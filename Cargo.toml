@@ -1,0 +1,42 @@
+[workspace]
+resolver = "2"
+members = [
+    "packages/core",
+    "packages/core-wasm",
+    "packages/contracts/guard",
+    "packages/contracts/registry",
+    "packages/sealed",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.93"
+license = "MIT"
+publish = false
+
+# Exact pins, checked 29 Oct 2026 (packages/core/VERSIONS.md). Every crate in the workspace
+# inherits these with `workspace = true`, so the core library, the contracts and the sealed
+# job can never drift onto different encoders.
+[workspace.dependencies]
+borsh = { version = "=1.8.1", features = ["derive"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+sha2 = "=0.11.1"
+bs58 = "=0.5.1"
+base64 = "=0.23.1"
+num-bigint = "=0.5.1"
+
+# Cargo reads profiles only from the workspace root, so the contract settings live here.
+# These match what the M0 contracts built and deployed with.
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
+
+# near-sdk 5.27 and later compile with cfg(near); member crates opt in with `[lints] workspace = true`.
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(near)"] }

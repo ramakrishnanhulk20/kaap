@@ -1,0 +1,10 @@
+[package]
+name = "kaap-guard"
+description = "The only member of a DAO's reject-only Guard role: casts VoteReject on a fresh verdict signed by the accepted key, and nothing else."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]

@@ -1,0 +1,10 @@
+[package]
+name = "kaap-sealed"
+description = "The sealed job that judges a proposal inside OutLayer's Intel TDX hardware and signs the verdict."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]

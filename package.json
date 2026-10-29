@@ -1,0 +1,14 @@
+{
+  "name": "kaap",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "workspaces": [
+    "packages/worker",
+    "packages/cli",
+    "packages/attack"
+  ],
+  "engines": {
+    "node": ">=24"
+  }
+}
