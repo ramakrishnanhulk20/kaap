@@ -1,0 +1,173 @@
+WO-01b proof run, 2026-10-29 04:43 UTC, inside WSL, CARGO_TARGET_DIR=/home/ram/kaap-target
+rustc 1.93.0 (254b59607 2026-01-19)
+cargo 1.93.0 (083ac5135 2025-12-15)
+
+== DONE MEANS 1: bash scripts/test-all.sh
+   Compiling kaap-core v0.1.0 (/mnt/d/Projects/Near Hackathan/packages/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.80s
+     Running unittests src/lib.rs (/home/ram/kaap-target/debug/deps/kaap_core-8ae2b93442f97222)
+
+running 3 tests
+test decode::known::tests::exact_accounts_only ... ok
+test decode::known::tests::staking_pool_needs_pattern_and_method ... ok
+test tests::labels_match_sputnik ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/canonical.rs (/home/ram/kaap-target/debug/deps/canonical-564fd4768e59c6df)
+
+running 11 tests
+test ambiguous_or_malformed_json_is_refused ... ok
+test arrays_outside_the_two_sets_keep_their_order ... ok
+test key_order_and_whitespace_do_not_matter ... ok
+test reordering_function_call_actions_gives_another_hash ... ok
+test canonical_policy_sorts_the_same_sets_and_keeps_roles_in_order ... ok
+test group_members_and_permissions_are_sets_in_both_role_kinds ... ok
+test the_canonical_form_is_stable_under_itself ... ok
+test a_content_change_gives_another_hash ... ok
+test reordering_roles_gives_another_hash ... ok
+test two_saved_reads_of_one_proposal_give_one_hash ... ok
+test input_over_256_kib_is_refused ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/decoders.rs (/home/ram/kaap-target/debug/deps/decoders-8e2fdf9322c97d59)
+
+running 15 tests
+test amounts_go_through_one_integer_parser ... ok
+test a_short_description_can_still_be_contradicted ... ok
+test a_claim_that_cannot_be_read_with_certainty_is_not_a_claim ... ok
+test native_near_is_written_near ... ok
+test a_kind_nothing_decodes_yet_gets_one_high_finding ... ok
+test an_unreadable_policy_before_counts_as_unknown ... ok
+test agreeing_claims_match_and_float_noise_is_not_a_contradiction ... ok
+test an_unpriced_token_is_unknown_value_and_never_low ... ok
+test a_transfer_description_that_states_another_amount_or_recipient_contradicts ... ok
+test transfer_effects_match_the_key ... ok
+test add_member_to_role_without_the_policy_before_fails_closed ... ok
+test a_short_description_is_empty ... ok
+test malformed_kind_json_gives_a_high_finding_and_never_panics ... ok
+test add_member_to_role_against_the_policy_before ... ok
+test a_transfer_sputnik_could_not_hold_is_unknown_call ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running tests/eval.rs (/home/ram/kaap-target/debug/deps/eval-9a749f03c3c71c5e)
+
+running 1 test
+test eval ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/floor.rs (/home/ram/kaap-target/debug/deps/floor-4aaf654ba0a19871)
+
+running 3 tests
+test codes_are_deduplicated_and_ordered_by_the_table ... ok
+test desc_contradicts_severity_sees_codes_from_other_modules ... ok
+test twelve_floor_and_veto_cases ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/severity.rs (/home/ram/kaap-target/debug/deps/severity-ccee5f1a0e2e52c2)
+
+running 7 tests
+test codes_other_than_desc_contradicts_ignore_context ... ok
+test desc_contradicts_is_critical_when_control_changes ... ok
+test desc_contradicts_is_critical_when_value_moves ... ok
+test desc_contradicts_is_high_without_value_or_control ... ok
+test guard_weakened_alongside_counts_as_control ... ok
+test member_entries_without_approver_are_refused ... ok
+test table_covers_all_24_codes_with_the_guide_severities ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/verdict.rs (/home/ram/kaap-target/debug/deps/verdict-bb2da5e6d2bd19d1)
+
+running 5 tests
+test encoding_round_trips ... ok
+test byte_layout_is_pinned ... ok
+test enum_indexes_follow_declaration_order ... ok
+test bytes_start_with_the_domain_prefix ... ok
+test hash_is_sha256_of_the_bytes_and_every_field_counts ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (/home/ram/kaap-target/debug/deps/kaap_core_wasm-452119c5d4c78014)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/ram/kaap-target/debug/deps/kaap_guard-177fdd1289035ab2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/ram/kaap-target/debug/deps/kaap_registry-0ece0cef2c3d9016)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/home/ram/kaap-target/debug/deps/kaap_sealed-23933aa23cb83c6a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests kaap_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests kaap_core_wasm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests kaap_guard
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests kaap_registry
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests kaap_sealed
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+EXIT test-all.sh: 0
+
+== DONE MEANS 2: cargo test -p kaap-core --test eval -- --nocapture
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s
+     Running tests/eval.rs (/home/ram/kaap-target/debug/deps/eval-9a749f03c3c71c5e)
+
+running 1 test
+
+== answer key: eval/real + eval/planted
+records 373, run 373, unreadable 0, panics 0
+field                 agree     of  percent
+effects                  90    373    24.1%
+finding_codes            71    373    19.0%
+risk_floor              190    373    50.9%
+description_check       118    373    31.6%
+must_veto               330    373    88.5%
+veto_allowed            219    373    58.7%
+all six fields           36    373     9.7%
+test eval ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+EXIT eval: 0
+
+== DONE MEANS 2, second part: a second, private labelled set was also run through KAAP_EVAL_EXTRA with 0 panics; its table is kept in the private notes.
