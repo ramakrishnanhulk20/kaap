@@ -30,5 +30,52 @@
     "signing_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
     "attested_run_tx": "7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC",
     "attestation_url": "https://testnet-api.outlayer.ai/attestations/by-tx/7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC"
+  },
+  "dao": {
+    "set_up_by": "scripts/WO-02c-setup-testnet.mjs (work order WO-02c)",
+    "member": {
+      "account_id": "kaap-member-1029064001.testnet",
+      "held_by": "Ram; the key is only in ~/.near-credentials/testnet/kaap-member-1029064001.testnet.json inside WSL on his machine"
+    },
+    "account_id": "kaap-dao-1029064008.testnet",
+    "deploy_and_init_tx": "77VM5xSUk3ry9Yp2xDU1etyFTf5451g8E6D6RNrdRpav",
+    "code_hash": "DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF",
+    "code_sha256": "bf6f951ee5e45968e3367fa857bebf8bc80badec183998c2239c487237e0d7f6",
+    "policy_from": {
+      "source": "the role setup of a live NEAR Business treasury on mainnet, read 29 Oct 2026, members removed",
+      "saved_in": "deployments/near-business-policy.json"
+    },
+    "members": {
+      "Requestor": [
+        "kaap-owner-1029061211.testnet",
+        "kaap-member-1029064001.testnet"
+      ],
+      "Admin": [
+        "kaap-member-1029064001.testnet",
+        "kaap-owner-1029061211.testnet"
+      ],
+      "Approver": [
+        "kaap-owner-1029061211.testnet",
+        "kaap-member-1029064001.testnet"
+      ],
+      "guard": [
+        "kaap-guard-1029061211.testnet"
+      ]
+    },
+    "approver_vote": "transfer and call need 2 of 2 Approvers, so one approval never executes a proposal",
+    "guard_role": "guard: [kaap-guard-1029061211.testnet], VoteReject on 16 labels (all but remove_member_from_role), threshold 1",
+    "enrolment": {
+      "proposal_id": 0,
+      "add_proposal_tx": "26XwzGhSTfWGseSo7DbmUWLW7oUVqkzBWqA2kPwrq9sm",
+      "vote_txs": [
+        "2Vecmijonji1eNvzzMC27WYhJWwCtGzox9JYy15dU2sc",
+        "CBhdoDc1F1PGTFRgjJL5RrEu3BbHoLZB9efS9GyCaZHu"
+      ],
+      "status": "Approved",
+      "enrolled": true
+    },
+    "checked_at": "2026-10-29T07:20:07.404Z",
+    "full_access_key_deleted_tx": "4giSEanWSMba3yPoBZkrKAjNs6mUprFXG4dsBntrweP4",
+    "access_keys_left": 0
   }
 }

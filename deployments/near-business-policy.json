@@ -1,0 +1,215 @@
+{
+  "source": "the role setup of a live NEAR Business treasury on mainnet, read 29 Oct 2026, members removed",
+  "members": "each Group lists <member 1> and <member 2>; scripts/WO-02c-setup-testnet.mjs puts the guard owner in <member 1> and the demo member in <member 2>",
+  "policy": {
+    "roles": [
+      {
+        "name": "Requestor",
+        "kind": {
+          "Group": [
+            "<member 1>",
+            "<member 2>"
+          ]
+        },
+        "permissions": [
+          "transfer:VoteRemove",
+          "call:VoteRemove",
+          "call:AddProposal",
+          "transfer:AddProposal"
+        ],
+        "vote_policy": {
+          "call": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "1"
+          },
+          "transfer": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "1"
+          }
+        }
+      },
+      {
+        "name": "Admin",
+        "kind": {
+          "Group": [
+            "<member 2>",
+            "<member 1>"
+          ]
+        },
+        "permissions": [
+          "policy_update_default_vote_policy:*",
+          "add_bounty:*",
+          "add_member_to_role:*",
+          "policy_remove_role:*",
+          "policy_update_parameters:*",
+          "policy_add_or_update_role:*",
+          "bounty_done:*",
+          "policy:*",
+          "remove_member_from_role:*",
+          "set_vote_token:*",
+          "upgrade_remote:*",
+          "config:*",
+          "factory_info_update:*",
+          "upgrade_self:*"
+        ],
+        "vote_policy": {
+          "call": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "add_member_to_role": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "remove_member_from_role": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "upgrade_remote": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "transfer": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "bounty_done": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "add_bounty": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "set_vote_token": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "upgrade_self": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "vote": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "config": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "policy": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          }
+        }
+      },
+      {
+        "name": "Approver",
+        "kind": {
+          "Group": [
+            "<member 1>",
+            "<member 2>"
+          ]
+        },
+        "permissions": [
+          "call:Finalize",
+          "transfer:Finalize",
+          "transfer:VoteReject",
+          "transfer:VoteApprove",
+          "transfer:RemoveProposal",
+          "call:VoteApprove",
+          "call:VoteReject",
+          "call:RemoveProposal"
+        ],
+        "vote_policy": {
+          "add_bounty": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "transfer": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "upgrade_self": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "config": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "add_member_to_role": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "bounty_done": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "policy": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "upgrade_remote": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "vote": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "remove_member_from_role": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "call": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          },
+          "set_vote_token": {
+            "weight_kind": "RoleWeight",
+            "quorum": "0",
+            "threshold": "2"
+          }
+        }
+      }
+    ],
+    "default_vote_policy": {
+      "weight_kind": "RoleWeight",
+      "quorum": "0",
+      "threshold": [
+        1,
+        2
+      ]
+    },
+    "proposal_bond": "0",
+    "proposal_period": "604800000000000",
+    "bounty_bond": "0",
+    "bounty_forgiveness_period": "604800000000000"
+  }
+}
