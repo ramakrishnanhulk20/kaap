@@ -1,0 +1,783 @@
+{
+  "total": 61,
+  "limit": 100,
+  "offset": 0,
+  "models": [
+    {
+      "modelId": "anthropic/claude-fable-5",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "anthropic",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": null,
+        "aliases": [
+          "claude-fable-5",
+          "fable-5"
+        ]
+      }
+    },
+    {
+      "modelId": "anthropic/claude-fable-5-1",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "anthropic",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": null,
+        "aliases": [
+          "claude-fable-5-1",
+          "fable-5-1"
+        ]
+      }
+    },
+    {
+      "modelId": "anthropic/claude-haiku-4-5",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "anthropic",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": [
+          "claude-haiku-4-5",
+          "haiku-4-5"
+        ]
+      }
+    },
+    {
+      "modelId": "anthropic/claude-haiku-5-5",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "anthropic",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": null,
+        "aliases": [
+          "claude-haiku-5-5",
+          "haiku-5-5",
+          "claude-haiku-latest"
+        ]
+      }
+    },
+    {
+      "modelId": "anthropic/claude-opus-4-6",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "anthropic",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": [
+          "claude-opus-4-6",
+          "opus-4-6"
+        ]
+      }
+    },
+    {
+      "modelId": "anthropic/claude-opus-4-7",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "anthropic",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": [
+          "claude-opus-4-7",
+          "opus-4-7"
+        ]
+      }
+    },
+    {
+      "modelId": "anthropic/claude-opus-4-8",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "anthropic",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": null,
+        "aliases": [
+          "claude-opus-4-8",
+          "opus-4-8"
+        ]
+      }
+    },
+    {
+      "modelId": "anthropic/claude-opus-5",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "anthropic",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": null,
+        "aliases": [
+          "claude-opus-5",
+          "opus-5"
+        ]
+      }
+    },
+    {
+      "modelId": "anthropic/claude-opus-5-5",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "anthropic",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": true,
+        "aliases": [
+          "claude-opus-5-5",
+          "opus-5-5",
+          "claude-opus-latest"
+        ]
+      }
+    },
+    {
+      "modelId": "anthropic/claude-sonnet-4-5",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "anthropic",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "anthropic/claude-sonnet-4-6",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "anthropic",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": [
+          "claude-sonnet-4-6",
+          "sonnet-4-6"
+        ]
+      }
+    },
+    {
+      "modelId": "anthropic/claude-sonnet-5",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "anthropic",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": null,
+        "aliases": [
+          "claude-sonnet-5",
+          "sonnet-5"
+        ]
+      }
+    },
+    {
+      "modelId": "anthropic/claude-sonnet-5-5",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "anthropic",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": true,
+        "aliases": [
+          "claude-sonnet-5-5",
+          "sonnet-5-5",
+          "claude-sonnet-latest"
+        ]
+      }
+    },
+    {
+      "modelId": "black-forest-labs/FLUX.2-klein-4B",
+      "metadata": {
+        "providerType": "vllm",
+        "ownedBy": "nearai",
+        "attestationSupported": true,
+        "verifiable": true,
+        "isReady": null,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "deepseek/deepseek-v3.2",
+      "metadata": {
+        "providerType": "chutes",
+        "ownedBy": "attested 3p",
+        "attestationSupported": true,
+        "verifiable": true,
+        "isReady": false,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "deepseek/deepseek-v4.1-flash",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "deepseek",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": true,
+        "aliases": [
+          "deepseek-v4.1-flash"
+        ]
+      }
+    },
+    {
+      "modelId": "deepseek/deepseek-v4.1-flash-1017",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "deepseek",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": true,
+        "aliases": [
+          "deepseek-v4.1-flash-1017",
+          "deepseek-flash-latest",
+          "deepseek/deepseek-flash-latest"
+        ]
+      }
+    },
+    {
+      "modelId": "google/gemini-2.5-flash",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "google",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": [
+          "gemini-2.5-flash"
+        ]
+      }
+    },
+    {
+      "modelId": "google/gemini-2.5-flash-lite",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "google",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "google/gemini-2.5-pro",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "google",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": [
+          "gemini-2.5-pro"
+        ]
+      }
+    },
+    {
+      "modelId": "google/gemini-3.1-flash-lite",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "google",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "google/gemini-3.5-flash",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "google",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": [
+          "gemini-3.5-flash"
+        ]
+      }
+    },
+    {
+      "modelId": "google/gemini-3.8-flash",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "google",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": null,
+        "aliases": [
+          "gemini-3.8-flash"
+        ]
+      }
+    },
+    {
+      "modelId": "levanto/sage-1.4",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "levanto",
+        "attestationSupported": false,
+        "verifiable": true,
+        "isReady": null,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "moonshotai/kimi-k2.6",
+      "metadata": {
+        "providerType": "chutes",
+        "ownedBy": "attested 3p",
+        "attestationSupported": true,
+        "verifiable": true,
+        "isReady": true,
+        "aliases": [
+          "kimi-k2.6"
+        ]
+      }
+    },
+    {
+      "modelId": "moonshotai/kimi-k3",
+      "metadata": {
+        "providerType": "chutes",
+        "ownedBy": "attested 3p",
+        "attestationSupported": true,
+        "verifiable": true,
+        "isReady": true,
+        "aliases": [
+          "kimi-k3"
+        ]
+      }
+    },
+    {
+      "modelId": "moonshotai/kimi-k3.1-pro",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "moonshotai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": null,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "openai/gpt-4.1",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": [
+          "gpt-4.1"
+        ]
+      }
+    },
+    {
+      "modelId": "openai/gpt-4.1-mini",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": [
+          "gpt-4.1-mini"
+        ]
+      }
+    },
+    {
+      "modelId": "openai/gpt-5",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": [
+          "gpt-5"
+        ]
+      }
+    },
+    {
+      "modelId": "openai/gpt-5.1",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "openai/gpt-5.2",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": [
+          "openai-gpt-5.2",
+          "gpt-5.2",
+          "gpt-5.2-400k"
+        ]
+      }
+    },
+    {
+      "modelId": "openai/gpt-5.4",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "openai/gpt-5.4-mini",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "openai/gpt-5.4-nano",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "openai/gpt-5.5",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "openai/gpt-5.6-luna",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": null,
+        "aliases": [
+          "gpt-4.1-nano",
+          "openai/gpt-4.1-nano"
+        ]
+      }
+    },
+    {
+      "modelId": "openai/gpt-5.6-sol",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": null,
+        "aliases": [
+          "openai/gpt-5.6"
+        ]
+      }
+    },
+    {
+      "modelId": "openai/gpt-5-mini",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "openai/gpt-5-nano",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "openai/gpt-6.1-sol",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": true,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "openai/gpt-6-astra",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": null,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "openai/gpt-6-luna",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": true,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "openai/gpt-6-sol",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": true,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "openai/o3",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": [
+          "o3"
+        ]
+      }
+    },
+    {
+      "modelId": "openai/o3-mini",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "openai/o4-mini",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "openai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": [
+          "o4-mini"
+        ]
+      }
+    },
+    {
+      "modelId": "openai/privacy-filter",
+      "metadata": {
+        "providerType": "vllm",
+        "ownedBy": "nearai",
+        "attestationSupported": true,
+        "verifiable": true,
+        "isReady": null,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "openai/whisper-large-v3",
+      "metadata": {
+        "providerType": "vllm",
+        "ownedBy": "nearai",
+        "attestationSupported": true,
+        "verifiable": true,
+        "isReady": null,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "qwen/qwen3.5-397b-a17b",
+      "metadata": {
+        "providerType": "chutes",
+        "ownedBy": "attested 3p",
+        "attestationSupported": true,
+        "verifiable": true,
+        "isReady": false,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "Qwen/Qwen3.6-35B-A3B-FP8",
+      "metadata": {
+        "providerType": "vllm",
+        "ownedBy": "nearai",
+        "attestationSupported": true,
+        "verifiable": true,
+        "isReady": true,
+        "aliases": [
+          "qwen3.6-35b-a3b-fp8",
+          "qwen/qwen3.6-35b-a3b-fp8",
+          "Qwen/Qwen3-30B-A3B-Instruct-2507",
+          "qwen/qwen3-30b-a3b-instruct-2507",
+          "qwen3-30b-a3b-instruct-2507"
+        ]
+      }
+    },
+    {
+      "modelId": "qwen/qwen3.7-max",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "qwen",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": false,
+        "aliases": [
+          "qwen3.7-max"
+        ]
+      }
+    },
+    {
+      "modelId": "Qwen/Qwen3.8-27B",
+      "metadata": {
+        "providerType": "vllm",
+        "ownedBy": "nearai",
+        "attestationSupported": true,
+        "verifiable": true,
+        "isReady": true,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "Qwen/Qwen3-Embedding-0.6B",
+      "metadata": {
+        "providerType": "vllm",
+        "ownedBy": "nearai",
+        "attestationSupported": true,
+        "verifiable": true,
+        "isReady": null,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "Qwen/Qwen3-Reranker-0.6B",
+      "metadata": {
+        "providerType": "vllm",
+        "ownedBy": "nearai",
+        "attestationSupported": true,
+        "verifiable": true,
+        "isReady": null,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "Qwen/Qwen3-VL-30B-A3B-Instruct",
+      "metadata": {
+        "providerType": "vllm",
+        "ownedBy": "nearai",
+        "attestationSupported": true,
+        "verifiable": true,
+        "isReady": true,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "typesafe/jev-1.13",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "typesafe",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": null,
+        "aliases": [
+          "typesafe/jev-latest"
+        ]
+      }
+    },
+    {
+      "modelId": "x-ai/grok-4.6",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "x-ai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": true,
+        "aliases": [
+          "grok-4.6"
+        ]
+      }
+    },
+    {
+      "modelId": "x-ai/grok-4.7",
+      "metadata": {
+        "providerType": "external",
+        "ownedBy": "x-ai",
+        "attestationSupported": false,
+        "verifiable": false,
+        "isReady": true,
+        "aliases": [
+          "grok-4.7"
+        ]
+      }
+    },
+    {
+      "modelId": "z-ai/glm-5.3",
+      "metadata": {
+        "providerType": "tinfoil",
+        "ownedBy": "attested 3p",
+        "attestationSupported": true,
+        "verifiable": true,
+        "isReady": null,
+        "aliases": null
+      }
+    },
+    {
+      "modelId": "z-ai/glm-5.3-flash",
+      "metadata": {
+        "providerType": "vllm",
+        "ownedBy": "nearai",
+        "attestationSupported": true,
+        "verifiable": true,
+        "isReady": true,
+        "aliases": [
+          "zai-org/GLM-5.3-Flash",
+          "GLM-5.3-Flash",
+          "glm-5.3-flash",
+          "zai-org/GLM-5.1-FP8",
+          "zai-org/GLM-5-FP8",
+          "glm-latest",
+          "zai-org/GLM-latest",
+          "GLM-5",
+          "zai-org/GLM-4.7",
+          "glm",
+          "GLM-5.1",
+          "zai-org/GLM-5.1",
+          "z-ai/glm-5.2",
+          "deepseek-ai/DeepSeek-V4-Flash"
+        ]
+      }
+    }
+  ]
+}

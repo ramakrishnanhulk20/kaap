@@ -1,0 +1,105 @@
+# kaap-sealed on OutLayer testnet: runs, timing and cost
+
+Measured on 29 Oct 2026 between 05:37 and 05:45 UTC, from WSL on one machine, with
+`scripts/WO-02b-run-testnet.sh`. Every run went through `request_execution` on `outlayer.testnet`,
+paid in testnet NEAR, with all three resource limits written out (10,000,000,000 instructions,
+128 MB, 60 s) and 0.02 NEAR attached (the unused part is refunded in the same transaction).
+
+| Thing | Value |
+| --- | --- |
+| Project | `kaap-worker-1029053612.testnet/kaap-sealed`, uuid `p00000000000000a9` |
+| Caller (the testnet worker account) | `kaap-worker-1029053612.testnet` |
+| Version (wasm sha256) | `0099d7b75f5f509ee0c84a7b819058c67ba2e9f9099e4dbf51e413a343d6ff49`, 380,792 bytes |
+| Verdict key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN`, the same on all 13 signed runs |
+| Proposal judged | `corm1gu.sputnikv2.testnet` #1, a real InProgress Transfer of 10 tokens of `nori4qx.tanssg2.testnet` |
+| Input | `{"v":1,"network":"testnet","guard":"kaap-worker-1029053612.testnet","dao":"corm1gu.sputnikv2.testnet","proposal_id":1,"expires_in_ms":600000}` |
+
+## The ten timed runs (DONE MEANS 4)
+
+"Read block" is the final block the job pinned every read to, taken from the verdict. "Wall" is
+from just before near-cli starts to near-cli returning the result; "on chain" is from the
+request's block to the last receipt's block; "worker" is OutLayer's own `time_ms`.
+
+| Run | Transaction | Request block | Read block | Result block | Blocks | Wall ms | On chain ms | Worker ms | Paid, NEAR |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | [7HvniWe5...](https://testnet.nearblocks.io/txns/7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC) | 275257058 | 275257062 | 275257072 | 14 | 12,223 | 8,459 | 1,427 | 0.0019189 |
+| 2 | [HX83h4x9...](https://testnet.nearblocks.io/txns/HX83h4x9PKLk4rSMMkuPfGkSkVWB4ixWqdtiVM4uZZdd) | 275257083 | 275257086 | 275257096 | 13 | 11,791 | 7,839 | 1,446 | 0.0019208 |
+| 3 | [5o5s7iKj...](https://testnet.nearblocks.io/txns/5o5s7iKj4u6uoJHaJuQ8QwH6aqoGnv1pa1dQDFQsDCR8) | 275257106 | 275257111 | 275257121 | 15 | 11,286 | 7,978 | 1,653 | 0.0019412 |
+| 4 | [9YF1YgD7...](https://testnet.nearblocks.io/txns/9YF1YgD7eEk8Zqs6XoH7aviBvx6q6KGVV8Gf96JQAyrZ) | 275257132 | 275257135 | 275257146 | 14 | 10,358 | 7,249 | 1,388 | 0.0019150 |
+| 5 | [ApuJRnv7...](https://testnet.nearblocks.io/txns/ApuJRnv7RtzEWMDsy2NT3aeK8ZL6umnqAsx2VnCV7Vxi) | 275257157 | 275257160 | 275257170 | 13 | 10,892 | 6,859 | 1,386 | 0.0019146 |
+| 6 | [BrvAbHNg...](https://testnet.nearblocks.io/txns/BrvAbHNg3PdmYHpWtEAzpQP11c1h1pXbTnocvAMy9q2G) | 275257181 | 275257185 | 275257195 | 14 | 11,805 | 8,488 | 1,398 | 0.0019161 |
+| 7 | [HovxWifA...](https://testnet.nearblocks.io/txns/HovxWifAJoi8kq7dJECTanyg6cF95v1YYneyr1UManFN) | 275257206 | 275257210 | 275257219 | 13 | 12,104 | 7,890 | 1,394 | 0.0019155 |
+| 8 | [F4q36d95...](https://testnet.nearblocks.io/txns/F4q36d95vojse9wDC8DzNVh6tviezkAkqtfxKFCZKfiR) | 275257229 | 275257233 | 275257242 | 13 | 11,746 | 7,922 | 1,465 | 0.0019227 |
+| 9 | [9yk571Hy...](https://testnet.nearblocks.io/txns/9yk571HyNZJsa2FWvibtA9pi6kNig71RvaHtfZWSw3sw) | 275257254 | 275257258 | 275257268 | 14 | 11,900 | 7,786 | 1,337 | 0.0019100 |
+| 10 | [ZBn3sJk7...](https://testnet.nearblocks.io/txns/ZBn3sJk7zo6n87r8GstFXqMUW7Zhf12SScMcADkLnup) | 275257279 | 275257283 | 275257294 | 15 | 11,064 | 7,446 | 1,375 | 0.0019139 |
+
+| Over the 10 runs | p50 | p90 | max |
+| --- | --- | --- | --- |
+| Wall clock, trigger to result | 11,746 ms | 12,104 ms | 12,223 ms |
+| On chain, request block to result block | 7,839 ms | 8,459 ms | 8,488 ms |
+| Blocks, request to result | 14 | 15 | 15 |
+| Worker run time (`time_ms`) | 1,394 ms | 1,465 ms | 1,653 ms |
+
+p50 and p90 are the 5th and 9th of the ten values in order. Paid per run: mean 0.0019189 testnet
+NEAR (range 0.0019100 to 0.0019412), of which OutLayer's charge is 0.0011427 and transaction gas
+0.0007762. Testnet NEAR has no price; at the M0 spike's $4.72 per NEAR the same run on mainnet
+would be about $0.009.
+
+Where the time goes: the job itself takes about 1.4 s inside the worker (ten chain reads, five
+from each provider, about 0.1 to 0.5 s each). The rest of the on-chain time is OutLayer picking up
+the request and resolving it, the same 13 to 15 blocks the M0 spike measured. Every run here
+was a cached one: the first run of this version (run 1 of DONE MEANS 2 below) was "Freshly
+compiled" and took 18 blocks (10.6 s on chain, 14.8 s wall clock).
+
+## DONE MEANS 2: three runs, one key
+
+| Run | Transaction | Read block | Status | Signature (Node crypto) | Key |
+| --- | --- | --- | --- | --- | --- |
+| 1 | [FY4uhBHU...](https://testnet.nearblocks.io/txns/FY4uhBHUGHMioXvtkvjNLnohfp6PtVPBHXH6qs4xbAfm) | 275256934 | ok | valid | `ed25519:4gaYx4kP...uonuN` |
+| 2 | [J3mAVr2b...](https://testnet.nearblocks.io/txns/J3mAVr2bjbQ3Szm2rHhR7S9VRjCTtM8etuGYQzJKKjAe) | 275256960 | ok | valid | the same |
+| 3 | [8ytVrRxf...](https://testnet.nearblocks.io/txns/8ytVrRxfnqXDSJ7Uu5GFZtwkoe13G2Cxyh9n3EiMXgrP) | 275256985 | ok | valid | the same |
+
+Each verdict decoded to `guard kaap-worker-1029053612.testnet, network testnet, dao
+corm1gu.sputnikv2.testnet, proposal 1`, risk high, floor high, findings `[UNKNOWN_VALUE]`,
+ai_status unavailable, expiry the read block's timestamp plus 600,000 ms; the explanation hash
+matched the printed explanation, and a one-bit change to the signed bytes failed to verify. The
+ten runs above passed the same checks under the same key.
+
+The high floor is expected for this honest Transfer: the job has no price list yet, so every token
+is unpriced, and an unpriced token is UNKNOWN_VALUE (high), never zero (C2). The AI part is
+Unavailable on every run because Ram's NEAR AI key is not yet an OutLayer secret of this project;
+the explanation says so.
+
+## DONE MEANS 3: the providers forced to disagree
+
+| Transaction | Input | Output |
+| --- | --- | --- |
+| [ACQcwBVx...](https://testnet.nearblocks.io/txns/ACQcwBVxwAKDQZSf7p8oi8ZWTotrLVNAhb89vp4wWFfW) | as above plus `"test_corrupt_https":true` | `{"reason":"providers disagree: get_proposal","status":"held","v":1}`, no signature |
+
+## What the transaction returns, and the attestation
+
+With `response_format` Json the contract returns the job's JSON with its keys sorted: 601 bytes on
+every signed run (67 for the hold), under the 900-byte cap. The attestation of timed run 1
+(`GET https://testnet-api.outlayer.ai/attestations/by-tx/7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC`,
+HTTP 200) names `project_id kaap-worker-1029053612.testnet/kaap-sealed`, `caller_account_id
+kaap-worker-1029053612.testnet`, `wasm_hash` and `executed_wasm_sha256` both `0099d7b7...ff49`,
+request 5833, and an Intel TDX quote; its `input_hash` is the sha256 of the exact input above and
+its `output_hash` the sha256 of the returned output, both checked.
+
+## Testnet NEAR spent
+
+The worker account came from the faucet with 10 NEAR and held 9.965044 NEAR after everything
+here: 0.034956 NEAR in all. The 14 runs (3, 1 and 10 above) account for 0.026979 by their
+receipts; the remaining 0.007977 is `create_project`, mostly its storage deposit, which the
+contract holds and refunds if the project is deleted.
+
+## What these runs do not cover
+
+- One proposal, one location, one 8-minute window, runs one after another. No load, nothing
+  concurrent, nothing on mainnet.
+- The NEAR AI call inside OutLayer: no key yet, so no run asked the model. The model-list check
+  and a refused chat call were exercised only in the local wasmtime build.
+- The host's lag: the host read at the HTTPS provider's final block every time, so the one-retry
+  path for a host that is a block behind never ran.
+- The full attestation check (Intel DCAP over the quote, the worker's measurements): only the named
+  fields and the two hashes were checked.

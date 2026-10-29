@@ -1,0 +1,18 @@
+{
+  "network": "testnet",
+  "account": "kaap-worker-1029053612.testnet",
+  "project_id": "kaap-worker-1029053612.testnet/kaap-sealed",
+  "contract": "outlayer.testnet",
+  "versions": [
+    {
+      "sha256": "0099d7b75f5f509ee0c84a7b819058c67ba2e9f9099e4dbf51e413a343d6ff49",
+      "bytes": 380792,
+      "url": "https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/0ecb03ebcbd8714164965d2df18edbae7d95875e/kaap-sealed-0099d7b7.wasm",
+      "registered_by": "create_project",
+      "tx": "FHy3utGUWWwPtPMGz8ALXh9NLR5G4Mo2h1QTsEDGtuMu",
+      "at": "2026-10-29T05:36:22Z"
+    }
+  ],
+  "uuid": "p00000000000000a9",
+  "active_version": "0099d7b75f5f509ee0c84a7b819058c67ba2e9f9099e4dbf51e413a343d6ff49"
+}
