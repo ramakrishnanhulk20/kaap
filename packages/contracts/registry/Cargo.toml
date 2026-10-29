@@ -7,4 +7,31 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
+near-sdk = "=5.29.1"
+kaap-core = { path = "../../core" }
+borsh.workspace = true
+hex = "=0.4.3"
+
+# Same test stack as kaap-guard; the reasons for each pin are in ../guard/Cargo.toml.
+[dev-dependencies]
+near-sdk = { version = "=5.29.1", features = ["unit-testing"] }
+ed25519-dalek = "=2.2.0"
+near-sandbox = "=0.3.16"
+near-api = { version = "=0.8.3", default-features = false }
+near-api-types = "=0.8.3"
+tokio = { version = "=1.54.1", features = ["macros", "rt-multi-thread", "sync"] }
+serde_json.workspace = true
+anyhow = "=1.0.104"
+base64.workspace = true
+bs58.workspace = true
+
+[[test]]
+name = "registry_sandbox"
+path = "../tests/registry.rs"
+
+[lints]
+workspace = true

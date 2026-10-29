@@ -7,4 +7,37 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
+near-sdk = "=5.29.1"
+kaap-core = { path = "../../core" }
+borsh.workspace = true
+hex = "=0.4.3"
+
+[dev-dependencies]
+near-sdk = { version = "=5.29.1", features = ["unit-testing"] }
+# 2.2.0, not 3.0.0: near-sdk's unit-testing VM and near-api already resolve 2.2.0, so the tests
+# sign with the same ed25519 stack the tooling verifies with, and only one copy is compiled.
+ed25519-dalek = "=2.2.0"
+near-sandbox = "=0.3.16"
+near-api = { version = "=0.8.3", default-features = false }
+# near-api 0.8.3 asks for near-api-types ^0.8.3, and a fresh resolve picks a newer 0.8.x that
+# near-api 0.8.3 does not compile against (found in our pre-build sandbox spike). Sputnik's own lockfile
+# holds it at 0.8.3, so we do the same.
+near-api-types = "=0.8.3"
+tokio = { version = "=1.54.1", features = ["macros", "rt-multi-thread", "sync"] }
+serde_json.workspace = true
+anyhow = "=1.0.104"
+base64.workspace = true
+bs58.workspace = true
+
+# The sandbox tests live in packages/contracts/tests so both contracts share one harness. They
+# are a test target of this crate so `cargo test --workspace` runs them with no extra command.
+[[test]]
+name = "guard_sandbox"
+path = "../tests/guard.rs"
+
+[lints]
+workspace = true
