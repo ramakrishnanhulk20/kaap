@@ -27,6 +27,8 @@ const VERDICT_SEED: [u8; 32] = [7; 32];
 const OTHER_SEED: [u8; 32] = [9; 32];
 const NOW_MS: u64 = 1_800_000_000_000;
 const PROPOSAL_ID: u64 = 7;
+// 0.01 NEAR, what a DAO is told to attach to `enroll`.
+const ENROL_DEPOSIT: u128 = 10_000_000_000_000_000_000_000;
 // Spaces on purpose: the guard must forward these bytes as they are, not a re-encoding (C5).
 const KIND: &str =
     r#"{"Transfer": {"token_id": "", "receiver_id": "a1ice.near", "amount": "1000", "msg": null}}"#;
@@ -100,7 +102,7 @@ fn signed(v: &Verdict, seed: &[u8; 32]) -> (Base64VecU8, Base64VecU8) {
 fn guard() -> KaapGuard {
     set_context(GUARD, 0);
     let mut guard = KaapGuard::new(account(OWNER), key_string(&VERDICT_SEED), "sandbox".to_owned());
-    set_context(DAO, 0);
+    set_context(DAO, ENROL_DEPOSIT);
     guard.enroll();
     set_context(STRANGER, 0);
     guard
@@ -182,10 +184,41 @@ fn veto_rule_follows_c9() {
         (with(Critical, Critical, vec![HashUnverified], Verified), false),
         (with(Critical, Critical, vec![], Verified), false),
         (with(High, Critical, vec![DescContradicts], Verified), false),
+        // A medium code beside an unexplained hash cannot back a veto; a high one can.
+        (with(Critical, High, vec![HashUnverified, NewRecipient], Verified), false),
+        (with(Critical, High, vec![HashUnverified, PolicyAddsApprover], Verified), true),
+        (with(Critical, Critical, vec![HashUnverified, LargeAmount, CrossChainOut], Verified), false),
+        (with(Critical, Critical, vec![EmptyDescription, HashMismatch], Unavailable), true),
     ];
     for (v, vetoable) in cases {
         assert_eq!(is_vetoable(&v), vetoable, "{v:?}");
     }
+}
+
+#[test]
+#[should_panic(expected = "ERR_NOT_VETOABLE")]
+fn err_not_vetoable_for_hash_unverified_beside_a_medium_code() {
+    let mut g = guard();
+    let v = Verdict {
+        floor: Severity::High,
+        findings: vec![FindingCode::HashUnverified, FindingCode::NewRecipient],
+        ai_status: AiStatus::Verified,
+        ..verdict()
+    };
+    veto(&mut g, &v, KIND);
+}
+
+#[test]
+fn hash_unverified_beside_a_high_code_is_vetoable() {
+    let mut g = guard();
+    let v = Verdict {
+        floor: Severity::High,
+        findings: vec![FindingCode::HashUnverified, FindingCode::PolicyAddsApprover],
+        ai_status: AiStatus::Verified,
+        ..verdict()
+    };
+    veto(&mut g, &v, KIND);
+    assert!(g.was_used(hex::encode(verdict_hash(&v))));
 }
 
 #[test]
@@ -359,7 +392,7 @@ fn err_bad_network_for_a_capitalised_name() {
 fn enroll_emits_the_nep297_event_in_the_agreed_shape() {
     set_context(GUARD, 0);
     let mut g = KaapGuard::new(account(OWNER), key_string(&VERDICT_SEED), "sandbox".to_owned());
-    set_context(DAO, 0);
+    set_context(DAO, ENROL_DEPOSIT);
     g.enroll();
     assert!(g.is_enrolled(account(DAO)));
     let logs = get_logs();
@@ -373,7 +406,7 @@ fn enroll_emits_the_nep297_event_in_the_agreed_shape() {
 #[should_panic(expected = "ERR_ALREADY_ENROLLED")]
 fn err_already_enrolled() {
     let mut g = guard();
-    set_context(DAO, 0);
+    set_context(DAO, ENROL_DEPOSIT);
     g.enroll();
 }
 
@@ -393,11 +426,70 @@ fn unenroll_stops_vetoes_for_that_dao() {
     assert_eq!(event_json(get_logs().last().unwrap())["event"], "unenrolled");
 }
 
+/// The refund the last call sent to `who`, or zero when it sent nothing.
+fn refund_sent_to(who: &str) -> NearToken {
+    let receipts = get_created_receipts();
+    match receipts.as_slice() {
+        [] => NearToken::from_yoctonear(0),
+        [receipt] if receipt.receiver_id == account(who) => match receipt.actions.as_slice() {
+            [MockAction::Transfer { deposit, .. }] => *deposit,
+            other => panic!("a refund must be one plain transfer, got {other:?}"),
+        },
+        other => panic!("expected at most one refund to {who}, got {other:?}"),
+    }
+}
+
+/// Enrols `who` and returns what the storage cost and what came back.
+fn enrol_and_measure(g: &mut KaapGuard, who: &str) -> (NearToken, NearToken) {
+    set_context(who, ENROL_DEPOSIT);
+    let before = env::storage_usage();
+    g.enroll();
+    let cost = storage_cost(env::storage_usage() - before);
+    (cost, refund_sent_to(who))
+}
+
+#[test]
+#[should_panic(expected = "ERR_NOT_ENOUGH_DEPOSIT")]
+fn err_not_enough_deposit_on_enroll() {
+    let mut g = guard();
+    set_context("new-dao.near", 1);
+    g.enroll();
+}
+
+#[test]
+fn enroll_charges_the_storage_it_writes_and_refunds_the_rest() {
+    let mut g = guard();
+    let (cost, refund) = enrol_and_measure(&mut g, "new-dao.near");
+    assert!(!cost.is_zero());
+    assert_eq!(refund, NearToken::from_yoctonear(ENROL_DEPOSIT).saturating_sub(cost));
+}
+
+#[test]
+fn unenroll_refunds_exactly_what_each_enrolment_charged() {
+    let mut g = guard();
+    let short = "a.near";
+    let long = "a-much-longer-dao-name-for-the-storage-test.sputnik-dao.near";
+    let (short_cost, _) = enrol_and_measure(&mut g, short);
+    let (long_cost, _) = enrol_and_measure(&mut g, long);
+    assert!(long_cost > short_cost);
+
+    // The short entry leaves first, so the long one moves into its slot in the set.
+    set_context(short, 0);
+    let before = env::storage_usage();
+    g.unenroll();
+    assert_eq!(refund_sent_to(short), short_cost);
+    assert_eq!(storage_cost(before - env::storage_usage()), short_cost);
+    set_context(long, 0);
+    g.unenroll();
+    assert_eq!(refund_sent_to(long), long_cost);
+    assert_eq!(g.enrolled_daos(0, 10), vec![account(DAO)]);
+}
+
 #[test]
 fn enrolled_daos_pages_and_caps_the_limit() {
     let mut g = guard();
     for i in 0..(MAX_ENROLLED_PAGE + 5) {
-        set_context(&format!("dao-{i}.near"), 0);
+        set_context(&format!("dao-{i}.near"), ENROL_DEPOSIT);
         g.enroll();
     }
     let total = MAX_ENROLLED_PAGE + 6;

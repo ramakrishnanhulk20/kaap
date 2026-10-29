@@ -33,6 +33,14 @@ pub fn severity(code: FindingCode, effects: &[Effect], codes: &[FindingCode]) ->
     }
 }
 
+/// The lowest severity `code` can have on any proposal: its fixed severity, and High for
+/// DESC_CONTRADICTS, which only rises to critical beside an effect that moves value or changes
+/// control. A signed verdict carries codes but no effects, so this is what the guard can know
+/// about a finding, and it never rates one above what `severity` gives it in context.
+pub fn min_severity(code: FindingCode) -> Severity {
+    severity(code, &[], &[])
+}
+
 /// The value-moving effects named in the DESC_CONTRADICTS row. Wrap, staking, storage deposits
 /// and DeFi calls keep the funds with the DAO, so the guide leaves them out.
 pub fn moves_value(effect: &Effect) -> bool {

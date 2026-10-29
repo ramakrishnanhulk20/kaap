@@ -55,11 +55,23 @@ struct EntryKey {
     index: u32,
 }
 
+/// Per proposal: how many verdicts are recorded and which one is the latest. Kept up to date by
+/// `record`, so `latest` is one read however long the history grows.
+#[near(serializers = [borsh])]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ProposalHead {
+    count: u32,
+    latest: u32,
+    latest_block_height: u64,
+}
+
 #[near(serializers = [borsh])]
 struct StoredVerdict {
     /// The borsh bytes exactly as signed, without the domain prefix.
     verdict: Vec<u8>,
     signature: Vec<u8>,
+    /// The record that was latest when this one arrived and that this one replaced as latest.
+    supersedes: Option<u32>,
     recorded_by: AccountId,
     recorded_at_block: u64,
     recorded_at_ms: u64,
@@ -72,7 +84,9 @@ struct StoredVerdict {
 pub struct VerdictRecord {
     /// Position in this proposal's history, 0 for the first verdict recorded.
     pub index: u32,
-    /// The index of the record this one supersedes, None for the first.
+    /// The index of the record that was latest when this one arrived and that this one replaced
+    /// as latest. None for the first record, and for a record whose verdict was read at an older
+    /// block than the latest one, which is kept in the history but never becomes latest.
     pub supersedes: Option<u32>,
     /// `kaap_core::verdict_hash`, hex.
     pub verdict_hash: String,
@@ -122,7 +136,7 @@ pub struct KaapRegistry {
     accepted_key: PublicKey,
     /// kaap-core's spelling of the network, as in kaap-guard.
     network: String,
-    counts: LookupMap<ProposalKey, u32>,
+    heads: LookupMap<ProposalKey, ProposalHead>,
     entries: LookupMap<EntryKey, StoredVerdict>,
     /// Hashes of every verdict recorded, so the same verdict cannot be recorded twice and pushed
     /// back to the top of a history it has already left.
@@ -170,7 +184,7 @@ impl KaapRegistry {
         Self {
             accepted_key: parse_accepted_key(&accepted_key),
             network: parse_network(&network),
-            counts: LookupMap::new(b"c"),
+            heads: LookupMap::new(b"c"),
             entries: LookupMap::new(b"r"),
             seen: LookupSet::new(b"s"),
         }
@@ -222,7 +236,19 @@ impl KaapRegistry {
             dao: dao.clone(),
             proposal_id: decoded.proposal_id,
         };
-        let index = self.counts.get(&proposal).copied().unwrap_or(0);
+        // The latest verdict is the one read at the highest block, ties going to the later
+        // record, so recording an older verdict after a newer one never moves `latest` back.
+        let head = self.heads.get(&proposal).copied();
+        let index = head.map_or(0, |h| h.count);
+        let becomes_latest = head.is_none_or(|h| decoded.block_height >= h.latest_block_height);
+        let next_head = match head {
+            Some(h) if !becomes_latest => ProposalHead { count: index + 1, ..h },
+            _ => ProposalHead {
+                count: index + 1,
+                latest: index,
+                latest_block_height: decoded.block_height,
+            },
+        };
         self.entries.insert(
             EntryKey {
                 proposal: proposal.clone(),
@@ -231,17 +257,18 @@ impl KaapRegistry {
             StoredVerdict {
                 verdict: verdict.0,
                 signature: signature.to_vec(),
+                supersedes: head.filter(|_| becomes_latest).map(|h| h.latest),
                 recorded_by: env::predecessor_account_id(),
                 recorded_at_block: env::block_height(),
                 recorded_at_ms: env::block_timestamp_ms(),
             },
         );
-        self.counts.insert(proposal, index + 1);
+        self.heads.insert(proposal, next_head);
         self.seen.insert(hash);
         // The two maps only write to storage when flushed (the set writes at once), and the
         // cost must be measured on what was really written.
         self.entries.flush();
-        self.counts.flush();
+        self.heads.flush();
         let used = env::storage_usage().saturating_sub(before);
         let cost = env::storage_byte_cost().saturating_mul(u128::from(used));
         let attached = env::attached_deposit();
@@ -269,7 +296,9 @@ impl KaapRegistry {
         index
     }
 
-    /// The newest verdict recorded for this proposal, or None.
+    /// The verdict recorded for this proposal that was read at the highest block, the later
+    /// record winning a tie, or None. A verdict read at an older block and recorded afterwards
+    /// stays in `history` but never becomes latest (C13).
     ///
     /// Panics with ERR_BAD_NETWORK unless `network` is "mainnet", "testnet" or "sandbox".
     pub fn latest(&self, network: String, dao: AccountId, proposal_id: u64) -> Option<VerdictRecord> {
@@ -278,8 +307,8 @@ impl KaapRegistry {
             dao,
             proposal_id,
         };
-        let count = *self.counts.get(&proposal)?;
-        self.record_at(&proposal, count.checked_sub(1)?)
+        let head = *self.heads.get(&proposal)?;
+        self.record_at(&proposal, head.latest)
     }
 
     /// Up to `limit` verdicts recorded for this proposal, oldest first, starting at index
@@ -299,11 +328,21 @@ impl KaapRegistry {
             dao,
             proposal_id,
         };
-        let count = u64::from(self.counts.get(&proposal).copied().unwrap_or(0));
+        let count = u64::from(self.heads.get(&proposal).map_or(0, |h| h.count));
         let end = from.saturating_add(limit.min(MAX_HISTORY_PAGE)).min(count);
         (from..end)
             .filter_map(|index| self.record_at(&proposal, u32::try_from(index).ok()?))
             .collect()
+    }
+
+    /// The key whose signatures this registry accepts, as "ed25519:<base58>". Fixed at `new`.
+    pub fn accepted_key(&self) -> String {
+        self.accepted_key.to_string()
+    }
+
+    /// The network this registry records for: "mainnet", "testnet" or "sandbox".
+    pub fn network(&self) -> String {
+        self.network.clone()
     }
 }
 
@@ -324,7 +363,7 @@ impl KaapRegistry {
         let verdict = Verdict::try_from_slice(&stored.verdict).unwrap_or_else(|_| env::abort());
         Some(VerdictRecord {
             index,
-            supersedes: index.checked_sub(1),
+            supersedes: stored.supersedes,
             verdict_hash: hex::encode(verdict_hash(&verdict)),
             verdict: Base64VecU8(stored.verdict.clone()),
             signature: Base64VecU8(stored.signature.clone()),

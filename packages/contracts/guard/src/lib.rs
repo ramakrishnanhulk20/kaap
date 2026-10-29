@@ -4,12 +4,14 @@
 //! names this guard, this network and an enrolled DAO, and meets the veto rule, the guard casts
 //! VoteReject on the proposal the verdict names. It can cast nothing else: the receiver comes
 //! from the signed verdict, the method and the action are fixed in this file, and `veto` is the
-//! only method that creates a promise (C15).
+//! only method that calls another contract (C15). The only other promises are plain refunds of
+//! a caller's own storage deposit, sent back to that caller by `enroll` and `unenroll` (C29).
 //!
 //! The code is immutable on purpose. There is no upgrade method, and the deploy script deletes
 //! the account's full-access key right after `new`. A new version is a new contract, which a DAO
 //! adopts with one ordinary proposal that moves its Guard role.
 
+use kaap_core::severity::min_severity;
 use kaap_core::verdict::VERDICT_VERSION;
 use kaap_core::{kind_hash, verdict_bytes, verdict_hash, AiStatus, FindingCode, Severity, Verdict};
 use near_sdk::borsh::BorshDeserialize;
@@ -38,6 +40,7 @@ pub const ERR_NOT_CALLBACK: &str = "ERR_NOT_CALLBACK";
 pub const ERR_NOT_OWNER: &str = "ERR_NOT_OWNER";
 pub const ERR_NEED_ONE_YOCTO: &str = "ERR_NEED_ONE_YOCTO";
 pub const ERR_NOT_PENDING_OWNER: &str = "ERR_NOT_PENDING_OWNER";
+pub const ERR_NOT_ENOUGH_DEPOSIT: &str = "ERR_NOT_ENOUGH_DEPOSIT";
 
 /// The most entries `enrolled_daos` returns in one page. Measured as a transaction: 1.30 Tgas for
 /// one entry and 2.14 Tgas for twelve, about 0.08 Tgas each, so a full page of 100 is about
@@ -164,21 +167,36 @@ fn require_one_yocto() {
     );
 }
 
-/// The veto rule (threat model C9; Ram's rulings of 20 and 23 Oct 2026). The verdict must be
-/// critical, its plain-code floor high or critical, and at least one finding must be something
-/// other than HASH_UNVERIFIED, which only says a text was never seen. When the floor is high,
-/// the AI is what raised it to critical, and only an AI answer proven by its attestation may do
-/// that. A floor of Unknown is refused like any floor below high: an unverifiable sign request
-/// alerts members but never triggers the guard (C8).
+/// The veto rule (threat model C9; Ram's rulings of 20 and 23 Oct 2026), the same test as
+/// `backed_by_proof` in kaap-core's `floor::finish`. The verdict must be critical and its
+/// plain-code floor high or critical, and at least one finding other than HASH_UNVERIFIED must
+/// be high or critical in its own right: an unexplained hash alerts but never vetoes, so a high
+/// floor built from HASH_UNVERIFIED beside a medium code is not enough. The verdict carries codes
+/// without effects, so each code counts at `min_severity`, which never overstates it. When the
+/// floor is high, the AI is what raised it to critical, and only an AI answer proven by its
+/// attestation may do that. A floor of Unknown is refused like any floor below high: an
+/// unverifiable sign request alerts members but never triggers the guard (C8).
 fn is_vetoable(verdict: &Verdict) -> bool {
     let floor_high = matches!(verdict.floor, Severity::High | Severity::Critical);
-    let deterministic = verdict
-        .findings
-        .iter()
-        .any(|code| *code != FindingCode::HashUnverified);
+    let backed_by_proof = verdict.findings.iter().any(|&code| {
+        code != FindingCode::HashUnverified
+            && matches!(min_severity(code), Severity::High | Severity::Critical)
+    });
     let raised_by_proven_ai =
         verdict.floor == Severity::Critical || verdict.ai_status == AiStatus::Verified;
-    verdict.risk == Severity::Critical && floor_high && deterministic && raised_by_proven_ai
+    verdict.risk == Severity::Critical && floor_high && backed_by_proof && raised_by_proven_ai
+}
+
+fn storage_cost(bytes: u64) -> NearToken {
+    env::storage_byte_cost().saturating_mul(u128::from(bytes))
+}
+
+/// Sends `amount` back to `to` as a plain transfer with no callback. Callers run it after their
+/// last write, so nothing can re-enter the call that owes the refund.
+fn refund(to: &AccountId, amount: NearToken) {
+    if !amount.is_zero() {
+        Promise::new(to.clone()).transfer(amount).detach();
+    }
 }
 
 fn parse_hash(hash_hex: &str) -> [u8; 32] {
@@ -244,21 +262,39 @@ impl KaapGuard {
     /// through an ordinary FunctionCall proposal, so enrolment is the DAO's own vote. Any account
     /// can enrol itself, but a vote only counts in a DAO whose policy gives this guard a role.
     ///
-    /// Panics with ERR_ALREADY_ENROLLED if the caller is already enrolled. Emits `enrolled`.
+    /// The caller attaches the storage its entry takes, measured as it is written (0.01 NEAR
+    /// always covers it), and gets the rest back in the same call, so an enrolment never spends
+    /// the guard's own balance (C29). Panics with ERR_ALREADY_ENROLLED if the caller is already
+    /// enrolled and ERR_NOT_ENOUGH_DEPOSIT if the deposit does not cover the storage. Emits
+    /// `enrolled`.
+    #[payable]
     pub fn enroll(&mut self) {
         let dao = env::predecessor_account_id();
+        let before = env::storage_usage();
         require!(self.enrolled.insert(dao.clone()), ERR_ALREADY_ENROLLED);
-        GuardEvent::Enrolled(vec![DaoEntry { dao }]).emit();
+        // The set only writes to storage when flushed, and the charge must be what was written.
+        self.enrolled.flush();
+        let cost = storage_cost(env::storage_usage().saturating_sub(before));
+        let attached = env::attached_deposit();
+        require!(attached >= cost, ERR_NOT_ENOUGH_DEPOSIT);
+        GuardEvent::Enrolled(vec![DaoEntry { dao: dao.clone() }]).emit();
+        refund(&dao, attached.saturating_sub(cost));
     }
 
     /// Removes the calling account from the enrolled DAOs, after which `veto` refuses every
-    /// verdict that names it. Called the same way as `enroll`.
+    /// verdict that names it. Called the same way as `enroll`. The storage the entry frees goes
+    /// back to the caller, which is exactly what its enrolment charged: every entry's size
+    /// depends only on its own account id, whatever moves into its place in the set.
     ///
     /// Panics with ERR_NOT_ENROLLED if the caller is not enrolled. Emits `unenrolled`.
     pub fn unenroll(&mut self) {
         let dao = env::predecessor_account_id();
+        let before = env::storage_usage();
         require!(self.enrolled.remove(&dao), ERR_NOT_ENROLLED);
-        GuardEvent::Unenrolled(vec![DaoEntry { dao }]).emit();
+        self.enrolled.flush();
+        let freed = before.saturating_sub(env::storage_usage());
+        GuardEvent::Unenrolled(vec![DaoEntry { dao: dao.clone() }]).emit();
+        refund(&dao, storage_cost(freed));
     }
 
     /// Casts VoteReject on the proposal a signed verdict names. Anyone may call it: the

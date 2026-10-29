@@ -1,0 +1,34 @@
+{
+  "network": "testnet",
+  "deployed_at": "2026-10-29T06:12:11Z",
+  "deployed_by": "scripts/WO-02a-deploy-testnet.sh (work order WO-02a2)",
+  "accepted_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
+  "guard": {
+    "account_id": "kaap-guard-1029061211.testnet",
+    "code_hash": "77fyhhxdRnHzb8efe9HBYL8C3KcUpEbbRjLvrNyqoxbP",
+    "code_sha256": "5adbadb5282e0cf43ab9347d73249ce092be06fd7120aa6294a8bee5797dec76",
+    "owner": "kaap-owner-1029061211.testnet",
+    "deploy_and_init_tx": "HTxwP7wQ52QLAGT2g7iYx6qGyUjdGFhGNcUXSJ66QVmD",
+    "full_access_key_deleted_tx": "8yok6DJwfpVK6413YktPP75VJoTPowy7e4cDFHwqFKwK",
+    "access_keys_left": 0
+  },
+  "registry": {
+    "account_id": "kaap-registry-1029061211.testnet",
+    "code_hash": "65Y2p3NqwjE8z8oXdzvRPjDWux2SXmHrxxzAhpqwPdqY",
+    "code_sha256": "4b73d851018e8e955b1037b4fa397380eb2638698f8eaea734eb1f9fa787539f",
+    "deploy_and_init_tx": "3kdTPkQpADXfzjFLUbM7KHWzxRFj9UdFx2YwiCpbhBSJ",
+    "full_access_key_deleted_tx": "Bin4nWQAJLx8jaJ2GuovuSAwHLmknTNRCrvd3U8VML19",
+    "access_keys_left": 0
+  },
+  "owner": {
+    "account_id": "kaap-owner-1029061211.testnet",
+    "held_by": "Ram; the key is only in ~/.near-credentials/testnet/kaap-owner-1029061211.testnet.json inside WSL on his machine"
+  },
+  "sealed": {
+    "project_id": "kaap-worker-1029053612.testnet/kaap-sealed",
+    "worker_account": "kaap-worker-1029053612.testnet",
+    "signing_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
+    "attested_run_tx": "7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC",
+    "attestation_url": "https://testnet-api.outlayer.ai/attestations/by-tx/7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC"
+  }
+}

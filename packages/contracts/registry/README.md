@@ -10,7 +10,7 @@ The key is fixed at `new` and can never change. A new key means a new registry, 
 
 ## What it keeps
 
-- Every verdict for a (network, DAO, proposal) is stored next to the earlier ones, never over them. Each record says which earlier record it supersedes. The same verdict twice is refused (`ERR_DUPLICATE`), so an old verdict cannot be pushed back on top.
+- Every verdict for a (network, DAO, proposal) is stored next to the earlier ones, never over them. `latest` is the verdict read at the highest block, the later record winning a tie, so a verdict read at an older block and recorded afterwards stays in the history but never becomes latest. Each record that became latest says which record it superseded. The same verdict twice is refused (`ERR_DUPLICATE`).
 - A verdict holds only ids, hashes, risk levels, finding codes, the model id and an expiry. No confidential text, no explanation of one and no contact detail ever reaches it; the explanation is a hash.
 - Verdicts over 1,024 bytes are refused (`ERR_TOO_LARGE`). The sealed program's whole output is capped below that.
 - The caller pays for the storage a record takes, measured as it is written, and gets the rest of its deposit back in the same transaction (`ERR_NOT_ENOUGH_DEPOSIT` if it does not cover it). The registry's own balance never pays. Attach 0.02 NEAR; a typical record keeps 0.0056 NEAR of it.
@@ -23,19 +23,20 @@ Other refusals: `ERR_BAD_VERDICT` (not a version 1 verdict), `ERR_BAD_SIGNATURE`
 |---|---|---|
 | `new(accepted_key, network)` | the account itself, at deploy | fixes the key and the network |
 | `record(verdict, signature)` | anyone, with a deposit | stores the verdict, returns its index; event `verdict_recorded` with the storage cost and the refund |
-| `latest(network, dao, proposal_id)` | view | the newest record, or null |
-| `history(network, dao, proposal_id, from, limit)` | view | oldest first, pages of at most 50 |
+| `latest(network, dao, proposal_id)` | view | the record read at the highest block, or null |
+| `history(network, dao, proposal_id, from, limit)` | view | in the order recorded, pages of at most 50 |
+| `accepted_key()`, `network()` | view | the key and network fixed at `new` |
 
-Each record comes back with the signed bytes and the signature, so a reader can verify it against the key in the deploy transaction, plus the decoded risk, floor, findings, AI status, model id, the block the proposal was read at, the expiry, who recorded it and when.
+Each record comes back with the signed bytes and the signature, so a reader can verify it against `accepted_key()`, plus the decoded risk, floor, findings, AI status, model id, the block the proposal was read at, the expiry, who recorded it and when.
 
 ## Testnet deployment
 
 | | |
 |---|---|
-| Account | `kaap-registry-1029054356.testnet` |
-| Code hash | `B7MktDsBNBPqCf5vHaEFXsTe3xEaAawsKBsjSXJvj26Q` (sha256 `9635d2dd25bacbd37ce00487e5926ca51dbb51176b2f62902fb8d888c444b4dd`) |
-| Accepted key | `ed25519:GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB`, a public test key; the registry for the sealed program's key is a fresh deploy |
-| Explorer | https://testnet.nearblocks.io/address/kaap-registry-1029054356.testnet |
+| Account | `kaap-registry-1029061211.testnet` |
+| Code hash | `65Y2p3NqwjE8z8oXdzvRPjDWux2SXmHrxxzAhpqwPdqY` (sha256 `4b73d851018e8e955b1037b4fa397380eb2638698f8eaea734eb1f9fa787539f`) |
+| Accepted key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN`, the sealed program's key (details in `deployments/testnet.json`) |
+| Explorer | https://testnet.nearblocks.io/address/kaap-registry-1029061211.testnet |
 
 Deploy a registry alone with `KAAP_DEPLOY=registry KAAP_ACCEPTED_KEY=ed25519:<key> bash scripts/WO-02a-deploy-testnet.sh`.
 

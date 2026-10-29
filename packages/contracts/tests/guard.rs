@@ -20,6 +20,9 @@ use near_api::types::transaction::result::ExecutionFinalResult;
 use near_api::{AccountId, NearGas, NearToken};
 use serde_json::{json, Value};
 
+/// What a DAO attaches to `enroll`; the guard keeps the storage cost and sends the rest back.
+const ENROL_DEPOSIT: NearToken = NearToken::from_millinear(10);
+
 struct World {
     env: Env,
     guard: AccountId,
@@ -64,16 +67,33 @@ impl World {
         Ok(dao)
     }
 
-    /// Enrols `dao` the way a real DAO does: a FunctionCall proposal to `enroll`, approved by its
-    /// council. Returns the approval transaction, whose guard receipt is the enrolment itself.
+    /// Enrols `dao` the way a real DAO does: a FunctionCall proposal to `enroll` that attaches
+    /// the storage deposit, approved by its council. Returns the approval transaction, whose
+    /// guard receipt is the enrolment itself.
     async fn enroll(&self, dao: &AccountId) -> Result<ExecutionFinalResult> {
+        let approval = self.dao_calls_guard(dao, "enroll", ENROL_DEPOSIT).await?;
+        anyhow::ensure!(
+            self.env.view(&self.guard, "is_enrolled", json!({ "dao": dao })).await? == json!(true),
+            "{dao} approved its enrolment but the guard does not list it"
+        );
+        Ok(approval)
+    }
+
+    /// `dao` files and approves a FunctionCall proposal that calls `method` on the guard with
+    /// `deposit` and the 10 Tgas the guard README tells DAOs to give it.
+    async fn dao_calls_guard(
+        &self,
+        dao: &AccountId,
+        method: &str,
+        deposit: NearToken,
+    ) -> Result<ExecutionFinalResult> {
         let kind = json!({ "FunctionCall": {
             "receiver_id": self.guard,
             "actions": [{
-                "method_name": "enroll",
+                "method_name": method,
                 "args": b64(b"{}"),
-                "deposit": "0",
-                "gas": NearGas::from_tgas(20).as_gas().to_string()
+                "deposit": deposit.as_yoctonear().to_string(),
+                "gas": NearGas::from_tgas(10).as_gas().to_string()
             }]
         }});
         let id = self.env.add_proposal(dao, &self.alice, kind).await?;
@@ -89,10 +109,6 @@ impl World {
                 NearGas::from_tgas(300),
             )
             .await?;
-        anyhow::ensure!(
-            self.env.view(&self.guard, "is_enrolled", json!({ "dao": dao })).await? == json!(true),
-            "{dao} approved its enrolment but the guard does not list it"
-        );
         Ok(approval)
     }
 
@@ -228,6 +244,39 @@ async fn valid_veto_rejects_the_proposal_and_the_dao_records_the_guards_vote() -
 }
 
 #[tokio::test]
+async fn enrolment_storage_is_paid_by_the_dao_and_refunded_when_it_leaves() -> Result<()> {
+    let w = world().await?;
+    let dao = w.add_dao("dao-pays", false).await?;
+    // The guard's free balance: what is left after its own storage is paid for.
+    let free = |a: &near_api::types::account::Account| {
+        a.amount.as_yoctonear() as i128 - a.storage_usage as i128 * 10_i128.pow(19)
+    };
+    let start = w.env.account_view(&w.guard).await?;
+
+    w.enroll(&dao).await?.into_result()?;
+    let enrolled = w.env.account_view(&w.guard).await?;
+    let added = enrolled.storage_usage - start.storage_usage;
+    let kept = enrolled.amount.as_yoctonear() - start.amount.as_yoctonear();
+    println!("enrolment added {added} bytes; the guard kept {kept} yoctoNEAR of the 0.01 NEAR deposit");
+    anyhow::ensure!(added > 0 && free(&enrolled) >= free(&start), "the guard paid for the enrolment");
+    anyhow::ensure!(kept < ENROL_DEPOSIT.as_yoctonear() / 2, "the excess deposit was not refunded");
+
+    w.dao_calls_guard(&dao, "unenroll", NearToken::from_yoctonear(0)).await?.into_result()?;
+    let left = w.env.account_view(&w.guard).await?;
+    println!("unenrolment freed {} bytes", enrolled.storage_usage - left.storage_usage);
+    anyhow::ensure!(left.storage_usage == start.storage_usage, "unenrolment left storage behind");
+    anyhow::ensure!(free(&left) >= free(&start), "the unenrolment refund came out of the guard's own balance");
+    anyhow::ensure!(w.env.view(&w.guard, "is_enrolled", json!({ "dao": dao })).await? == json!(false));
+
+    let text = assert_refused(
+        w.env.call(&w.stranger, &w.guard, "enroll", json!({}), NearToken::from_yoctonear(0), NearGas::from_tgas(30)).await?,
+        "ERR_NOT_ENOUGH_DEPOSIT",
+    )?;
+    println!("enroll with no deposit refused with: {text}");
+    Ok(())
+}
+
+#[tokio::test]
 async fn err_bad_verdict_for_bytes_that_are_not_a_verdict() -> Result<()> {
     let w = world().await?;
     let id = w.file_transfer(&w.dao, 5).await?;
@@ -353,6 +402,25 @@ async fn err_not_vetoable_when_the_only_finding_is_hash_unverified() -> Result<(
         w.assert_refused_untouched(outcome, "ERR_NOT_VETOABLE", &w.dao, id, &unseen_text).await?;
     }
     Ok(())
+}
+
+#[tokio::test]
+async fn hash_unverified_needs_a_high_code_beside_it_to_back_a_veto() -> Result<()> {
+    let w = world().await?;
+    let id = w.file_transfer(&w.dao, 5).await?;
+    let (kind_json, verdict) = w.fresh(&w.dao, id).await?;
+    let beside = |other| Verdict {
+        floor: Severity::High,
+        findings: vec![FindingCode::HashUnverified, other],
+        ai_status: AiStatus::Verified,
+        ..verdict.clone()
+    };
+    let medium = beside(FindingCode::NewRecipient);
+    let outcome = w.veto(&medium, &kind_json).await?;
+    w.assert_refused_untouched(outcome, "ERR_NOT_VETOABLE", &w.dao, id, &medium).await?;
+
+    w.veto(&beside(FindingCode::PolicyAddsApprover), &kind_json).await?.into_result()?;
+    w.assert_rejected_by_guard(&w.dao, id).await
 }
 
 #[tokio::test]
@@ -703,8 +771,10 @@ async fn gas_report() -> Result<()> {
     );
     let expires = w.env.chain_time_ms().await? + TEN_MINUTES_MS;
     let refused = vetoable_verdict(&w.guard, &w.dao, id, &altered, expires)?;
+    let before = guard_bytes().await?;
     let outcome = w.veto(&refused, &altered).await?;
     report_gas("veto the DAO refuses (ERR_WRONG_KIND)", &outcome);
+    println!("GAS | refused veto | guard storage added (bytes) | {}", guard_bytes().await? - before);
 
     let id = w.file_transfer(&w.dao, 5).await?;
     let (kind_json, verdict) = w.fresh(&w.dao, id).await?;
@@ -714,7 +784,7 @@ async fn gas_report() -> Result<()> {
     for n in 0..10 {
         let account = w.env.account(&format!("plain-{n}"), 5).await?;
         w.env
-            .call(&account, &w.guard, "enroll", json!({}), NearToken::from_yoctonear(0), NearGas::from_tgas(30))
+            .call(&account, &w.guard, "enroll", json!({}), ENROL_DEPOSIT, NearGas::from_tgas(30))
             .await?
             .into_result()?;
     }

@@ -1,17 +1,18 @@
 # Gas and storage for the Kaap contracts
 
-Measured on 29 Oct 2026 in a local near-sandbox (nearcore 2.13.4, protocol 86, the protocol mainnet runs) against the real Sputnik DAO 3.2 binary (code hash `DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF`). The contracts were built with `cargo near build non-reproducible-wasm` (cargo-near 0.22.0, Rust 1.93.0, near-sdk 5.29.1):
+Measured on 29 Oct 2026 (WO-02a, enrolment and builds again for WO-02a2) in a local near-sandbox (nearcore 2.13.4, protocol 86, the protocol mainnet runs) against the real Sputnik DAO 3.2 binary (code hash `DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF`). The contracts were built with `cargo near build non-reproducible-wasm` (cargo-near 0.22.0, Rust 1.93.0, near-sdk 5.29.1):
 
 | Contract | Size | sha256 |
 |---|---|---|
-| kaap-guard | 219,691 bytes | `9947dda2716f128a222630e3e72c2c77a3979bca9c883af0326f2f5f34cfea8b` |
-| kaap-registry | 180,912 bytes | `9635d2dd25bacbd37ce00487e5926ca51dbb51176b2f62902fb8d888c444b4dd` |
+| kaap-guard | 220,810 bytes | `5adbadb5282e0cf43ab9347d73249ce092be06fd7120aa6294a8bee5797dec76` |
+| kaap-registry | 182,731 bytes | `4b73d851018e8e955b1037b4fa397380eb2638698f8eaea734eb1f9fa787539f` |
 
 NEAR amounts use the minimum gas price of 100,000,000 yoctoNEAR per unit of gas, so 1 Tgas costs 0.0001 NEAR. Whoever sends the transaction pays its gas; neither contract pays gas for anyone.
 
 To measure again, inside WSL from the repo root:
 
 ```
+bash scripts/fetch-sputnik-wasm.sh
 cargo test -p kaap-guard --test guard_sandbox gas_report -- --nocapture
 cargo test -p kaap-registry --test registry_sandbox gas_report -- --nocapture
 ```
@@ -25,9 +26,9 @@ Each prints one `GAS |` line per receipt. A "total" adds every receipt of the tr
 | Veto a Transfer (106-byte kind) | guard `veto` 2.78 Tgas, DAO `act_proposal` 2.42 Tgas, guard `on_veto_result` 1.61 Tgas | 8.26 Tgas | 0.00083 NEAR |
 | Record a verdict | registry `record` 2.43 Tgas | 3.43 Tgas | 0.00034 NEAR, plus 0.00555 NEAR of storage |
 | Record a verdict of the full 1,024 bytes | registry `record` 2.63 Tgas | 3.68 Tgas | 0.00037 NEAR, plus 0.01361 NEAR of storage |
-| Enrol a DAO (its approved FunctionCall proposal) | guard `enroll` 1.64 Tgas, inside Sputnik's approval 2.94 Tgas and its callback 2.30 Tgas | 8.30 Tgas | 0.00083 NEAR |
+| Enrol a DAO (its approved FunctionCall proposal) | guard `enroll` 1.88 Tgas with its refund, inside Sputnik's approval 2.94 Tgas and its callback 2.30 Tgas | 9.00 Tgas | 0.00090 NEAR, plus 0.0014 NEAR of storage |
 
-In plain words: stopping a disguised payment costs whoever submits the verdict less than a thousandth of a NEAR. Recording a verdict costs about a third of that in gas, and the caller also leaves about half a hundredth of a NEAR behind to pay for the bytes the record occupies, forever. A DAO's enrolment costs it the same as any ordinary approved proposal.
+In plain words: stopping a disguised payment costs whoever submits the verdict less than a thousandth of a NEAR. Recording a verdict costs about a third of that in gas, and the caller also leaves about half a hundredth of a NEAR behind to pay for the bytes the record occupies, forever. A DAO's enrolment costs it about what any approved proposal costs, and its proposal attaches 0.01 NEAR, of which the guard keeps the storage cost and sends the rest straight back.
 
 ## Veto by size of the kind
 
@@ -72,10 +73,25 @@ Both full pages stay far inside the gas an RPC node lets a view burn.
 |---|---|---|---|
 | A typical verdict in the registry, with its index entries | 555 | 0.00555 | the caller, from the deposit it attaches; the rest is refunded |
 | The largest verdict the registry accepts (1,024 bytes of borsh) | 1,361 | 0.01361 | the caller, the same way |
-| One enrolled DAO in the guard | 141 | 0.00141 | the guard's own balance |
-| One used verdict in the guard | 74 | 0.00074 | the guard's own balance |
-| kaap-guard's code | 219,691 | about 2.2 | the guard account, once, at deploy |
-| kaap-registry's code | 180,912 | about 1.8 | the registry account, once, at deploy |
+| One enrolled DAO in the guard (a 15-character id; a 64-character id takes about 239) | 141 | 0.00141 | the DAO, from the deposit on `enroll`; refunded in full by `unenroll` |
+| One used verdict in the guard, vote cast | 74 | 0.00074 | the guard's own balance |
+| One used verdict in the guard, vote refused (the entry holds "Failed") | 84 | 0.00084 | the guard's own balance |
+| kaap-guard's code | 220,810 | about 2.2 | the guard account, once, at deploy |
+| kaap-registry's code | 182,731 | about 1.8 | the registry account, once, at deploy |
+
+## The guard's own budget
+
+The guard pays for exactly one thing: the 74 to 84 bytes each used verdict leaves in its storage, at most 0.00084 NEAR a veto. Only a verdict the accepted key signed can create one, so nobody else can spend it. Gas is always the caller's. At the worst case of 84 bytes:
+
+| Vetoes | Storage the guard pays |
+|---|---|
+| 100 | 0.084 NEAR |
+| 1,000 | 0.84 NEAR |
+| 10,000 | 8.4 NEAR |
+
+The free balance is the account balance minus 0.00001 NEAR for every byte the account stores. A faucet-funded guard starts with about 7.8 NEAR free after its code is paid for, enough for about 9,000 vetoes. For C18, the worker should raise "guard balance low" when the free balance drops below 0.1 NEAR, which is about 119 vetoes left.
+
+Enrolments never touch this budget: the DAO pays for its own entry, and `unenroll` hands back exactly what it paid.
 
 Attaching 0.02 NEAR to `record` always covers the storage: the largest record allowed took 0.0136 NEAR here, and the longest possible DAO and caller names (64 characters each, against 11 and 14 in the test) add at most about 0.0016 NEAR more.
 
@@ -83,4 +99,4 @@ Attaching 0.02 NEAR to `record` always covers the storage: the largest record al
 
 - A policy-shaped kind much above 200 KB cannot be vetoed: at 198 KB the whole veto already burnt 291 of the 300 Tgas a transaction may carry.
 - kaap-core refuses to canonicalise anything over 256 KiB, so the guard answers ERR_BAD_KIND for such a kind and cannot veto it at any gas. A FunctionCall padded past that size is cheap to file: the 196,735-byte one above was filed and vetoed without trouble.
-- Both limits are reported to the head chef as follow-ups; this order does not change them.
+- Both are stated limits, in the Limits section of `guard/README.md`: the sealed job holds such a proposal and the worker alerts members that it cannot be judged or vetoed (WO-06b).

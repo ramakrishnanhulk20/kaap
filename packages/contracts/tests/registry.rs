@@ -126,6 +126,26 @@ async fn a_newer_verdict_is_stored_next_to_the_older_one_never_over_it() -> Resu
 }
 
 #[tokio::test]
+async fn an_older_verdict_recorded_later_never_becomes_latest() -> Result<()> {
+    let w = world().await?;
+    let newer = w.verdict(3, 120)?;
+    let older = Verdict { risk: Severity::Low, ..w.verdict(3, 100)? };
+    w.record(&newer).await?.into_result()?;
+    let index = w.record(&older).await?.into_result()?.json::<u32>()?;
+    anyhow::ensure!(index == 1, "the older verdict must still be kept, at index 1");
+
+    let latest = w.latest(3).await?;
+    anyhow::ensure!(latest["verdict_hash"] == json!(verdict_hash_hex(&newer)), "{latest}");
+    anyhow::ensure!(latest["block_height"] == json!(120), "{latest}");
+    let history = w.history(3).await?;
+    anyhow::ensure!(history.len() == 2 && history[1]["supersedes"] == Value::Null, "{history:?}");
+    anyhow::ensure!(
+        w.env.view(&w.registry, "accepted_key", json!({})).await? == json!(w.sealed.public_key())
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn err_too_large_for_a_verdict_over_the_cap() -> Result<()> {
     let w = world().await?;
     let (_, signature) = w.sealed.sign(&w.verdict(3, 100)?);

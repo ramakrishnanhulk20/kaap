@@ -151,6 +151,7 @@ if [ "$DEPLOY" != "guard" ]; then
   say "  account:     $(link_account "$REGISTRY")"
   say "  deploy+init: $(link_tx "$DEPLOY_TX")"
   say "  key deleted: $(link_tx "$DELETE_TX")"
+  say "  views:       accepted_key=$(view "$REGISTRY" accepted_key '{}') network=$(view "$REGISTRY" network '{}')"
 fi
 
 say ""

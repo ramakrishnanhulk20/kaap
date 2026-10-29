@@ -27,7 +27,8 @@ use tokio::sync::{Semaphore, SemaphorePermit};
 pub use anyhow::Result;
 
 const REPO_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../..");
-const SPUTNIK_WASM: &str = "reference/tech/kaval/q5/sputnik-dao-3.2.wasm";
+/// Written by scripts/fetch-sputnik-wasm.sh, which takes the code every 3.2 DAO runs from mainnet.
+const SPUTNIK_WASM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/wasm/sputnik-dao-3.2.wasm");
 pub const SPUTNIK_CODE_HASH: &str = "DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF";
 
 pub const NETWORK: &str = "sandbox";
@@ -91,11 +92,15 @@ fn outer_target_dir() -> Result<PathBuf> {
         .ok_or_else(|| anyhow::anyhow!("unexpected test binary path {}", exe.display()))
 }
 
-/// Reads the saved mainnet binary and refuses to go on unless it is the 3.2 release.
+/// Reads the fetched mainnet binary and refuses to go on unless it is the 3.2 release.
 pub fn sputnik_wasm() -> Result<Vec<u8>> {
-    let path = Path::new(REPO_ROOT).join(SPUTNIK_WASM);
-    let code = std::fs::read(&path)
-        .map_err(|error| anyhow::anyhow!("cannot read {} ({error})", path.display()))?;
+    let path = Path::new(SPUTNIK_WASM);
+    let code = std::fs::read(path).map_err(|error| {
+        anyhow::anyhow!(
+            "cannot read {} ({error}); run `bash scripts/fetch-sputnik-wasm.sh` first",
+            path.display()
+        )
+    })?;
     let hash = CryptoHash::hash(&code).to_string();
     anyhow::ensure!(
         hash == SPUTNIK_CODE_HASH,

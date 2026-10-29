@@ -57,6 +57,51 @@ fn table_covers_all_24_codes_with_the_guide_severities() {
 }
 
 #[test]
+fn min_severity_covers_all_24_codes_and_never_exceeds_the_severity_in_context() {
+    use kaap_core::severity::min_severity;
+    use FindingCode::*;
+    let table = [
+        (HashMismatch, Severity::Critical),
+        (HashTextDangerous, Severity::Critical),
+        (PolicyDuplicateRoleNames, Severity::Critical),
+        (PromptInjection, Severity::Critical),
+        (DescContradicts, Severity::High),
+        (PolicyAddsApprover, Severity::High),
+        (PolicyLowersThreshold, Severity::High),
+        (PolicyReplacesRole, Severity::High),
+        (PolicyRemovesMember, Severity::High),
+        (PolicyBeforeUnknown, Severity::High),
+        (CodeUpgrade, Severity::High),
+        (IntentsKeyChange, Severity::High),
+        (GuardWeakened, Severity::High),
+        (UnknownCall, Severity::High),
+        (ArgsNotJson, Severity::High),
+        (UnknownValue, Severity::High),
+        (LookalikeToken, Severity::High),
+        (OtherRiskyKind, Severity::High),
+        (HashUnverified, Severity::Unknown),
+        (AttachedDeposit, Severity::Medium),
+        (CrossChainOut, Severity::Medium),
+        (NewRecipient, Severity::Medium),
+        (LargeAmount, Severity::Medium),
+        (EmptyDescription, Severity::Low),
+    ];
+    let listed: Vec<FindingCode> = table.iter().map(|(c, _)| *c).collect();
+    assert_eq!(listed, FindingCode::ALL.to_vec(), "table must list every code once, in guide order");
+    // The context that raises DESC_CONTRADICTS the most: value moves and the guard is weakened.
+    let busy = [effect(json!({"type": "transfer", "token": "near", "amount": "1", "to": "a.near"}))];
+    for (code, expected) in table {
+        assert_eq!(min_severity(code), expected, "{code:?}");
+        let in_context = severity(code, &busy, &FindingCode::ALL);
+        if code == DescContradicts {
+            assert_eq!(in_context, Severity::Critical, "the busy context must raise it");
+        } else {
+            assert_eq!(in_context, expected, "{code:?} must not depend on context");
+        }
+    }
+}
+
+#[test]
 fn codes_other_than_desc_contradicts_ignore_context() {
     let busy = [
         effect(json!({"type": "transfer", "token": "near", "amount": "1", "to": "a.near"})),

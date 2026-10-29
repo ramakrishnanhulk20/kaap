@@ -21,7 +21,7 @@ No other method creates a promise, and nothing in the code builds any action but
 
 ## Who holds the owner key
 
-The owner is Ram. On testnet the owner account is `kaap-owner-1029054356.testnet`, made by the deploy script, with its key kept only on Ram's machine. On mainnet the owner will be Ram's own NEAR account.
+The owner is Ram. On testnet the owner account is `kaap-owner-1029061211.testnet`, made by the deploy script, with its key kept only on Ram's machine. On mainnet the owner will be Ram's own NEAR account.
 
 The owner can do two things and nothing else: replace the accepted key with `set_accepted_key` (every change emits `key_changed` with the old and the new key, public on chain, so Kaap's worker can alert every enrolled DAO's members, C18), and hand ownership to another account in two steps, `propose_owner` then `accept_owner` by the new owner. Both need exactly one yoctoNEAR attached, so only a full-access key can call them. The owner cannot make the guard vote, cannot enrol or remove a DAO, and cannot change the code.
 
@@ -30,7 +30,7 @@ The owner can do two things and nothing else: replace the accepted key with `set
 There is no upgrade method, and the deploy script deletes the account's only full-access key right after `new`. Anyone can check that the account has no keys and that its code hash matches this build:
 
 ```
-near account list-keys kaap-guard-1029054356.testnet network-config testnet now
+near account list-keys kaap-guard-1029061211.testnet network-config testnet now
 ```
 
 A new version is a new contract. A DAO moves to it with one ordinary proposal that changes its Guard role.
@@ -39,23 +39,23 @@ A new version is a new contract. A DAO moves to it with one ordinary proposal th
 
 | | |
 |---|---|
-| Account | `kaap-guard-1029054356.testnet` |
-| Code hash | `BKLwJNq7QyJjfJa7hnU3wZ9fhGaqi8ZXr1s8DW1BUUxr` (sha256 `9947dda2716f128a222630e3e72c2c77a3979bca9c883af0326f2f5f34cfea8b`) |
-| Accepted key | `ed25519:GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB`, a public test key, until the sealed program's key replaces it |
-| Explorer | https://testnet.nearblocks.io/address/kaap-guard-1029054356.testnet |
+| Account | `kaap-guard-1029061211.testnet` |
+| Code hash | `77fyhhxdRnHzb8efe9HBYL8C3KcUpEbbRjLvrNyqoxbP` (sha256 `5adbadb5282e0cf43ab9347d73249ce092be06fd7120aa6294a8bee5797dec76`) |
+| Accepted key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN`, the sealed program's key (project `kaap-worker-1029053612.testnet/kaap-sealed`; attested run https://testnet-api.outlayer.ai/attestations/by-tx/7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC) |
+| Explorer | https://testnet.nearblocks.io/address/kaap-guard-1029061211.testnet |
 
-Deploy again with `bash scripts/WO-02a-deploy-testnet.sh`.
+Every id and hash is also in `deployments/testnet.json`. Deploy again with `KAAP_ACCEPTED_KEY=ed25519:<key> bash scripts/WO-02a-deploy-testnet.sh`.
 
 ## Enrolling a DAO
 
-The DAO files a FunctionCall proposal to `enroll` on the guard, with no deposit and 10 Tgas (it burns 1.64), and approves it like any other proposal. `unenroll` works the same way. The DAO's policy must also give the guard a Guard role holding `<kind>:VoteReject` for every kind except `remove_member_from_role`, so the DAO can always remove Kaap.
+The DAO files a FunctionCall proposal to `enroll` on the guard, attaching 0.01 NEAR and 10 Tgas (it burns 1.88), and approves it like any other proposal. The guard keeps only the storage its entry takes, 0.0014 NEAR for a short name and at most about 0.0024 NEAR, and sends the rest back in the same call (`ERR_NOT_ENOUGH_DEPOSIT` if the deposit is short). `unenroll` works the same way with no deposit, and refunds exactly what the enrolment kept. The DAO's policy must also give the guard a Guard role holding `<kind>:VoteReject` for every kind except `remove_member_from_role`, so the DAO can always remove Kaap.
 
 ## Methods
 
 | Method | Who | What |
 |---|---|---|
 | `new(owner, accepted_key, network)` | the account itself, at deploy | sets the owner, the key and the network |
-| `enroll()`, `unenroll()` | the DAO | adds or removes the caller; events `enrolled`, `unenrolled` |
+| `enroll()`, `unenroll()` | the DAO; `enroll` with a storage deposit | adds or removes the caller and settles its storage; events `enrolled`, `unenrolled` |
 | `veto(verdict, signature, kind_json)` | anyone | the checks above, then the vote; events `veto_sent`, then `veto_cast` or `veto_refused` |
 | `set_accepted_key(key)` | owner, 1 yoctoNEAR | event `key_changed` |
 | `propose_owner(new_owner)`, `accept_owner()` | owner, then the new owner, 1 yoctoNEAR each | events `owner_proposed`, `owner_accepted` |
@@ -65,7 +65,14 @@ The DAO files a FunctionCall proposal to `enroll` on the guard, with no deposit 
 
 Gas: a veto of a Transfer burns 8.3 Tgas in all, about 0.0008 NEAR. Attach 300 Tgas; what is not burnt comes back. Every figure is in `../GAS.md`.
 
-## Known limits
+## Limits
 
-- A policy-shaped kind much above 200 KB cannot be vetoed inside the 300 Tgas one transaction may carry, and a kind over 256 KiB cannot be canonicalised at all (`ERR_BAD_KIND`). See `../GAS.md`.
-- The guard stores 141 bytes for each enrolled DAO and 74 bytes for each used verdict, paid from its own balance.
+These proposals cannot be vetoed, whatever the verdict says:
+
+- A kind kaap-core cannot canonicalise: anything over 256 KiB, or text that is not strict JSON. The guard answers `ERR_BAD_KIND` at any gas. Size, not cost, is the barrier here: padding a FunctionCall's args is cheap, and a 196,735-byte padded FunctionCall was filed and vetoed for 89.0 Tgas in the sandbox.
+- A kind whose vote cannot fit in the 300 Tgas one transaction may carry. Big policies cost the most per byte: a 117,526-byte ChangePolicy veto burnt 171.6 Tgas, and a 197,966-byte one 291.3 Tgas (guard 122.7, DAO 155.1, callback 1.6), so policy kinds over about 200 KB do not fit.
+- A RemoveMemberFromRole proposal, by design: the Guard role never holds VoteReject on it, so a DAO can always remove Kaap. The DAO refuses the vote and the guard records the refusal.
+
+For the first two, Kaap's sealed job holds the proposal instead of signing a veto for it, and the worker alerts the DAO's members that it cannot be judged or vetoed, so a person looks at it (WO-06b). Every measurement is in `../GAS.md`.
+
+The guard pays for one thing itself: each used verdict takes 74 bytes of its storage (84 when the DAO refused the vote), about 0.0008 NEAR. Only a verdict the accepted key signed can create one. Enrolments are paid by the DAO.

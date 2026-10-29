@@ -185,6 +185,38 @@ fn history_caps_the_page_and_pages_past_the_end_are_empty() {
 }
 
 #[test]
+fn an_older_verdict_recorded_later_never_becomes_latest() {
+    let mut r = registry();
+    let newer = verdict(3, 120);
+    let older = Verdict { risk: Severity::Low, ..verdict(3, 100) };
+    record(&mut r, &newer);
+    set_context(CALLER, DEPOSIT);
+    assert_eq!(record(&mut r, &older), 1);
+
+    let found = latest(&r, 3).unwrap();
+    assert_eq!(found.index, 0);
+    assert_eq!(found.verdict_hash, hex::encode(verdict_hash(&newer)));
+    let history = r.history("sandbox".to_owned(), account(DAO), 3, 0, 10);
+    assert_eq!(history.len(), 2, "the older verdict is still kept");
+    assert_eq!(history[1].supersedes, None, "a stale verdict supersedes nothing");
+
+    // A verdict read at the same block as the latest is newer information, so it wins the tie.
+    set_context(CALLER, DEPOSIT);
+    let same_block = Verdict { risk: Severity::High, ..verdict(3, 120) };
+    assert_eq!(record(&mut r, &same_block), 2);
+    let found = latest(&r, 3).unwrap();
+    assert_eq!(found.index, 2);
+    assert_eq!(found.supersedes, Some(0));
+}
+
+#[test]
+fn the_accepted_key_and_network_are_readable() {
+    let r = registry();
+    assert_eq!(r.accepted_key(), key_string(&VERDICT_SEED));
+    assert_eq!(r.network(), "sandbox");
+}
+
+#[test]
 #[should_panic(expected = "ERR_TOO_LARGE")]
 fn err_too_large_above_the_cap() {
     let mut r = registry();
