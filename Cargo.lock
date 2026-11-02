@@ -1807,6 +1807,13 @@ dependencies = [
 [[package]]
 name = "kaap-core-wasm"
 version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "kaap-core",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "kaap-guard"

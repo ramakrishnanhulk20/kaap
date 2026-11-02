@@ -1,0 +1,3 @@
+# Built by `npm run build`: the TypeScript output and kaap-core's wasm with its wasm-bindgen glue.
+dist/
+wasm/

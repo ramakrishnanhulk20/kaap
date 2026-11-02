@@ -7,4 +7,20 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+# cdylib is what wasm-bindgen reads; rlib lets the native tests call the same functions.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
+kaap-core = { path = "../core" }
+serde.workspace = true
+# raw_value keeps a proposal's `kind` as the exact bytes the RPC returned (C5).
+serde_json = { workspace = true, features = ["raw_value"] }
+base64.workspace = true
+
+# Only the browser and Node build carry the JavaScript bindings. scripts/build-core-wasm.sh also
+# builds every package it is given for wasm32-wasip2, where this crate is plain Rust with nothing
+# exported. 0.2.129 is the version the root lockfile already resolves for js-sys and web-sys, and
+# the wasm-bindgen command line tool must be this exact version.
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+wasm-bindgen = "=0.2.129"

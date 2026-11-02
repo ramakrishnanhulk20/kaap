@@ -1,0 +1,2 @@
+# Built by build.sh: the wasm and its wasm-bindgen glue.
+pkg/

@@ -1,6 +1,26 @@
 {
-  "name": "@kaap/cli",
+  "name": "kaap",
   "version": "0.1.0",
   "private": true,
-  "license": "MIT"
+  "license": "MIT",
+  "description": "Checks any NEAR Sputnik DAO proposal with no keys, and reruns Kaap's evaluation and DAO census.",
+  "type": "module",
+  "bin": {
+    "kaap": "dist/src/bin.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build:wasm": "bash ../core-wasm/build.sh wasm",
+    "build": "npm run build:wasm && tsc -p tsconfig.json",
+    "test": "npm run build && node --test --test-concurrency=1 \"dist/test/*.test.js\""
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  }
 }
