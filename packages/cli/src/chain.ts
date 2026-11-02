@@ -63,6 +63,16 @@ export class Reader {
     return a;
   }
 
+  /** `sameView`, read as JSON. A view both providers return but that is not JSON holds. */
+  async sameJson(what: string, account: string, method: string, args: object, block: Block): Promise<unknown> {
+    const view = await this.sameView(what, account, method, args, block);
+    try {
+      return JSON.parse(view.text);
+    } catch {
+      throw new Held(`${what} is not JSON`);
+    }
+  }
+
   /** The proposal from both providers, read by kaap-core's strict reader, with the kind compared
    *  in canonical form (Sputnik's sets can come back in another order) and every other field
    *  exactly. */

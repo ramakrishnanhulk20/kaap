@@ -1,8 +1,10 @@
 // Pins the JavaScript-facing functions to kaap-core itself: `analyze` through its JSON input gives
 // kaap-core's own answer on every answer-key record, `read_proposal` keeps the kind's exact text
-// and refuses a duplicate key, and the scoreboards give today's numbers. It does not run the wasm
-// build (the CLI tests do), and it does not cover the hash, verdict or arming exports beyond
-// what kaap-core's own tests already prove of the functions they call.
+// and refuses a duplicate key, the scoreboards give today's numbers, the enrolment template is
+// generated from Sputnik's label list and arms the guard on the NEAR Business role setup, and
+// `who_acts` names who files and approves on that setup. It does not run the wasm build (the CLI
+// tests do), and it does not cover the hash, verdict or arming exports beyond what kaap-core's own
+// tests already prove of the functions they call.
 
 use std::path::{Path, PathBuf};
 
@@ -94,4 +96,55 @@ fn the_scoreboards_give_todays_numbers() {
     assert_eq!((pick("describe", 1), pick("describe", 2), pick("describe", 3)), ((373, 373), (373, 373), (337, 337)));
     assert_eq!((pick("value", 0), pick("value", 2), pick("value", 3)), ((205, 205), (205, 205), (147, 147)));
     assert!((0..5).all(|i| pick("hash", i) == (42, 42)), "codes, floor, veto fields and effects: {:?}", rows("hash"));
+}
+
+/// The NEAR Business role setup (deployments/near-business-policy.json) with one account in every
+/// member place, the shape 18 of the 22 new NEAR Business treasuries had on 24 Oct.
+fn near_business(member: &str) -> Value {
+    let saved: Value = serde_json::from_str(&std::fs::read_to_string(repo().join("deployments/near-business-policy.json")).unwrap()).unwrap();
+    let mut policy = saved["policy"].clone();
+    for role in policy["roles"].as_array_mut().unwrap() {
+        role["kind"]["Group"] = json!([member]);
+    }
+    policy
+}
+
+#[test]
+fn the_enrolment_template_covers_every_sputnik_label_and_arms_the_guard() {
+    use kaap_core::policy::sputnik::LABELS;
+    let guard = "kaap-guard-1029061211.testnet";
+    let t: Value = serde_json::from_str(&api::enrolment_drafts(guard).unwrap()).unwrap();
+    let labels: Vec<&str> = t["labels"].as_array().unwrap().iter().map(|l| l.as_str().unwrap()).collect();
+    assert_eq!(t["left_out"], json!([api::OWN_REMOVAL]));
+    assert_eq!(labels.len() + 1, LABELS.len(), "every label but the guard's own removal");
+    assert!(LABELS.iter().all(|l| labels.contains(l) || *l == api::OWN_REMOVAL), "a Sputnik label is missing from the template");
+    let role = &t["drafts"][0]["kind"]["ChangePolicyAddOrUpdateRole"]["role"];
+    assert_eq!(role["kind"], json!({ "Group": [guard] }), "the role is added with the guard already in it");
+    assert_eq!(t["drafts"][1]["kind"]["FunctionCall"]["actions"][0]["method_name"], "enroll");
+    assert!(api::enrolment_drafts("Not An Account").is_err());
+
+    let mut policy = near_business("owner.testnet");
+    policy["roles"].as_array_mut().unwrap().push(role.clone());
+    let a: Value = serde_json::from_str(&api::guard_arming(&policy.to_string(), guard).unwrap()).unwrap();
+    assert_eq!(a["rejects_alone"], json!(labels));
+    assert_eq!(a["cannot_reject"], json!([api::OWN_REMOVAL]));
+    assert_eq!(a["extra_rights"], json!([]));
+}
+
+#[test]
+fn who_acts_follows_the_near_business_roles() {
+    let policy = near_business("owner.testnet").to_string();
+    let read = |label: &str| -> Value { serde_json::from_str(&api::who_acts(&policy, label).unwrap()).unwrap() };
+    let role_add = read("policy_add_or_update_role");
+    assert_eq!(role_add["add_proposal"]["accounts"], json!([{ "account": "owner.testnet", "roles": ["Admin"] }]));
+    assert_eq!(role_add["vote_approve"]["accounts"], json!([{ "account": "owner.testnet", "roles": ["Admin"] }]));
+    let call = read("call");
+    assert_eq!(call["add_proposal"]["accounts"], json!([{ "account": "owner.testnet", "roles": ["Requestor"] }]), "Admin may not file a function call");
+    assert_eq!(call["vote_approve"]["accounts"], json!([{ "account": "owner.testnet", "roles": ["Approver"] }]));
+    for side in ["add_proposal", "vote_approve"] {
+        assert_eq!(call[side]["anyone"], json!([]));
+        assert_eq!(call[side]["token_roles"], json!([]));
+    }
+    assert!(api::who_acts(&policy, "transfers").is_err());
+    assert!(api::who_acts("{}", "call").is_err());
 }

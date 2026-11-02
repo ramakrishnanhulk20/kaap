@@ -15,6 +15,12 @@ export const CASES: Record<string, string[]> = {
   'check-testnet-7': ['check', 'kaap-dao-1029064008.testnet', '7', '--network', 'testnet'],
   'check-wrap-near': ['check', 'wrap.near', '1'],
   'census-sample-5': ['census', '--sample', '5'],
+  'verify-m1-2': ['verify', 'kaap-dao-1029064008.testnet', '2', '--network', 'testnet'],
+  'arming-m1': ['arming', 'kaap-dao-1029064008.testnet'],
+  'enroll-m1': ['enroll', 'kaap-dao-1029064008.testnet'],
+  // A testnet DAO made through sputnikv2.testnet with the NEAR Business roles, one member in each.
+  'enroll-nb': ['enroll', 'kaap-nb-1102140303.sputnikv2.testnet'],
+  'arming-nb': ['arming', 'kaap-nb-1102140303.sputnikv2.testnet'],
 };
 
 const wanted = process.argv.slice(2);

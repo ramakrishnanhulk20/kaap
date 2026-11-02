@@ -73,6 +73,16 @@ mod bindings {
         api::guard_arming(policy_json, guard).map_err(thrown)
     }
 
+    #[wasm_bindgen(js_name = whoActs)]
+    pub fn who_acts(policy_json: &str, label: &str) -> Result<String, JsError> {
+        api::who_acts(policy_json, label).map_err(thrown)
+    }
+
+    #[wasm_bindgen(js_name = enrolmentDrafts)]
+    pub fn enrolment_drafts(guard: &str) -> Result<String, JsError> {
+        api::enrolment_drafts(guard).map_err(thrown)
+    }
+
     #[wasm_bindgen(js_name = pricesFromTokens)]
     pub fn prices_from_tokens(tokens_json: &str) -> Result<String, JsError> {
         api::prices_json(tokens_json).map_err(thrown)

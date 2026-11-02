@@ -10,6 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { z } from 'zod';
 
 import type { Network } from './rpc.js';
+import type { VerdictFields } from './verdict.js';
 
 /** `packages/cli/wasm`, where `npm run build:wasm` writes wasm-bindgen's output. */
 export const WASM_DIR = fileURLToPath(new URL('../../wasm/', import.meta.url));
@@ -27,6 +28,8 @@ interface Bindings {
   nep461Hash(delegateB64: string): string;
   verdictHash(verdict: string): string;
   guardArming(policy: string, guard: string): string;
+  whoActs(policy: string, label: string): string;
+  enrolmentDrafts(guard: string): string;
   pricesFromTokens(tokens: string): string;
   evalScoreboards(real: string, planted: string, tokens: string): string;
 }
@@ -81,6 +84,34 @@ const boardsSchema = z.strictObject({
 });
 export type Scoreboards = z.output<typeof boardsSchema>;
 
+/** C16 for one guard account under one policy. Vote counts are decimal strings, "none" where no
+ *  role can pass the kind. */
+const armingSchema = z.strictObject({
+  rejects_alone: z.array(z.string()),
+  cannot_reject: z.array(z.string()),
+  extra_rights: z.array(z.string()),
+  others_who_reject_alone: z.record(z.string(), z.array(z.string())),
+  approval_votes_needed: z.record(z.string(), z.string().regex(/^(\d{1,40}|none)$/)),
+  race_note: z.string(),
+});
+export type Arming = z.output<typeof armingSchema>;
+
+const actorsSchema = z.strictObject({
+  accounts: z.array(z.strictObject({ account: z.string(), roles: z.array(z.string()) })),
+  anyone: z.array(z.string()),
+  token_roles: z.array(z.string()),
+});
+const whoActsSchema = z.strictObject({ add_proposal: actorsSchema, vote_approve: actorsSchema });
+export type WhoActs = z.output<typeof whoActsSchema>;
+
+const draftsSchema = z.strictObject({
+  role_name: z.string(),
+  labels: z.array(z.string()).min(1),
+  left_out: z.array(z.string()),
+  drafts: z.array(z.strictObject({ title: z.string(), kind_label: z.string(), description: z.string(), kind: z.record(z.string(), z.unknown()) })).length(2),
+});
+export type EnrolmentDrafts = z.output<typeof draftsSchema>;
+
 export interface History {
   approved_payments_before: number;
   median_payment_usd_before: number | null;
@@ -99,6 +130,8 @@ export interface AnalyzeInput {
   prices: Prices;
   dao_version: string | null;
   block_timestamp_ns: string | null;
+  /** Kaap's guard account, so a change to the roles that hold it is named (C17). */
+  guard_account?: string;
 }
 
 export class Core {
@@ -155,6 +188,26 @@ export class Core {
 
   policyHash(policy: string): string {
     return this.#run('policyHash', () => this.#b.policyHash(policy));
+  }
+
+  /** Hex of kaap-verdict's `verdict_hash` of these fields: sha256 of the domain and the borsh
+   *  bytes kaap-verdict writes for them. */
+  verdictHash(fields: VerdictFields): string {
+    return this.#run('verdictHash', () => this.#b.verdictHash(JSON.stringify(fields)));
+  }
+
+  guardArming(policy: string, guard: string): Arming {
+    return armingSchema.parse(JSON.parse(this.#run('guardArming', () => this.#b.guardArming(policy, guard))));
+  }
+
+  /** Who may file and who may approve a proposal of the kind `label`, by Sputnik's own rule. */
+  whoActs(policy: string, label: string): WhoActs {
+    return whoActsSchema.parse(JSON.parse(this.#run('whoActs', () => this.#b.whoActs(policy, label))));
+  }
+
+  /** Kaap's one enrolment template for `guard` (C30). */
+  enrolmentDrafts(guard: string): EnrolmentDrafts {
+    return draftsSchema.parse(JSON.parse(this.#run('enrolmentDrafts', () => this.#b.enrolmentDrafts(guard))));
   }
 
   pricesFromTokens(tokens: string): Prices {

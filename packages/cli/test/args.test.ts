@@ -1,5 +1,5 @@
 // The command line: what each command accepts, the default network, and every refusal. It does not
-// run any command (check.test.ts, eval.test.ts and census.test.ts do).
+// run any command (the other test files do).
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -57,4 +57,33 @@ test('help and version answer without loading anything, and a usage error exits 
   assert.match(out.join('\n'), /kaap 0\.1\.0/);
   assert.equal(await main(['check', 'a.near', '--network', 'devnet'], env, io), 2);
   assert.match(err.join('\n'), /--network must be mainnet or testnet[\s\S]*kaap check <dao>/);
+});
+
+test('verify, enroll and arming take the network from --network, else from a .testnet account name', () => {
+  assert.deepEqual(parse(['verify', 'kaap-dao-1029064008.testnet', '2']), { command: 'verify', dao: 'kaap-dao-1029064008.testnet', id: 2, network: 'testnet' });
+  assert.deepEqual(parse(['verify', 'a.sputnik-dao.near', '2']), { command: 'verify', dao: 'a.sputnik-dao.near', id: 2, network: 'mainnet' });
+  assert.deepEqual(parse(['verify', 'a.testnet', '2', '--network', 'mainnet']), { command: 'verify', dao: 'a.testnet', id: 2, network: 'mainnet' });
+  assert.deepEqual(parse(['enroll', 'a.sputnikv2.testnet']), { command: 'enroll', dao: 'a.sputnikv2.testnet', network: 'testnet' });
+  assert.deepEqual(parse(['arming', 'a.sputnik-dao.near', '--network', 'testnet']), { command: 'arming', dao: 'a.sputnik-dao.near', network: 'testnet' });
+  for (const argv of [['verify', 'a.near'], ['verify', 'a.near', 'x'], ['verify', 'a.near', '1', '2'], ['enroll'], ['arming', 'a.near', 'b.near'], ['arming', 'a.near', '--network', 'devnet']]) {
+    assert.throws(() => parse(argv), UsageError, argv.join(' '));
+  }
+});
+
+test('seal-text needs --dao, --id and --file; subscribe needs an https --worker', () => {
+  assert.deepEqual(parse(['seal-text', '--dao', 'a.testnet', '--id', '3', '--file', 't.json']), { command: 'seal-text', dao: 'a.testnet', id: 3, file: 't.json', network: 'testnet' });
+  assert.deepEqual(parse(['subscribe', 'a.near', '--worker', 'https://kaap.example.com/api/']), { command: 'subscribe', dao: 'a.near', worker: 'https://kaap.example.com/api' });
+  assert.deepEqual(parse(['subscribe', 'a.near', '--worker', 'http://127.0.0.1:8787']), { command: 'subscribe', dao: 'a.near', worker: 'http://127.0.0.1:8787' });
+  for (const argv of [
+    ['seal-text', '--dao', 'a.near', '--id', '3'],
+    ['seal-text', '--dao', 'a.near', '--file', 't.json'],
+    ['seal-text', 'a.near', '--id', '3', '--file', 't.json'],
+    ['subscribe', 'a.near'],
+    ['subscribe', 'a.near', '--worker', 'http://kaap.example.com'],
+    ['subscribe', 'a.near', '--worker', 'https://user:pw@kaap.example.com'],
+    ['subscribe', 'a.near', '--worker', 'https://kaap.example.com/?dao=b.near'],
+    ['subscribe', 'a.near', '--worker', 'not a url'],
+  ]) {
+    assert.throws(() => parse(argv), UsageError, argv.join(' '));
+  }
 });

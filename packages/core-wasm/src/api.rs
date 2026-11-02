@@ -13,7 +13,8 @@ use std::fmt;
 use base64::Engine as _;
 use kaap_core::hash::sign::to_hex;
 use kaap_core::policy::arming::guard_arming as arming;
-use kaap_core::policy::sputnik::to_policy_label;
+use kaap_core::policy::sputnik::{can_execute_action, to_policy_label, Action, Policy, RoleKind, LABELS};
+use kaap_core::policy::GUARD_ROLE;
 use kaap_core::{
     analyze as analyze_input, canonical_kind as canon_kind, canonical_policy as canon_policy, describe,
     hash::{nep413_hash as nep413, nep461_hash as nep461},
@@ -264,6 +265,94 @@ pub fn guard_arming(policy_json: &str, guard: &str) -> Result<String, Error> {
         "approval_votes_needed": needed,
         "race_note": a.race_note,
     }))
+}
+
+/// Who may file, and who may approve, a proposal whose policy label is `label`, by Sputnik's own
+/// `can_execute_action` (`kaap_core::policy::sputnik`). Every account a Group role names is asked
+/// one by one, so a role name used twice is read the way Sputnik reads it (C1). `anyone` holds the
+/// roles through which an account in no Group role may act (an Everyone role, or a token role that
+/// asks for no tokens), and `token_roles` the roles that let holders of the DAO's token act, whose
+/// members no policy lists. Errors on a policy the strict parser refuses, or a label that is not
+/// one of Sputnik's 17.
+pub fn who_acts(policy_json: &str, label: &str) -> Result<String, Error> {
+    let value = canonical_value(policy_json).ok_or(Error("the policy cannot be read"))?;
+    let policy = Policy::from_json(&value).ok_or(Error("the policy cannot be read"))?;
+    if !LABELS.contains(&label) {
+        return Err(Error("not a Sputnik policy label"));
+    }
+    let named: BTreeSet<&str> = policy.roles.iter().filter_map(|r| r.members()).flatten().map(String::as_str).collect();
+    let side = |action: Action| {
+        let accounts: Vec<Value> = named
+            .iter()
+            .filter_map(|account| {
+                let (roles, allowed) = can_execute_action(&policy, account, label, action);
+                allowed.then(|| json!({ "account": account, "roles": roles }))
+            })
+            .collect();
+        // No Group role holds the empty name, since Sputnik stores only valid account ids, so this
+        // asks for an account outside every Group with no delegated tokens.
+        let (anyone, allowed) = can_execute_action(&policy, "", label, action);
+        let token_roles: Vec<&str> = policy
+            .roles
+            .iter()
+            .filter(|r| matches!(r.kind, RoleKind::Member(_)) && r.allows(label, action))
+            .map(|r| r.name.as_str())
+            .collect();
+        json!({ "accounts": accounts, "anyone": if allowed { anyone } else { Vec::new() }, "token_roles": token_roles })
+    };
+    to_json(&json!({ "add_proposal": side(Action::AddProposal), "vote_approve": side(Action::VoteApprove) }))
+}
+
+/// The one kind Kaap's guard leaves alone, so a DAO can always remove Kaap with an ordinary
+/// proposal (threat model C15, C17).
+pub const OWN_REMOVAL: &str = "remove_member_from_role";
+
+/// What an enrolment proposal attaches to `enroll`: 0.01 NEAR, which always covers the guard's
+/// storage for the DAO's entry (the guard keeps what the entry takes and refunds the rest), and
+/// 10 Tgas, of which `enroll` burns 1.88 (packages/contracts/GAS.md).
+pub const ENROL_DEPOSIT_YOCTO: &str = "10000000000000000000000";
+pub const ENROL_GAS: &str = "10000000000000";
+
+/// Kaap's enrolment template for the guard contract `guard` (C30): the two proposal kinds a DAO
+/// files, with their titles and descriptions. The first adds a role named `GUARD_ROLE` holding the
+/// guard alone, with VoteReject on every label of Sputnik's `to_policy_label` (`LABELS`) except
+/// `OWN_REMOVAL`, and a RoleWeight threshold of one vote on each; the second calls `enroll` on the
+/// guard. The role is created with its one member in the same proposal, so the policy never holds
+/// it in any other shape than this. Errors when `guard` is not a valid account id.
+pub fn enrolment_drafts(guard: &str) -> Result<String, Error> {
+    if !is_account_id(guard) {
+        return Err(Error("the guard is not a valid account id"));
+    }
+    let labels: Vec<&str> = LABELS.iter().copied().filter(|l| *l != OWN_REMOVAL).collect();
+    let rule = json!({ "weight_kind": "RoleWeight", "quorum": "0", "threshold": "1" });
+    let role = json!({
+        "name": GUARD_ROLE,
+        "kind": { "Group": [guard] },
+        "permissions": labels.iter().map(|l| format!("{l}:VoteReject")).collect::<Vec<_>>(),
+        "vote_policy": labels.iter().map(|l| (l.to_string(), rule.clone())).collect::<serde_json::Map<_, _>>(),
+    });
+    let add_role = json!({
+        "title": "add Kaap's reject-only guard role",
+        "kind_label": "policy_add_or_update_role",
+        "description": format!(
+            "Add Kaap's guard role \"{GUARD_ROLE}\" with one member, the guard contract {guard}. It may only vote to reject, \
+             on every kind of proposal except removing a member from a role, so this DAO can always remove Kaap. One reject \
+             from it decides. It cannot approve, remove or finalise anything."
+        ),
+        "kind": { "ChangePolicyAddOrUpdateRole": { "role": role } },
+    });
+    let enrol = json!({
+        "title": "enrol the DAO in Kaap's guard",
+        "kind_label": "call",
+        "description": format!(
+            "Enrol this treasury in Kaap's guard {guard}. It attaches 0.01 NEAR for the guard's storage; the guard keeps \
+             what its entry costs and refunds the rest."
+        ),
+        "kind": { "FunctionCall": { "receiver_id": guard, "actions": [{
+            "method_name": "enroll", "args": "e30=", "deposit": ENROL_DEPOSIT_YOCTO, "gas": ENROL_GAS,
+        }] } },
+    });
+    to_json(&json!({ "role_name": GUARD_ROLE, "labels": labels, "left_out": [OWN_REMOVAL], "drafts": [add_role, enrol] }))
 }
 
 /// USD prices from a 1Click `GET /v0/tokens` list, keyed the way the guide writes tokens: the

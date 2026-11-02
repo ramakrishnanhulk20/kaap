@@ -1,6 +1,8 @@
 // The one way the CLI reaches the network. Every request names a fixed host from this package
-// (rpc.ts, prices.ts), never one built from input, carries a timeout and a body cap, follows no
-// redirect, and sends no key or cookie. Tests swap `fetchTransport` for recorded answers.
+// (rpc.ts, prices.ts, outlayer.ts), never one built from input, carries a timeout and a body cap,
+// follows no redirect, and sends no key or cookie. The one exception is `kaap subscribe`, which asks
+// the worker the user names with --worker, held to https by args.ts. Tests swap `fetchTransport`
+// for recorded answers.
 
 export interface HttpRequest {
   url: string;

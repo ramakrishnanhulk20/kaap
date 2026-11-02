@@ -38,3 +38,18 @@ export const MAX_PRICE_LIST_BYTES = 1024 * 1024;
 
 /** How much of an attacker-written text the terminal output shows. */
 export const MAX_SHOWN_TEXT = 2_000;
+
+/** How far `kaap verify` looks for the sealed run of a verdict, in blocks before and after the
+ *  block the verdict was read at. Every run measured so far landed 4 to 6 blocks before that
+ *  block (packages/sealed/RUNS.md, PROOF-M1.md), and a run is given at most 180 seconds, about
+ *  300 blocks, so 60 back covers a slow pickup without reading half an hour of chain. The verdict
+ *  is read at the final block the job saw, which can trail the request by a block or two, hence
+ *  the look ahead. A run outside the window is reported as not found, never guessed. */
+export const RUN_SCAN_BACK = 60;
+export const RUN_SCAN_AHEAD = 4;
+
+/** An OutLayer attestation is about 7.5 KiB, most of it the 5 KB Intel quote. */
+export const MAX_ATTESTATION_BYTES = 256 * 1024;
+
+/** The worker's answer to POST /subscribe is a few hundred bytes (packages/worker/src/status.ts). */
+export const MAX_WORKER_ANSWER_BYTES = 4 * 1024;

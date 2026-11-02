@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "description": "Checks any NEAR Sputnik DAO proposal with no keys, and reruns Kaap's evaluation and DAO census.",
+  "description": "Checks any NEAR Sputnik DAO proposal with no keys, verifies Kaap's verdicts down to the sealed run, drafts a DAO's enrolment, and reruns Kaap's evaluation and DAO census.",
   "type": "module",
   "bin": {
     "kaap": "dist/src/bin.js"

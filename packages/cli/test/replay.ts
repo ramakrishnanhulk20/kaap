@@ -3,7 +3,8 @@
 // with the recorded answer to the same request and refuses anything that was not recorded. View
 // results are stored as their UTF-8 text instead of JSON-RPC's list of byte values, and turned back
 // into that list on replay, which is lossless and keeps the files about four times smaller. A block
-// is stored as its header alone, the only part the CLI reads.
+// is stored as its header and its chunks' hashes, heights and transaction roots, the only parts the
+// CLI reads.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -35,13 +36,14 @@ export function load(name: string): Fixture {
 
 const key = (r: { method: string; url: string; body?: string | null | undefined }) => `${r.method} ${r.url} ${r.body ?? ''}`;
 
-/** Stores a view result as text when its bytes are UTF-8, and a block as its header alone (the CLI
- *  reads nothing else of a block). */
+/** Stores a view result as text when its bytes are UTF-8, and a block as its header and the three
+ *  fields of each chunk `kaap verify` reads (the CLI reads nothing else of a block). */
 export function compact(text: string): string {
   try {
     const answer = JSON.parse(text) as { result?: { result?: unknown; header?: unknown; chunks?: unknown } };
-    if (answer.result?.header !== undefined && answer.result.chunks !== undefined) {
-      return JSON.stringify({ ...answer, result: { header: answer.result.header } });
+    if (answer.result?.header !== undefined && Array.isArray(answer.result.chunks)) {
+      const chunks = (answer.result.chunks as Record<string, unknown>[]).map((c) => ({ chunk_hash: c['chunk_hash'], height_included: c['height_included'], tx_root: c['tx_root'] }));
+      return JSON.stringify({ ...answer, result: { header: answer.result.header, chunks } });
     }
     const bytes = answer.result?.result;
     if (!Array.isArray(bytes)) return text;
