@@ -10,8 +10,8 @@
 //! is stored next to the earlier ones and points back to the one it supersedes (C13). A verdict
 //! holds only hashes, ids, levels and codes, never a confidential text or an explanation of one.
 
-use kaap_core::verdict::VERDICT_VERSION;
-use kaap_core::{verdict_bytes, verdict_hash, Verdict};
+use kaap_verdict::verdict::VERDICT_VERSION;
+use kaap_verdict::{verdict_bytes, verdict_hash, Verdict};
 use near_sdk::borsh::BorshDeserialize;
 use near_sdk::json_types::{Base64VecU8, U128};
 use near_sdk::serde::Serialize;
@@ -78,7 +78,7 @@ struct StoredVerdict {
 }
 
 /// One recorded verdict as the views return it: the signed bytes, so anyone can check the
-/// signature themselves, and the fields a reader needs most, decoded with kaap-core's spelling.
+/// signature themselves, and the fields a reader needs most, decoded with kaap-verdict's spelling.
 #[near(serializers = [json])]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VerdictRecord {
@@ -88,9 +88,9 @@ pub struct VerdictRecord {
     /// as latest. None for the first record, and for a record whose verdict was read at an older
     /// block than the latest one, which is kept in the history but never becomes latest.
     pub supersedes: Option<u32>,
-    /// `kaap_core::verdict_hash`, hex.
+    /// `kaap_verdict::verdict_hash`, hex.
     pub verdict_hash: String,
-    /// borsh of `kaap_core::Verdict` without the domain prefix, exactly as signed.
+    /// borsh of `kaap_verdict::Verdict` without the domain prefix, exactly as signed.
     pub verdict: Base64VecU8,
     pub signature: Base64VecU8,
     pub guard: String,
@@ -134,7 +134,7 @@ pub enum RegistryEvent {
 #[derive(PanicOnDefault)]
 pub struct KaapRegistry {
     accepted_key: PublicKey,
-    /// kaap-core's spelling of the network, as in kaap-guard.
+    /// kaap-verdict's spelling of the network, as in kaap-guard.
     network: String,
     heads: LookupMap<ProposalKey, ProposalHead>,
     entries: LookupMap<EntryKey, StoredVerdict>,
@@ -153,8 +153,8 @@ fn parse_accepted_key(key: &str) -> PublicKey {
     parsed
 }
 
-/// A kaap-core enum's serde name ("critical", "testnet", "DESC_CONTRADICTS"), so every string the
-/// registry writes or compares is spelled the way kaap-core spells it.
+/// A kaap-verdict enum's serde name ("critical", "testnet", "DESC_CONTRADICTS"), so every string the
+/// registry writes or compares is spelled the way kaap-verdict spells it.
 fn name_of<T: Serialize>(value: T) -> String {
     match near_sdk::serde_json::to_value(value) {
         Ok(near_sdk::serde_json::Value::String(name)) => name,
@@ -163,7 +163,7 @@ fn name_of<T: Serialize>(value: T) -> String {
 }
 
 fn parse_network(name: &str) -> String {
-    let network: kaap_core::Network = near_sdk::serde_json::from_value(
+    let network: kaap_verdict::Network = near_sdk::serde_json::from_value(
         near_sdk::serde_json::Value::String(name.to_owned()),
     )
     .unwrap_or_else(|_| env::panic_str(ERR_BAD_NETWORK));
@@ -194,8 +194,8 @@ impl KaapRegistry {
     /// storage cost and gets the rest back in the same transaction. The largest verdict allowed
     /// takes about 1,520 bytes with its index entries, so 0.02 NEAR is always enough.
     ///
-    /// `verdict` is the borsh encoding of `kaap_core::Verdict` without the domain prefix, and
-    /// `signature` the 64-byte ed25519 signature over `kaap_core::verdict_bytes`, exactly as
+    /// `verdict` is the borsh encoding of `kaap_verdict::Verdict` without the domain prefix, and
+    /// `signature` the 64-byte ed25519 signature over `kaap_verdict::verdict_bytes`, exactly as
     /// kaap-guard's `veto` takes them.
     ///
     /// Panics with ERR_TOO_LARGE above `MAX_VERDICT_BYTES`, ERR_BAD_VERDICT unless the bytes

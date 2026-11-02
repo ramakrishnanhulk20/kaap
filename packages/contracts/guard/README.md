@@ -12,7 +12,7 @@ The NEAR contract that sits alone in a Sputnik DAO's Guard role and can cast exa
 4. Its DAO enrolled itself (`ERR_NOT_ENROLLED`).
 5. It is critical, its plain-code floor is high or critical, it has a plain-code finding other than HASH_UNVERIFIED, and when the floor is only high, the AI answer that raised it is proven by its attestation (`ERR_NOT_VETOABLE`).
 6. It has not expired (`ERR_EXPIRED`).
-7. `kind_json` hashes, through kaap-core's canonical form, to the kind the verdict reviewed (`ERR_WRONG_KIND_HASH`), and is JSON (`ERR_BAD_KIND`).
+7. `kind_json` hashes, through kaap-verdict's canonical form (the one kaap-core re-exports), to the kind the verdict reviewed (`ERR_WRONG_KIND_HASH`), and is JSON (`ERR_BAD_KIND`).
 8. It was never used before (`ERR_REPLAY`).
 
 Then it records the verdict as used and calls the DAO's `act_proposal` with `VoteReject` and `kind_json` exactly as given. Sputnik compares that kind with the stored one by value, so the vote can only land on the proposal that was reviewed. A callback records the DAO's answer: `veto_result` reads `"Ok"` or `"Failed"`, and the events `veto_cast` and `veto_refused` say the same, so a refused vote is never silent.
@@ -69,7 +69,7 @@ Gas: a veto of a Transfer burns 8.3 Tgas in all, about 0.0008 NEAR. Attach 300 T
 
 These proposals cannot be vetoed, whatever the verdict says:
 
-- A kind kaap-core cannot canonicalise: anything over 256 KiB, or text that is not strict JSON. The guard answers `ERR_BAD_KIND` at any gas. Size, not cost, is the barrier here: padding a FunctionCall's args is cheap, and a 196,735-byte padded FunctionCall was filed and vetoed for 89.0 Tgas in the sandbox.
+- A kind kaap-verdict cannot canonicalise: anything over 256 KiB, or text that is not strict JSON. The guard answers `ERR_BAD_KIND` at any gas. Size, not cost, is the barrier here: padding a FunctionCall's args is cheap, and a 196,735-byte padded FunctionCall was filed and vetoed for 89.0 Tgas in the sandbox.
 - A kind whose vote cannot fit in the 300 Tgas one transaction may carry. Big policies cost the most per byte: a 117,526-byte ChangePolicy veto burnt 171.6 Tgas, and a 197,966-byte one 291.3 Tgas (guard 122.7, DAO 155.1, callback 1.6), so policy kinds over about 200 KB do not fit.
 - A RemoveMemberFromRole proposal, by design: the Guard role never holds VoteReject on it, so a DAO can always remove Kaap. The DAO refuses the vote and the guard records the refusal.
 

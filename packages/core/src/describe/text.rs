@@ -6,11 +6,8 @@
 //!
 //! What this does not do: it does not map lookalike letters from other scripts to Latin (a
 //! Cyrillic "а" stays Cyrillic), so a claim spelt with one is unreadable and is not a claim. That
-//! errs toward `vague`, never toward a contradiction. A build without the `unicode` feature (only
-//! the guard and registry contracts, which never call this module) skips NFKC, so a fullwidth
-//! claim or phrase there is not read.
+//! errs toward `vague`, never toward a contradiction.
 
-#[cfg(feature = "unicode")]
 use unicode_normalization::UnicodeNormalization;
 
 /// The Unicode property Default_Ignorable_Code_Point (DerivedCoreProperties.txt, Unicode 15.1):
@@ -57,10 +54,7 @@ pub(super) fn is_bidi_control(c: char) -> bool {
 }
 
 fn visible_nfkc(text: &str) -> String {
-    #[cfg(feature = "unicode")]
     let chars = text.nfkc();
-    #[cfg(not(feature = "unicode"))]
-    let chars = text.chars();
     chars.filter(|&c| !is_ignorable(c)).collect()
 }
 

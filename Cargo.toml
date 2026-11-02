@@ -7,6 +7,7 @@ members = [
     "packages/contracts/guard",
     "packages/contracts/registry",
     "packages/sealed",
+    "packages/verdict",
 ]
 
 [workspace.package]

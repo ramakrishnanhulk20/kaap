@@ -98,5 +98,5 @@ Attaching 0.02 NEAR to `record` always covers the storage: the largest record al
 ## Limits these numbers show
 
 - A policy-shaped kind much above 200 KB cannot be vetoed: at 198 KB the whole veto already burnt 291 of the 300 Tgas a transaction may carry.
-- kaap-core refuses to canonicalise anything over 256 KiB, so the guard answers ERR_BAD_KIND for such a kind and cannot veto it at any gas. A FunctionCall padded past that size is cheap to file: the 196,735-byte one above was filed and vetoed without trouble.
+- kaap-verdict refuses to canonicalise anything over 256 KiB, so the guard answers ERR_BAD_KIND for such a kind and cannot veto it at any gas. A FunctionCall padded past that size is cheap to file: the 196,735-byte one above was filed and vetoed without trouble.
 - Both are stated limits, in the Limits section of `guard/README.md`: the sealed job holds such a proposal and the worker alerts members that it cannot be judged or vetoed (WO-06b).

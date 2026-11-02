@@ -1,6 +1,6 @@
 [package]
 name = "kaap-core"
-description = "Decides what a NEAR Sputnik DAO proposal really does, and holds the one canonical encoding of a Kaap verdict."
+description = "Decides what a NEAR Sputnik DAO proposal really does, and re-exports kaap-verdict's canonical encoding of a Kaap verdict."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,8 +8,9 @@ license.workspace = true
 publish.workspace = true
 
 # No std::time, no network and no randomness anywhere in this crate, so it builds unchanged for
-# native, wasm32-unknown-unknown (contracts, browser) and wasm32-wasip2 (the sealed job).
+# native, wasm32-unknown-unknown (browser, worker bridge) and wasm32-wasip2 (the sealed job).
 [dependencies]
+kaap-verdict = { path = "../verdict" }
 borsh.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -17,11 +18,4 @@ sha2.workspace = true
 bs58.workspace = true
 base64.workspace = true
 num-bigint.workspace = true
-unicode-normalization = { workspace = true, optional = true }
-
-# `unicode` gives the description check its NFKC normalisation. The guard and registry contracts
-# never read descriptions and build without it, so their deployed wasm stays byte for byte what it
-# was before the check existed. Everything that reads descriptions keeps the default.
-[features]
-default = ["unicode"]
-unicode = ["dep:unicode-normalization"]
+unicode-normalization.workspace = true

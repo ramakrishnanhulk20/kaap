@@ -11,7 +11,7 @@
 mod common;
 
 use common::*;
-use kaap_core::{Network, Severity, Verdict};
+use kaap_verdict::{Network, Severity, Verdict};
 use near_api::types::transaction::result::ExecutionFinalResult;
 use near_api::{AccountId, NearGas, NearToken};
 use serde_json::{json, Value};

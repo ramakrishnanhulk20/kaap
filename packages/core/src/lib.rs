@@ -5,7 +5,6 @@
 //! policy kinds to `policy`, and every other kind to `decode::value`. Each kind has exactly one
 //! owner, so no effect is counted twice and none falls between two modules.
 
-pub mod canonical;
 pub mod decode;
 pub mod describe;
 pub mod floor;
@@ -13,7 +12,8 @@ pub mod hash;
 pub mod policy;
 pub mod severity;
 pub mod types;
-pub mod verdict;
+
+pub use kaap_verdict::{canonical, verdict};
 
 pub use canonical::{canonical_kind, canonical_policy, kind_hash, policy_hash, CanonError};
 pub use types::*;

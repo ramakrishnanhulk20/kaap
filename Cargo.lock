@@ -1782,6 +1782,7 @@ dependencies = [
  "base64 0.23.1",
  "borsh",
  "bs58 0.5.1",
+ "kaap-verdict",
  "num-bigint 0.5.1",
  "serde",
  "serde_json",
@@ -1816,7 +1817,7 @@ dependencies = [
  "bs58 0.5.1",
  "ed25519-dalek 2.2.0",
  "hex",
- "kaap-core",
+ "kaap-verdict",
  "near-api",
  "near-api-types",
  "near-sandbox",
@@ -1835,7 +1836,7 @@ dependencies = [
  "bs58 0.5.1",
  "ed25519-dalek 2.2.0",
  "hex",
- "kaap-core",
+ "kaap-verdict",
  "near-api",
  "near-api-types",
  "near-sandbox",
@@ -1859,6 +1860,16 @@ dependencies = [
  "serde_json",
  "sha2 0.11.1",
  "wasi 0.13.3+wasi-0.2.2",
+]
+
+[[package]]
+name = "kaap-verdict"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
 ]
 
 [[package]]

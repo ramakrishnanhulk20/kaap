@@ -11,9 +11,9 @@
 //! the account's full-access key right after `new`. A new version is a new contract, which a DAO
 //! adopts with one ordinary proposal that moves its Guard role.
 
-use kaap_core::severity::min_severity;
-use kaap_core::verdict::VERDICT_VERSION;
-use kaap_core::{kind_hash, verdict_bytes, verdict_hash, AiStatus, FindingCode, Severity, Verdict};
+use kaap_verdict::severity::min_severity;
+use kaap_verdict::verdict::VERDICT_VERSION;
+use kaap_verdict::{kind_hash, verdict_bytes, verdict_hash, AiStatus, FindingCode, Severity, Verdict};
 use near_sdk::borsh::BorshDeserialize;
 use near_sdk::json_types::Base64VecU8;
 use near_sdk::serde::de::IgnoredAny;
@@ -80,13 +80,13 @@ pub struct KaapGuard {
     owner: AccountId,
     pending_owner: Option<AccountId>,
     accepted_key: PublicKey,
-    /// The network's name in kaap-core's own spelling ("mainnet", "testnet", "sandbox"). It is a
-    /// string because kaap-core's `Network` has no borsh schema for the ABI build, and it is only
+    /// The network's name in kaap-verdict's own spelling ("mainnet", "testnet", "sandbox"). It is a
+    /// string because kaap-verdict's `Network` has no borsh schema for the ABI build, and it is only
     /// ever produced by `network_name`, so both sides of the comparison in `veto` come out of the
     /// same serializer.
     network: String,
     enrolled: IterableSet<AccountId>,
-    /// Keyed by `kaap_core::verdict_hash`, the sha256 of the signed bytes, so a second signature
+    /// Keyed by `kaap_verdict::verdict_hash`, the sha256 of the signed bytes, so a second signature
     /// or another base64 spelling of the same verdict is still the same entry.
     vetoes: LookupMap<[u8; 32], VetoOutcome>,
 }
@@ -217,19 +217,19 @@ fn parse_accepted_key(key: &str) -> PublicKey {
     parsed
 }
 
-/// The one spelling of a network, produced by kaap-core's own serde derive so the guard can
+/// The one spelling of a network, produced by kaap-verdict's own serde derive so the guard can
 /// never disagree with the sealed job about what a network is called.
-fn network_name(network: kaap_core::Network) -> String {
+fn network_name(network: kaap_verdict::Network) -> String {
     match near_sdk::serde_json::to_value(network) {
         Ok(near_sdk::serde_json::Value::String(name)) => name,
         _ => env::panic_str(ERR_BAD_NETWORK),
     }
 }
 
-/// Reads a network name through kaap-core's serde derive, so only its exact lowercase names
+/// Reads a network name through kaap-verdict's serde derive, so only its exact lowercase names
 /// pass.
 fn parse_network(name: &str) -> String {
-    let network: kaap_core::Network = near_sdk::serde_json::from_value(
+    let network: kaap_verdict::Network = near_sdk::serde_json::from_value(
         near_sdk::serde_json::Value::String(name.to_owned()),
     )
     .unwrap_or_else(|_| env::panic_str(ERR_BAD_NETWORK));
@@ -300,9 +300,9 @@ impl KaapGuard {
     /// Casts VoteReject on the proposal a signed verdict names. Anyone may call it: the
     /// signature is the authority, and the caller only pays gas.
     ///
-    /// `verdict` is the borsh encoding of `kaap_core::Verdict` without the domain prefix;
+    /// `verdict` is the borsh encoding of `kaap_verdict::Verdict` without the domain prefix;
     /// `signature` is the 64-byte ed25519 signature by the accepted key over
-    /// `kaap_core::verdict_bytes` (the prefix followed by that borsh); `kind_json` is the
+    /// `kaap_verdict::verdict_bytes` (the prefix followed by that borsh); `kind_json` is the
     /// proposal's kind as `get_proposal` returned it, which the guard forwards to the DAO
     /// unchanged (C5).
     ///
@@ -311,7 +311,7 @@ impl KaapGuard {
     /// accepted key (ERR_BAD_SIGNATURE); the verdict names this contract and this network
     /// (ERR_WRONG_GUARD); its DAO is enrolled (ERR_NOT_ENROLLED); it meets the veto rule of C9
     /// (ERR_NOT_VETOABLE); the block time is before `expires_at_ms` (ERR_EXPIRED); `kind_json`
-    /// hashes, through kaap-core's canonical form, to the verdict's `kind_hash`
+    /// hashes, through kaap-verdict's canonical form, to the verdict's `kind_hash`
     /// (ERR_WRONG_KIND_HASH, or ERR_BAD_KIND when it cannot be canonicalised at all); `kind_json`
     /// parses as JSON (ERR_BAD_KIND); the verdict was never used (ERR_REPLAY).
     ///
@@ -529,7 +529,7 @@ impl KaapGuard {
         self.enrolled.iter().skip(skip).take(take).cloned().collect()
     }
 
-    /// Whether the verdict with this `kaap_core::verdict_hash` (64 hex characters) was used.
+    /// Whether the verdict with this `kaap_verdict::verdict_hash` (64 hex characters) was used.
     ///
     /// Panics with ERR_BAD_HASH if the input is not 32 bytes of hex, rather than answer false.
     pub fn was_used(&self, verdict_hash_hex: String) -> bool {

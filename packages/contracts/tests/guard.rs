@@ -15,7 +15,7 @@
 mod common;
 
 use common::*;
-use kaap_core::{AiStatus, FindingCode, Network, Severity, Verdict};
+use kaap_verdict::{AiStatus, FindingCode, Network, Severity, Verdict};
 use near_api::types::transaction::result::ExecutionFinalResult;
 use near_api::{AccountId, NearGas, NearToken};
 use serde_json::{json, Value};
@@ -517,7 +517,7 @@ async fn a_kind_with_its_sets_in_another_order_is_accepted_and_the_vote_lands() 
     println!("kind as sent:  {reordered}");
     anyhow::ensure!(reordered != read_kind, "the reordered text must differ byte for byte");
     anyhow::ensure!(
-        kaap_core::kind_hash(reordered.as_bytes()).ok() == Some(verdict.kind_hash),
+        kaap_verdict::kind_hash(reordered.as_bytes()).ok() == Some(verdict.kind_hash),
         "the canonical hash must absorb the new order"
     );
 

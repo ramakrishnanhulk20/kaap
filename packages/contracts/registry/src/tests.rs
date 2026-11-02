@@ -8,7 +8,7 @@
 // - whether the sealed job fills a verdict correctly; verdicts here are built by hand.
 
 use ed25519_dalek::{Signer as _, SigningKey};
-use kaap_core::{verdict_bytes, verdict_hash, AiStatus, FindingCode, Network, Severity, Verdict};
+use kaap_verdict::{verdict_bytes, verdict_hash, AiStatus, FindingCode, Network, Severity, Verdict};
 use near_sdk::json_types::Base64VecU8;
 use near_sdk::mock::MockAction;
 use near_sdk::test_utils::{get_created_receipts, get_logs, VMContextBuilder};

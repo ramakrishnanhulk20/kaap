@@ -1,0 +1,16 @@
+[package]
+name = "kaap-verdict"
+description = "The verdict types, canonical hashes, verdict encoding and fixed severities that the Kaap guard and registry contracts are built from."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Only what the contracts compile in. The proposal analysis lives in kaap-core, which depends on
+# this crate, so analysis work never changes the contracts' wasm.
+[dependencies]
+borsh.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true

@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
 use ed25519_dalek::{Signer as _, SigningKey};
-use kaap_core::{kind_hash, verdict_bytes, verdict_hash, AiStatus, FindingCode, Network, Severity, Verdict};
+use kaap_verdict::{kind_hash, verdict_bytes, verdict_hash, AiStatus, FindingCode, Network, Severity, Verdict};
 use near_api::types::account::ContractState;
 use near_api::types::transaction::result::ExecutionFinalResult;
 use near_api::{Account, AccountId, Chain, Contract, CryptoHash, NearGas, NearToken, NetworkConfig, Signer};
@@ -111,7 +111,7 @@ pub fn sputnik_wasm() -> Result<Vec<u8>> {
 }
 
 /// The test's stand-in for the sealed program: it signs verdicts exactly as kaap-sealed will,
-/// over `kaap_core::verdict_bytes`, with its own ed25519 library rather than the contract's host
+/// over `kaap_verdict::verdict_bytes`, with its own ed25519 library rather than the contract's host
 /// function, so the two are checked against each other.
 pub struct SealedSigner {
     key: SigningKey,
