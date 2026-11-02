@@ -9,7 +9,7 @@
 // What it does not do: count an enrolment. That happens only once the on-chain policy matches the
 // template, which `kaap arming` checks on the live policy after the proposals pass (C16).
 
-import { armingLines, armingState, readGuard, sharedRoles } from './arming.js';
+import { armingLines, armingState, readGuard } from './arming.js';
 import { Held } from './chain.js';
 import type { Deps } from './check.js';
 import type { CheckAnalysis, WhoActs } from './core.js';
@@ -80,7 +80,7 @@ export async function enroll(deps: Deps & { repoRoot: string }, request: { dao: 
   const last = await g.reader.sameJson('the proposal counter', request.dao, 'get_last_proposal_id', {}, g.head);
   if (!Number.isSafeInteger(last) || (last as number) < 0) throw new Held('the proposal counter is not a whole number');
 
-  const policyMatches = armingState(g.arming, g.template, true, sharedRoles(g.policy, g.d.guard)).armed;
+  const policyMatches = armingState(g.arming, g.template, true).armed;
   const [roleDraft, enrolDraft] = g.template.drafts;
   const wanted = [...(policyMatches || !roleDraft ? [] : [roleDraft]), ...(g.enrolled || !enrolDraft ? [] : [enrolDraft])];
   const prices = await readPrices(request.network, deps.core, deps.transport, deps.limiter);
@@ -122,7 +122,7 @@ export async function enroll(deps: Deps & { repoRoot: string }, request: { dao: 
     ],
     bondYocto: bond,
     drafts,
-    after: armingLines(afterArming, g.template, armingState(afterArming, g.template, true, sharedRoles(afterPolicy, g.d.guard))),
+    after: armingLines(afterArming, g.template, armingState(afterArming, g.template, true)),
     network: request.network,
     dao: request.dao,
   };

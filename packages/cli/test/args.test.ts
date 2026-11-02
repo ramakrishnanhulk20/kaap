@@ -9,7 +9,7 @@ import { main } from '../src/main.js';
 import { Core } from '../src/core.js';
 import { fakeClock, REPO_ROOT } from './replay.js';
 
-test('check takes a DAO and an optional id, on mainnet unless told otherwise', () => {
+test('check takes a DAO and an optional id, on mainnet for a .near account unless told otherwise', () => {
   assert.deepEqual(parse(['check', 'a.sputnik-dao.near']), { command: 'check', dao: 'a.sputnik-dao.near', id: null, network: 'mainnet', json: false });
   assert.deepEqual(parse(['check', 'a.sputnik-dao.near', '132', '--network', 'testnet', '--json']), {
     command: 'check',
@@ -19,6 +19,13 @@ test('check takes a DAO and an optional id, on mainnet unless told otherwise', (
     json: true,
   });
   assert.deepEqual(parse(['check', '--network=mainnet', 'a.sputnik-dao.near', '0']), { command: 'check', dao: 'a.sputnik-dao.near', id: 0, network: 'mainnet', json: false });
+});
+
+test('check takes testnet from a .testnet account when --network is absent, and --network still wins', () => {
+  assert.equal((parse(['check', 'kaap-dao-1029064008.testnet', '7']) as { network: string }).network, 'testnet');
+  assert.equal((parse(['check', 'a.sputnikv2.testnet']) as { network: string }).network, 'testnet');
+  assert.equal((parse(['check', 'kaap-dao-1029064008.testnet', '--network', 'mainnet']) as { network: string }).network, 'mainnet');
+  assert.equal((parse(['check', 'testnet.sputnik-dao.near']) as { network: string }).network, 'mainnet', 'only the suffix counts');
 });
 
 test('check refuses a missing DAO, a bad id, a third argument and any other network', () => {

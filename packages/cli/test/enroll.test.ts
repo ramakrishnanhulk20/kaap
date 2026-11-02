@@ -1,8 +1,8 @@
 // `kaap arming` and `kaap enroll` against recorded testnet runs: the M1 DAO (enrolled, NEAR Business
 // roles with two members and Kaap's guard role) and a DAO made through sputnikv2.testnet with the
 // NEAR Business roles and one member in each, the shape most NEAR Business treasuries have, not yet
-// enrolled. Edited copies of the M1 policy show the guard losing a kind, sharing its role, and a
-// Sputnik 2 DAO being refused. It does not file or vote on any draft (the CLI never does), and it
+// enrolled. Edited copies of the M1 recording show the guard losing a kind, a second account in the
+// guard role (still armed, with a warning), and a Sputnik 2 DAO being refused. It does not file or vote on any draft (the CLI never does), and it
 // does not cover a DAO whose guard holds delegated tokens.
 
 import assert from 'node:assert/strict';
@@ -52,24 +52,32 @@ test('arming: the M1 DAO is armed on every kind but its own removal, with no ext
   assert.match(out, /^rights beyond rejecting: none$/m);
   assert.match(out, /^ {2}2 votes: add_bounty, .*\btransfer\b/m);
   assert.match(out, /^race: Every kind that can pass needs at least 2 approvals/m);
+  assert.doesNotMatch(out, /also able to veto alone/, 'no other account vetoes alone, so no warning');
 });
 
-test('arming: a guard role without transfer:VoteReject, or shared with another account, is not armed', async () => {
-  const noTransfer = await run('arming-m1', editPolicy((p) => {
+test('arming: a guard role without transfer:VoteReject is not armed', async () => {
+  const { code, out } = await run('arming-m1', editPolicy((p) => {
     const role = guardRole(p);
     if (role) role.permissions = role.permissions.filter((x) => x !== 'transfer:VoteReject');
   }));
-  assert.equal(noTransfer.code, 0);
-  assert.match(noTransfer.out, /^armed: no\. The guard's one reject does not decide: transfer\.$/m);
-  assert.match(noTransfer.out, /^kinds the guard cannot reject: remove_member_from_role \(left out by design\), transfer$/m);
+  assert.equal(code, 0);
+  assert.match(out, /^armed: no\. The guard's one reject does not decide: transfer\.$/m);
+  assert.match(out, /^kinds the guard cannot reject: remove_member_from_role \(left out by design\), transfer$/m);
+});
 
-  // The template's threshold of one vote still lets the guard reject alone, so C16's formulas say
-  // it decides; the template check is what catches a second account holding the same veto.
-  const shared = await run('arming-m1', editPolicy((p) => {
+test('arming: a second member of the guard role leaves the guard armed and is warned about as able to veto alone', async () => {
+  // The M1 recording with kaap-intruder.testnet added to the guard role on both providers. Under the
+  // template's threshold of one vote, kaap-core's guard_arming still finds the guard deciding every
+  // template kind (C16, one source), and names the second account in others_who_reject_alone.
+  const { code, out } = await run('arming-m1', editPolicy((p) => {
     guardRole(p)?.kind.Group?.push('kaap-intruder.testnet');
   }));
-  assert.match(shared.out, /^armed: no\. The guard shares a role with other accounts, which Kaap's template never does: guard \(kaap-intruder\.testnet\)\.$/m);
-  assert.match(shared.out, /^ {2}kaap-intruder\.testnet: add_bounty, add_member_to_role, bounty_done, call, /m);
+  assert.equal(code, 0);
+  assert.match(out, /^armed: yes\./m);
+  const warnings = out.split('\n').filter((l) => l.startsWith('also able to veto alone: '));
+  assert.deepEqual(warnings, [
+    'also able to veto alone: kaap-intruder.testnet (on add_bounty, add_member_to_role, bounty_done, call, config, factory_info_update, policy, policy_add_or_update_role, policy_remove_role, policy_update_default_vote_policy, policy_update_parameters, set_vote_token, transfer, upgrade_remote, upgrade_self, vote)',
+  ]);
 });
 
 test('arming: the NEAR Business test DAO is not armed and one approval passes every kind', async () => {
@@ -110,6 +118,7 @@ test('enroll: a NEAR Business treasury gets two drafts, the role filed by Admin 
   assert.match(call, /must_veto false/);
 
   assert.match(out, /^after these pass \(Sputnik's rules on the policy they leave\):\n {2}armed: yes\./m);
+  assert.match(out, new RegExp(`^ {2}also able to veto alone: ${NB_MEMBER} \\(on add_bounty, `, 'm'), 'the one member decides alone too');
   assert.match(out, /^ {2}each proposal: the DAO's proposal bond, 0 NEAR/m);
   assert.match(out, /^ {2}the enrolment call: the DAO attaches 0\.01 NEAR to enroll/m);
   assert.match(out, new RegExp(`^when they have passed, check it on chain: kaap arming ${NB_DAO} --network testnet$`, 'm'));

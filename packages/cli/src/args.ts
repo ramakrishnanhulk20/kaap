@@ -31,7 +31,6 @@ export const USAGE = `kaap: check NEAR DAO proposals with no keys, and rerun Kaa
       Reads one proposal of a Sputnik DAO (the latest when no id is given) from two RPC
       providers at one final block and prints what kaap-core makes of it: effects, findings
       with severities, risk floor, description check, must_veto and veto_allowed.
-      The network is mainnet unless --network says otherwise.
   kaap verify <dao> <id> [--network mainnet|testnet]
       Checks the verdict Kaap's registry holds for one proposal: the sealed signature against
       the guard's key, the hashes kaap-core recomputes, the sealed run on chain and OutLayer's
@@ -56,8 +55,8 @@ export const USAGE = `kaap: check NEAR DAO proposals with no keys, and rerun Kaa
   kaap help | --help
   kaap --version
 
-For verify, enroll, arming and seal-text the network is testnet for an account ending in
-.testnet and mainnet otherwise, unless --network says otherwise.
+For check, verify, enroll, arming and seal-text the network is testnet for an account ending
+in .testnet and mainnet otherwise, unless --network says otherwise.
 
 Nothing here holds a key or sends a transaction.`;
 
@@ -123,11 +122,11 @@ export function parse(argv: string[]): Command {
     case '--version':
       return { command: 'version' };
     case 'check': {
-      const { values, positionals } = parsed(rest, { network: { type: 'string', default: 'mainnet' }, json: { type: 'boolean', default: false } });
+      const { values, positionals } = parsed(rest, { network: { type: 'string' }, json: { type: 'boolean', default: false } });
       const [dao, id, ...extra] = positionals;
       if (dao === undefined || dao === '') throw new UsageError('kaap check needs a DAO account, for example: kaap check example.sputnik-dao.near 12');
       if (extra.length) throw new UsageError('kaap check takes a DAO and at most one proposal id');
-      const network = networkOf(values['network']);
+      const network = networkFor(values['network'], dao);
       return { command: 'check', dao, id: id === undefined ? null : wholeNumber(id, 'the proposal id', 0, Number.MAX_SAFE_INTEGER), network, json: values['json'] === true };
     }
     case 'verify': {

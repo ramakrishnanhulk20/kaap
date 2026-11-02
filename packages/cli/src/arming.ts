@@ -3,11 +3,12 @@
 // guard. The policy, the DAO's code and the guard's enrolment are read at one final block and must
 // agree across two providers (C22).
 //
-// Armed means all four: the DAO enrolled itself in the guard; the guard's one reject decides every
-// kind in Kaap's template; it does not decide the one kind the template leaves out, so the DAO can
-// always remove Kaap; and every role that holds the guard holds it alone, as the template's role
-// does, so no other account shares its vote or its role's count (C30). Rights beyond rejecting are
-// shown, not counted against arming: the guard contract has no code path that could use them (C15).
+// Armed means all three: the DAO enrolled itself in the guard; by kaap-core's `guard_arming`, the
+// guard's one reject decides every kind in Kaap's template; and it does not decide the one kind the
+// template leaves out, so the DAO can always remove Kaap (C30). C16 has one source, so nothing else
+// counts: another account that can also veto alone, and rights beyond rejecting, are shown as
+// warnings, never as disarming. The guard contract has no code path that could use extra rights
+// (C15).
 
 import { Held, type Reader } from './chain.js';
 import { type Deps, readers } from './check.js';
@@ -25,20 +26,8 @@ export interface ArmingState {
   missing: string[];
 }
 
-/** Each role whose Group names `guard` together with other accounts, as "role (other, ...)". The
- *  policy is kaap-core's canonical form, so a Group is a plain list of account ids. */
-export function sharedRoles(policy: string, guard: string): string[] {
-  const roles = (JSON.parse(policy) as { roles: { name: string; kind: unknown }[] }).roles;
-  return roles.flatMap((r) => {
-    const group = (r.kind as { Group?: unknown } | null)?.Group;
-    if (!Array.isArray(group) || !group.includes(guard)) return [];
-    const others = group.filter((m) => m !== guard).map((m) => oneLine(String(m), 80));
-    return others.length ? [`${oneLine(r.name, 40)} (${others.join(', ')})`] : [];
-  });
-}
-
-/** Compares C16's answer, and the roles that hold the guard, with Kaap's template. */
-export function armingState(a: Arming, template: EnrolmentDrafts, enrolled: boolean, shared: string[]): ArmingState {
+/** Compares C16's answer with Kaap's template. */
+export function armingState(a: Arming, template: EnrolmentDrafts, enrolled: boolean): ArmingState {
   const missing = template.labels.filter((l) => !a.rejects_alone.includes(l));
   const over = template.left_out.filter((l) => a.rejects_alone.includes(l));
   const reasons: string[] = [];
@@ -46,7 +35,6 @@ export function armingState(a: Arming, template: EnrolmentDrafts, enrolled: bool
   if (missing.length === template.labels.length) reasons.push('the guard holds no deciding reject vote in this policy');
   else if (missing.length) reasons.push(`the guard's one reject does not decide: ${missing.join(', ')}`);
   if (over.length) reasons.push(`the guard could also reject ${over.join(', ')}, which Kaap leaves out so the DAO can always remove Kaap`);
-  if (shared.length) reasons.push(`the guard shares a role with other accounts, which Kaap's template never does: ${shared.join('; ')}`);
   return { armed: reasons.length === 0, reasons, missing };
 }
 
@@ -74,7 +62,7 @@ export async function readGuard(deps: Deps & { repoRoot: string }, request: { da
   if (typeof enrolled !== 'boolean') throw new Held('the guard\'s is_enrolled answer is not true or false');
   const arming = deps.core.guardArming(policy, d.guard);
   const template = deps.core.enrolmentDrafts(d.guard);
-  return { d, reader, head, dao, policy, enrolled, arming, template, state: armingState(arming, template, enrolled, sharedRoles(policy, d.guard)) };
+  return { d, reader, head, dao, policy, enrolled, arming, template, state: armingState(arming, template, enrolled) };
 }
 
 export interface ArmingReport {
@@ -108,16 +96,14 @@ export function armingLines(a: Arming, template: EnrolmentDrafts, state: ArmingS
     'votes the approvers need to pass each kind:',
     ...votes(a.approval_votes_needed),
   ];
-  // Kinds with the same accounts are one line, so a one-member treasury reads as one line, not 16.
+  // Kinds with the same accounts are one warning line, so a one-member treasury reads as one line,
+  // not 16. Nothing is printed when no other account can veto alone.
   const byAccounts = new Map<string, string[]>();
   for (const [label, who] of Object.entries(a.others_who_reject_alone)) {
     const key = who.map((w) => oneLine(w, 80)).join(', ');
     byAccounts.set(key, [...(byAccounts.get(key) ?? []), label]);
   }
-  if (byAccounts.size) {
-    lines.push('other accounts whose one reject also decides:');
-    for (const [who, labels] of byAccounts) lines.push(`  ${who}: ${labels.join(', ')}`);
-  }
+  for (const [who, labels] of byAccounts) lines.push(`also able to veto alone: ${who} (on ${labels.join(', ')})`);
   lines.push(`race: ${a.race_note}`);
   return lines;
 }
