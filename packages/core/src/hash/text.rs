@@ -9,6 +9,11 @@
 //! and a refused text that hashed correctly is HASH_TEXT_DANGEROUS: the DAO would sign bytes Kaap
 //! cannot read one way (Q2 ruling, 2 Nov 2026).
 //!
+//! One text signs with the empty path: Trezu's login for the DAO's bulk-payment sub-account
+//! (`bulk_account`, `is_bulk_login`). The MPC key for the DAO and path `""` is the one
+//! registered for that sub-account on the verifier (prepare_auth.rs 82-86), so the same key
+//! could move the sub-account's funds; only the exact login, which carries no intent, is read.
+//!
 //! What it does not do: judge the intents themselves (`intents::judge` does), or check the
 //! deadline against a block (the caller does, since only it knows the block).
 
@@ -19,6 +24,17 @@ use crate::decode::json::{self, Parsed};
 /// The recipients whose message format this reader models: the NEAR Intents verifier on public
 /// NEAR, and its confidential shard, where NEAR Business and Trezu send their texts.
 pub const MODELLED_RECIPIENTS: [&str; 2] = ["intents.near", "intents.far"];
+
+/// The recipient Trezu's login texts name (prepare_auth.rs 129 and 169, `INTENTS_CONTRACT_ID`).
+const LOGIN_RECIPIENT: &str = "intents.near";
+
+/// The factory Trezu derives every bulk-payment sub-account under: `BULK_PAYMENT_CONTRACT_ID`,
+/// `bulkpayment.near` by default (NEAR-DevHub/trezu 7b063dd, nt-be/src/utils/env.rs 126-129).
+/// On mainnet `kmxv7.bulkpayment.near` is a bootstrapped sub-account and `bulk-payment.near` does
+/// not exist (views at block 222705041 and 222705043, 2 Nov 2026).
+const BULK_FACTORY: &str = "bulkpayment.near";
+
+const DAO_FACTORY_SUFFIX: &str = ".sputnik-dao.near";
 
 /// A text longer than this is refused before it is parsed (standard 4). Trezu's longest texts,
 /// a 25-recipient bulk header, are a few kilobytes.
@@ -43,6 +59,7 @@ pub enum Refusal {
     RecipientNotModelled,
     PathNotTheDao,
     SignerNotTheDao,
+    NotTheBulkLogin,
     Deadline,
     Intents,
     AppData,
@@ -59,7 +76,8 @@ pub struct Message {
 }
 
 /// Reads `message`, the exact text whose NEP-413 hash matched, for `dao`. `recipient` and
-/// `path` are the NEP-413 recipient and the `sign` call's path.
+/// `path` are the NEP-413 recipient and the `sign` call's path. With the empty path, only
+/// `dao`'s exact bulk login reads.
 pub fn read(message: &str, recipient: &str, path: &str, dao: &str) -> Result<Message, Refusal> {
     if message.len() > MAX_TEXT_BYTES {
         return Err(Refusal::TooLong);
@@ -67,9 +85,14 @@ pub fn read(message: &str, recipient: &str, path: &str, dao: &str) -> Result<Mes
     if !MODELLED_RECIPIENTS.contains(&recipient) {
         return Err(Refusal::RecipientNotModelled);
     }
-    if path != dao {
+    let login = path.is_empty() && path != dao;
+    let signer = if path == dao {
+        dao.to_string()
+    } else if login {
+        bulk_account(dao).ok_or(Refusal::PathNotTheDao)?
+    } else {
         return Err(Refusal::PathNotTheDao);
-    }
+    };
     let fields = match json::parse(message.as_bytes()) {
         Parsed::Json(Value::Object(fields)) => fields,
         Parsed::Json(_) => return Err(Refusal::NotAnObject),
@@ -80,7 +103,7 @@ pub fn read(message: &str, recipient: &str, path: &str, dao: &str) -> Result<Mes
         return Err(Refusal::UnknownField(unknown.clone()));
     }
     let field = |name: &'static str| fields.get(name).ok_or(Refusal::MissingField(name));
-    if field("signer_id")?.as_str() != Some(dao) {
+    if field("signer_id")?.as_str() != Some(signer.as_str()) {
         return Err(Refusal::SignerNotTheDao);
     }
     let deadline_ns = deadline_ns(field("deadline")?).ok_or(Refusal::Deadline)?;
@@ -96,7 +119,34 @@ pub fn read(message: &str, recipient: &str, path: &str, dao: &str) -> Result<Mes
             return Err(Refusal::AppData);
         }
     }
+    if login && !is_bulk_login(&fields, recipient, &intents) {
+        return Err(Refusal::NotTheBulkLogin);
+    }
     Ok(Message { deadline_ns, intents })
+}
+
+/// The bulk-payment sub-account Trezu derives for `dao` (`derive_bulk_subaccount_id`,
+/// NEAR-DevHub/trezu 7b063dd, nt-be/src/handlers/treasury/confidential_setup.rs 266-294): the
+/// DAO's one label before `.sputnik-dao.near`, then `.bulkpayment.near`. `None` for a DAO not
+/// named that way, which Trezu refuses too.
+pub fn bulk_account(dao: &str) -> Option<String> {
+    let prefix = dao.strip_suffix(DAO_FACTORY_SUFFIX).filter(|p| !p.is_empty() && !p.contains('.'))?;
+    Some(format!("{prefix}.{BULK_FACTORY}"))
+}
+
+/// The login Trezu builds for a bulk-payment sub-account (`build_auth_proposal_with_signer`,
+/// prepare_auth.rs 92-202): for `intents.near`, with a deadline string, no intent, and app data
+/// holding exactly one auth config. The signer was checked before this.
+fn is_bulk_login(fields: &Map<String, Value>, recipient: &str, intents: &[Map<String, Value>]) -> bool {
+    let one_config = fields
+        .get("external_app_data")
+        .and_then(|data| data.get("configs"))
+        .and_then(Value::as_array)
+        .is_some_and(|configs| configs.len() == 1);
+    recipient == LOGIN_RECIPIENT
+        && intents.is_empty()
+        && fields.get("deadline").is_some_and(Value::is_string)
+        && one_config
 }
 
 /// `{"configs": [{"type": "auth", "expires_in": <seconds>}, ...]}`, the only app data 1Click

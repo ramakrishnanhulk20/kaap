@@ -9,18 +9,23 @@
 //! `unknown_call` on `intents.near`, so a missing entry produces an alert, not a pass
 //! (standard 1).
 //!
+//! A withdrawal also reads its `msg` and `storage_deposit` (`after_withdraw`). `hash::intents`
+//! reads a signed text's withdrawals through this same code, so the two are never read two ways
+//! (standard 2).
+//!
 //! A message may also carry its intents as a bare `intents` list, as the planted attacks do.
 //! intents.near may refuse that shape, but the module cannot prove it does, so it takes the worst
 //! plausible reading and treats those intents as executed (C2). For the same reason a withdrawal
 //! intent that names a destination `chain` other than NEAR is read as leaving NEAR.
 
 use num_bigint::BigUint;
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 
 use super::account::is_account_id;
 use super::json::{self, Parsed};
 use super::value::{account, amount, object, optional_text, text, token_call, u128_amount};
 use super::value::{Decoded, Move, Refusal, INTENTS, MAX_ITEMS, NATIVE};
+use crate::hash::intents::storage_excess;
 use crate::types::{Effect, KeyOp, MsgKind};
 
 /// Defuse's PoA bridge tokens are `<chain>.omft.near` or `<chain>-<address>.omft.near`, and
@@ -52,6 +57,16 @@ const WITHDRAW_TO: &str = "WITHDRAW_TO:";
 
 const UNKNOWN: &str = "unknown";
 
+/// How a withdrawal reaches `intents.near`. Only an intent pays a `storage_deposit`: the
+/// `ft_withdraw` and `mt_withdraw` methods pass none on (near/intents d340060,
+/// contracts/defuse/src/contract/tokens/nep141/withdraw.rs 27-50 and nep245/withdraw.rs 32-58),
+/// so that argument to a method moves nothing.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Form {
+    Method,
+    Intent,
+}
+
 /// A method called directly on `intents.near` by the DAO.
 pub(super) fn method(method: &str, args: &Value, dao: &str) -> Result<Decoded, Refusal> {
     let fields = object(args)?;
@@ -71,8 +86,8 @@ pub(super) fn method(method: &str, args: &Value, dao: &str) -> Result<Decoded, R
             let msg = fields.get("msg").and_then(Value::as_str).ok_or(Refusal::Unreadable)?;
             return token_call(&token, &sent, to, msg, dao);
         }
-        "ft_withdraw" => ft_withdraw(fields, &mut decoded)?,
-        "mt_withdraw" => mt_withdraw(fields, &mut decoded)?,
+        "ft_withdraw" => ft_withdraw(fields, Form::Method, &mut decoded)?,
+        "mt_withdraw" => mt_withdraw(fields, Form::Method, &mut decoded)?,
         "add_public_key" | "remove_public_key" => key_change(method, fields, &mut decoded)?,
         "execute_intents" => {
             for item in list(fields, "signed")? {
@@ -159,8 +174,8 @@ fn read_item(item: &Value, wrapper: &str, out: &mut Decoded) {
 fn intent(kind: &str, fields: &Map<String, Value>) -> Result<Decoded, Refusal> {
     let mut decoded = Decoded::default();
     match kind {
-        "ft_withdraw" => ft_withdraw(fields, &mut decoded)?,
-        "mt_withdraw" => mt_withdraw(fields, &mut decoded)?,
+        "ft_withdraw" => ft_withdraw(fields, Form::Intent, &mut decoded)?,
+        "mt_withdraw" => mt_withdraw(fields, Form::Intent, &mut decoded)?,
         "add_public_key" | "remove_public_key" => key_change(kind, fields, &mut decoded)?,
         "transfer" => {
             let to = account(fields, "receiver_id")?;
@@ -190,13 +205,14 @@ fn intent(kind: &str, fields: &Map<String, Value>) -> Result<Decoded, Refusal> {
     Ok(decoded)
 }
 
-fn ft_withdraw(fields: &Map<String, Value>, out: &mut Decoded) -> Result<(), Refusal> {
+fn ft_withdraw(fields: &Map<String, Value>, form: Form, out: &mut Decoded) -> Result<(), Refusal> {
     let token = account(fields, "token")?;
     let sent = amount(fields, "amount")?;
-    withdraw(fields, token, token, None, &sent, out)
+    withdraw(fields, token, token, None, &sent, out)?;
+    after_withdraw(fields, token, "ft_on_transfer", form, out)
 }
 
-fn mt_withdraw(fields: &Map<String, Value>, out: &mut Decoded) -> Result<(), Refusal> {
+fn mt_withdraw(fields: &Map<String, Value>, form: Form, out: &mut Decoded) -> Result<(), Refusal> {
     let contract = account(fields, "token")?;
     let ids = list(fields, "token_ids")?;
     let amounts = list(fields, "amounts")?;
@@ -207,6 +223,34 @@ fn mt_withdraw(fields: &Map<String, Value>, out: &mut Decoded) -> Result<(), Ref
         let id = id.as_str().filter(|id| !id.is_empty()).ok_or(Refusal::Unreadable)?;
         let sent = sent.as_str().and_then(u128_amount).ok_or(Refusal::Unreadable)?;
         withdraw(fields, &format!("nep245:{contract}:{id}"), contract, Some(id), &sent, out)?;
+    }
+    after_withdraw(fields, contract, "mt_on_transfer", form, out)
+}
+
+/// What a withdrawal of `contract`'s tokens does besides moving them (near/intents d340060,
+/// contracts/defuse/src/contract/tokens/nep141/withdraw.rs 118-151, nep245/withdraw.rs 161-203).
+///
+/// An intent's `storage_deposit` pays that much wNEAR to `contract` for the receiver first: a
+/// `storage_deposit` effect, and its part above `hash::intents::STORAGE_ALLOWANCE_YOCTO` also a
+/// `transfer` of NEAR to `contract`, so the value findings judge it. Any `msg`, the empty one
+/// included (`is_call` is `msg.is_some()`, core/src/intents/tokens.rs 177-181), makes the token
+/// call `hook` on the receiver with it, which runs code this module cannot see: an
+/// `unknown_call` there.
+fn after_withdraw(fields: &Map<String, Value>, contract: &str, hook: &str, form: Form, out: &mut Decoded) -> Result<(), Refusal> {
+    let receiver = text(fields, "receiver_id")?;
+    if form == Form::Intent {
+        if let Some(paid) = optional_text(fields, "storage_deposit")? {
+            let paid = u128_amount(paid).ok_or(Refusal::Unreadable)?;
+            let effect = Effect::StorageDeposit { contract: contract.into(), for_account: receiver.into(), amount: paid.to_string() };
+            out.push(effect, None);
+            if let Some(excess) = storage_excess(&paid) {
+                let sent = Effect::Transfer { token: NATIVE.into(), amount: excess.to_string(), to: contract.into() };
+                out.push(sent, Some(Move::new(NATIVE, &excess, Some(contract))));
+            }
+        }
+    }
+    if let Some(msg) = optional_text(fields, "msg")? {
+        out.unknown(receiver, hook, json!({ "msg": msg }), &BigUint::ZERO);
     }
     Ok(())
 }

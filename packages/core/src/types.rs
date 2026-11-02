@@ -125,6 +125,12 @@ pub enum Effect {
         amount: String,
         to: String,
     },
+    /// A `token_diff` the DAO signs: `gives` leave its intents balance and `receives` come in.
+    /// Tokens are written as for `intents_transfer`.
+    IntentsSwap {
+        gives: Vec<TokenAmount>,
+        receives: Vec<TokenAmount>,
+    },
     IntentsKeyChange {
         op: KeyOp,
         public_key: String,
@@ -202,6 +208,14 @@ pub enum Effect {
         args: Value,
         deposit: String,
     },
+}
+
+/// One side of an `intents_swap`: a token and an amount of it in whole base units.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TokenAmount {
+    pub token: String,
+    pub amount: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

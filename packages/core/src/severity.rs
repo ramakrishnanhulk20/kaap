@@ -22,8 +22,9 @@ pub fn severity(code: FindingCode, effects: &[Effect], codes: &[FindingCode]) ->
     min_severity(code)
 }
 
-/// The value-moving effects named in the DESC_CONTRADICTS row. Wrap, staking, storage deposits
-/// and DeFi calls keep the funds with the DAO, so the guide leaves them out.
+/// The value-moving effects named in the DESC_CONTRADICTS row, and a swap, whose `gives` leave
+/// the DAO. Wrap, staking, storage deposits and DeFi calls keep the funds with the DAO, so the
+/// guide leaves them out.
 pub fn moves_value(effect: &Effect) -> bool {
     matches!(
         effect,
@@ -31,6 +32,7 @@ pub fn moves_value(effect: &Effect) -> bool {
             | Effect::TokenCallTransfer { .. }
             | Effect::IntentsWithdraw { .. }
             | Effect::IntentsTransfer { .. }
+            | Effect::IntentsSwap { .. }
             | Effect::BulkPayment { .. }
     )
 }

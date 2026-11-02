@@ -209,6 +209,10 @@ fn touched(effects: &[Effect]) -> BTreeSet<String> {
                 add(to);
                 add("intents.near");
             }
+            Effect::IntentsSwap { gives, receives } => {
+                gives.iter().chain(receives).for_each(|t| add(&t.token));
+                add("intents.near");
+            }
             Effect::IntentsKeyChange { .. } => add("intents.near"),
             Effect::Wrap { .. } => add("wrap.near"),
             Effect::Staking { pool, .. } => add(pool),

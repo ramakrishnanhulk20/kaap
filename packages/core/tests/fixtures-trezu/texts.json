@@ -1,0 +1,74 @@
+[
+  {
+    "name": "swap",
+    "source": "1Click generate-intent swap_transfer response, reference/tech/intents/docs/integration__distribution-channels__1click-api__quickstart__signed-intent-execution.md lines 68-75 (saved 20 Oct 2026), nonce and intent as published, signer_id set to the DAO and the deadline moved after the test block. Trezu does not build this text: it passes 1Click's /v0/generate-intent answer through (NEAR-DevHub/trezu 7b063dd, nt-be/src/handlers/intents/confidential/generate_intent.rs 90-108).",
+    "dao": "kmxv7.sputnik-dao.near",
+    "path": "kmxv7.sputnik-dao.near",
+    "recipient": "intents.near",
+    "nonce": "Vij2xgAlKBKzAEiS6N1S/hcQLaHzX2s1fNKhBDblXT4=",
+    "message": "{\"deadline\":\"2026-11-02T12:00:00.000Z\",\"intents\":[{\"intent\":\"token_diff\",\"diff\":{\"nep141:wrap.near\":\"-1000000000000000000000000\",\"nep141:usdt.tether-token.near\":\"1000000\"}}],\"signer_id\":\"kmxv7.sputnik-dao.near\"}"
+  },
+  {
+    "name": "native_withdraw",
+    "source": "NativeWithdraw {receiver_id, amount} (near/intents d340060, contracts/defuse/core/src/intents/tokens.rs 436-439), listed in reference/tech/intents/docs/integration__verifier-contract__intent-types-and-execution.md line 270, which gives no example. 5 NEAR to vendor.near. The nonce is a versioned nonce with the 20 Oct salt 252812b3 and made-up bytes after it.",
+    "dao": "kmxv7.sputnik-dao.near",
+    "path": "kmxv7.sputnik-dao.near",
+    "recipient": "intents.near",
+    "nonce": "Vij2xgAlKBKzEBESExQVFhcYGRobHB0eHyAhIiMkJSY=",
+    "message": "{\"deadline\":\"2026-11-02T12:00:00.000Z\",\"intents\":[{\"intent\":\"native_withdraw\",\"receiver_id\":\"vendor.near\",\"amount\":\"5000000000000000000000000\"}],\"signer_id\":\"kmxv7.sputnik-dao.near\"}"
+  },
+  {
+    "name": "storage_deposit",
+    "source": "The storage_deposit example, reference/tech/intents/docs/integration__verifier-contract__intent-types-and-execution.md lines 315-345, nonce and intent as published, signer_id set to the DAO and the deadline moved after the test block.",
+    "dao": "kmxv7.sputnik-dao.near",
+    "path": "kmxv7.sputnik-dao.near",
+    "recipient": "intents.near",
+    "nonce": "Vij2xgAlKBKzgNPJFViEQRhA/qs878LtXEL9iIjJC14=",
+    "message": "{\"deadline\":\"2026-11-02T12:00:00.000Z\",\"intents\":[{\"intent\":\"storage_deposit\",\"contract_id\":\"usdc.near\",\"account_id\":\"bob.near\",\"amount\":\"1250000000000000000000\"}],\"signer_id\":\"kmxv7.sputnik-dao.near\"}"
+  },
+  {
+    "name": "bulk_login",
+    "source": "Trezu's bulk-payment sub-account login (NEAR-DevHub/trezu 7b063dd): build_auth_proposal_with_signer and build_bulk_payment_auth_proposal, nt-be/src/handlers/intents/confidential/prepare_auth.rs 92-202, sign path the empty string. Signer from derive_bulk_subaccount_id (nt-be/src/handlers/treasury/confidential_setup.rs 266-294) with the default factory bulkpayment.near (nt-be/src/utils/env.rs 126-129); on mainnet kmxv7.bulkpayment.near get_bootstrap_status is Ready at block 222705041. expires_in from the 36500-day default (env.rs 284-287), keys in serde_json's default sorted order, nonce from build_nonce (prepare_auth.rs 59-72) with salt 252812b3 and made-up last bytes.",
+    "dao": "kmxv7.sputnik-dao.near",
+    "path": "",
+    "recipient": "intents.near",
+    "nonce": "Vij2xgAlKBKzAGBvgtMdpUQAYMOuVUfhGAECAwQFBgc=",
+    "message": "{\"deadline\":\"2126-09-29T21:56:00.000Z\",\"external_app_data\":{\"configs\":[{\"expires_in\":3153600000,\"type\":\"auth\"}]},\"intents\":[],\"signer_id\":\"kmxv7.bulkpayment.near\"}"
+  },
+  {
+    "name": "dao_login",
+    "source": "Trezu's DAO login (NEAR-DevHub/trezu 7b063dd, nt-be/src/handlers/intents/confidential/prepare_auth.rs 92-187, build_auth_proposal: signer and path both the DAO), built like bulk_login.",
+    "dao": "kmxv7.sputnik-dao.near",
+    "path": "kmxv7.sputnik-dao.near",
+    "recipient": "intents.near",
+    "nonce": "Vij2xgAlKBKzAGBvgtMdpUQAYMOuVUfhGAECAwQFBgc=",
+    "message": "{\"deadline\":\"2126-09-29T21:56:00.000Z\",\"external_app_data\":{\"configs\":[{\"expires_in\":3153600000,\"type\":\"auth\"}]},\"intents\":[],\"signer_id\":\"kmxv7.sputnik-dao.near\"}"
+  },
+  {
+    "name": "trezu_signed_shield",
+    "source": "A text 1Click generated for a Trezu DAO and the DAO signed, copied as published: NEAR-DevHub/trezu 7b063dd, nt-be/examples/fixtures/signed_confidential_intent.json lines 3-8.",
+    "dao": "petersalomonsendev.sputnik-dao.near",
+    "path": "petersalomonsendev.sputnik-dao.near",
+    "recipient": "intents.near",
+    "nonce": "Vij2xgAlKBKzQIplM0Q8nxhAihair+2eGOK624Oz8Uc=",
+    "message": "{\"deadline\":\"2026-03-22T18:10:41.644Z\",\"intents\":[{\"intent\":\"transfer\",\"receiver_id\":\"d32b552aa188face5952516a370bc5a9d91f77a19c48d5b7b16e6c59eb79b08e\",\"tokens\":{\"nep141:wrap.near\":\"100000000000000000000000\"}}],\"signer_id\":\"petersalomonsendev.sputnik-dao.near\"}"
+  },
+  {
+    "name": "trezu_e2e_intent",
+    "source": "Trezu's end-to-end generate-intent fixture, copied as published: NEAR-DevHub/trezu 7b063dd, nt-fe/e2e/fixtures/confidential-intent.json lines 4-8.",
+    "dao": "petersalomonsendev.sputnik-dao.near",
+    "path": "petersalomonsendev.sputnik-dao.near",
+    "recipient": "intents.near",
+    "nonce": "Vij2xgAlKBKzgB67tZAvnxgPVIiJkIBxtPcWOQPg6MM=",
+    "message": "{\"deadline\":\"2026-03-26T12:00:00.000Z\",\"intents\":[{\"intent\":\"transfer\",\"receiver_id\":\"d32b552aa188face5952516a370bc5a9d91f77a19c48d5b7b16e6c59eb79b08e\",\"tokens\":{\"nep141:wrap.near\":\"10000000000000000000000\"}}],\"signer_id\":\"petersalomonsendev.sputnik-dao.near\"}"
+  },
+  {
+    "name": "trezu_mock_intent",
+    "source": "The text Trezu's mock 1Click builds (NEAR-DevHub/trezu 7b063dd, sandbox/sandbox-init/src/mock_server.rs 129-160): a chrono to_rfc3339 deadline, keys in serde_json's default sorted order, the magic prefix then made-up nonce bytes. signer_id is the bare DAO, as 1Click writes it in trezu_signed_shield; the mock itself echoes the request's signerId, which Trezu sends as near:<dao> (generate_intent.rs 21 and 49-51).",
+    "dao": "petersalomonsendev.sputnik-dao.near",
+    "path": "petersalomonsendev.sputnik-dao.near",
+    "recipient": "intents.near",
+    "nonce": "Vij2xgABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhs=",
+    "message": "{\"deadline\":\"2026-11-03T09:41:57.649371544+00:00\",\"intents\":[{\"intent\":\"transfer\",\"receiver_id\":\"d32b552aa188face5952516a370bc5a9d91f77a19c48d5b7b16e6c59eb79b08e\",\"tokens\":{\"nep141:wrap.near\":\"10000000000000000000000\"}}],\"signer_id\":\"petersalomonsendev.sputnik-dao.near\"}"
+  }
+]
