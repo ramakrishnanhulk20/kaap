@@ -229,6 +229,7 @@ fn touched(effects: &[Effect]) -> BTreeSet<String> {
                 members_added.iter().chain(members_removed).for_each(|m| add(&m.member));
             }
             Effect::CodeUpgrade { target, .. } => add(target),
+            Effect::GuardEnrol { guard, .. } => add(guard),
             Effect::UnknownCall { receiver, args, .. } => {
                 add(receiver);
                 strings_in(args, 0, &mut |s| add(s));

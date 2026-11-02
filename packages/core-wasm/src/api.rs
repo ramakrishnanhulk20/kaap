@@ -15,7 +15,9 @@ use kaap_core::hash::sign::to_hex;
 use kaap_core::policy::arming::guard_arming as arming;
 use kaap_core::policy::sputnik::{can_execute_action, to_policy_label, Action, Policy, RoleKind, LABELS};
 use kaap_core::policy::GUARD_ROLE;
+use kaap_core::receipt::{receivers_hash as hash_receivers, DECODER_VERSION};
 use kaap_core::{
+    enrolment,
     analyze as analyze_input, canonical_kind as canon_kind, canonical_policy as canon_policy, describe,
     hash::{nep413_hash as nep413, nep461_hash as nep461},
     kind_hash as hash_kind, policy_hash as hash_policy, verdict_hash as hash_verdict, AiStatus, FindingCode, History,
@@ -303,34 +305,18 @@ pub fn who_acts(policy_json: &str, label: &str) -> Result<String, Error> {
     to_json(&json!({ "add_proposal": side(Action::AddProposal), "vote_approve": side(Action::VoteApprove) }))
 }
 
-/// The one kind Kaap's guard leaves alone, so a DAO can always remove Kaap with an ordinary
-/// proposal (threat model C15, C17).
-pub const OWN_REMOVAL: &str = "remove_member_from_role";
+pub use kaap_core::enrolment::OWN_REMOVAL;
 
-/// What an enrolment proposal attaches to `enroll`: 0.01 NEAR, which always covers the guard's
-/// storage for the DAO's entry (the guard keeps what the entry takes and refunds the rest), and
-/// 10 Tgas, of which `enroll` burns 1.88 (packages/contracts/GAS.md).
-pub const ENROL_DEPOSIT_YOCTO: &str = "10000000000000000000000";
-pub const ENROL_GAS: &str = "10000000000000";
-
-/// Kaap's enrolment template for the guard contract `guard` (C30): the two proposal kinds a DAO
-/// files, with their titles and descriptions. The first adds a role named `GUARD_ROLE` holding the
-/// guard alone, with VoteReject on every label of Sputnik's `to_policy_label` (`LABELS`) except
-/// `OWN_REMOVAL`, and a RoleWeight threshold of one vote on each; the second calls `enroll` on the
-/// guard. The role is created with its one member in the same proposal, so the policy never holds
-/// it in any other shape than this. Errors when `guard` is not a valid account id.
+/// Kaap's enrolment template (`kaap_core::enrolment`, C30) for the guard contract `guard`: the two
+/// proposal kinds a DAO files, with their titles and descriptions. The first adds
+/// `enrolment::role`, the guard's reject-only role on every label but `OWN_REMOVAL`; the second
+/// calls `enroll` on the guard with no arguments and the template's deposit and gas. Both come
+/// from the same items `analyze` reads Kaap's own enrolment back from, so the drafts always read
+/// as what they are. Errors when `guard` is not a valid account id.
 pub fn enrolment_drafts(guard: &str) -> Result<String, Error> {
     if !is_account_id(guard) {
         return Err(Error("the guard is not a valid account id"));
     }
-    let labels: Vec<&str> = LABELS.iter().copied().filter(|l| *l != OWN_REMOVAL).collect();
-    let rule = json!({ "weight_kind": "RoleWeight", "quorum": "0", "threshold": "1" });
-    let role = json!({
-        "name": GUARD_ROLE,
-        "kind": { "Group": [guard] },
-        "permissions": labels.iter().map(|l| format!("{l}:VoteReject")).collect::<Vec<_>>(),
-        "vote_policy": labels.iter().map(|l| (l.to_string(), rule.clone())).collect::<serde_json::Map<_, _>>(),
-    });
     let add_role = json!({
         "title": "add Kaap's reject-only guard role",
         "kind_label": "policy_add_or_update_role",
@@ -339,7 +325,7 @@ pub fn enrolment_drafts(guard: &str) -> Result<String, Error> {
              on every kind of proposal except removing a member from a role, so this DAO can always remove Kaap. One reject \
              from it decides. It cannot approve, remove or finalise anything."
         ),
-        "kind": { "ChangePolicyAddOrUpdateRole": { "role": role } },
+        "kind": { "ChangePolicyAddOrUpdateRole": { "role": enrolment::role(guard) } },
     });
     let enrol = json!({
         "title": "enrol the DAO in Kaap's guard",
@@ -349,10 +335,25 @@ pub fn enrolment_drafts(guard: &str) -> Result<String, Error> {
              what its entry costs and refunds the rest."
         ),
         "kind": { "FunctionCall": { "receiver_id": guard, "actions": [{
-            "method_name": "enroll", "args": "e30=", "deposit": ENROL_DEPOSIT_YOCTO, "gas": ENROL_GAS,
+            "method_name": enrolment::METHOD, "args": "e30=",
+            "deposit": enrolment::DEPOSIT_YOCTO.to_string(), "gas": enrolment::GAS.to_string(),
         }] } },
     });
+    let labels = enrolment::labels();
     to_json(&json!({ "role_name": GUARD_ROLE, "labels": labels, "left_out": [OWN_REMOVAL], "drafts": [add_role, enrol] }))
+}
+
+/// `kaap_core::receipt::DECODER_VERSION`, the `decoder_version` a verdict carries.
+pub fn decoder_version() -> String {
+    DECODER_VERSION.to_string()
+}
+
+/// Hex of `kaap_core::receipt::receivers_hash`, the `receivers_hash` a verdict carries, over
+/// `[["<account>","<code hash>"],...]` in any order. Errors on anything else.
+pub fn receivers_hash(pairs_json: &str) -> Result<String, Error> {
+    let pairs: Vec<(String, String)> =
+        serde_json::from_str(pairs_json).map_err(|_| Error("the pairs are not a list of [account, code hash]"))?;
+    Ok(to_hex(&hash_receivers(&pairs)))
 }
 
 /// USD prices from a 1Click `GET /v0/tokens` list, keyed the way the guide writes tokens: the
@@ -454,5 +455,79 @@ impl<'de> Deserialize<'de> for Fields {
             }
         }
         d.deserialize_map(FieldsVisitor)
+    }
+}
+
+// The drafts `enrolment_drafts` prints, handed to `analyze` the way the CLI hands them over (the
+// kind as text, the policy before as text, the guard account set) on the M1 testnet DAO's policy
+// before enrolment: the role draft gives no GUARD_WEAKENED, and the enroll draft one guard_enrol
+// effect with no UNKNOWN_CALL or UNKNOWN_VALUE, with no prices given. It does NOT run the wasm
+// build, and it does not cover a DAO whose policy already lets the guard reject (that still fires
+// GUARD_WEAKENED, kaap-core's enrol_guard_role.rs).
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn deployment(file: &str) -> Value {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../deployments").join(file);
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+    }
+
+    /// The NEAR Business role setup with the M1 owner and member in its places, as
+    /// scripts/WO-02c-setup-testnet.mjs filed it before the guard role was added.
+    fn m1_before(state: &Value) -> Value {
+        let mut policy = deployment("near-business-policy.json")["policy"].clone();
+        for role in policy["roles"].as_array_mut().unwrap() {
+            for place in role["kind"]["Group"].as_array_mut().unwrap().iter_mut() {
+                let who = if *place == "<member 1>" { &state["owner"] } else { &state["dao"]["member"] };
+                *place = who["account_id"].clone();
+            }
+        }
+        policy
+    }
+
+    #[test]
+    fn the_printed_drafts_read_back_as_what_they_are() {
+        let state = deployment("testnet.json");
+        let (dao, guard) = (state["dao"]["account_id"].as_str().unwrap(), state["guard"]["account_id"].as_str().unwrap());
+        let template: Value = serde_json::from_str(&enrolment_drafts(guard).unwrap()).unwrap();
+        let read = |draft: &Value| -> Value {
+            let input = json!({
+                "network": "testnet",
+                "dao": dao,
+                "proposal_id": 1,
+                "description": draft["description"],
+                "kind_json": draft["kind"].to_string(),
+                "policy_before_json": m1_before(&state).to_string(),
+                "guard_account": guard,
+            });
+            serde_json::from_str::<Value>(&analyze(&input.to_string()).unwrap()).unwrap()["analysis"].clone()
+        };
+        let codes = |analysis: &Value| -> Vec<String> {
+            analysis["findings"].as_array().unwrap().iter().map(|f| f["code"].as_str().unwrap().to_string()).collect()
+        };
+
+        let role = read(&template["drafts"][0]);
+        assert!(!codes(&role).contains(&"GUARD_WEAKENED".to_string()), "{:?}", codes(&role));
+        assert!(codes(&role).is_empty() && role["risk_floor"] == "low", "nothing to warn about: {role}");
+
+        let enrol = read(&template["drafts"][1]);
+        assert_eq!(
+            enrol["effects"],
+            json!([{ "type": "guard_enrol", "guard": guard, "deposit": enrolment::DEPOSIT_YOCTO.to_string() }])
+        );
+        for code in ["UNKNOWN_CALL", "UNKNOWN_VALUE"] {
+            assert!(!codes(&enrol).iter().any(|c| c == code), "{:?}", codes(&enrol));
+        }
+        assert!(codes(&enrol).is_empty() && enrol["risk_floor"] == "low", "nothing to warn about: {enrol}");
+    }
+
+    #[test]
+    fn decoder_version_and_receivers_hash_are_kaap_cores() {
+        assert_eq!(decoder_version(), "0.1.0");
+        let pairs = r#"[["nori4qx.tanssg2.testnet","12AiGxHGtiSBJenkwsqqrV5Z1XJB1GhWkJRivrQB3m6Y"],
+                        ["corm1gu.sputnikv2.testnet","AA4nA45vauiac3jdVwJTzSdUP3oj2r1fDaPAb2mHdgcH"]]"#;
+        assert_eq!(receivers_hash(pairs).unwrap(), "3e45bc50874d22357a5da82e3a5721c951a8d36dd0b8f16d0f6946978c9ccefb");
+        assert!(receivers_hash(r#"[["only one"]]"#).is_err());
     }
 }

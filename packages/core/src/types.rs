@@ -149,6 +149,13 @@ pub enum Effect {
         for_account: String,
         amount: String,
     },
+    /// Kaap's own enrolment call: `enroll` on `ProposalInput::guard_account`, with no arguments
+    /// and at most `enrolment::DEPOSIT_YOCTO` attached. `deposit` is that NEAR in yoctoNEAR; the
+    /// guard keeps its storage cost and refunds the rest, so it is this effect, not a payment.
+    GuardEnrol {
+        guard: String,
+        deposit: String,
+    },
     DefiCall {
         protocol: String,
         method: String,

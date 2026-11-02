@@ -1,8 +1,8 @@
 //! Effects and findings for the Transfer kind and for FunctionCall kinds: payments, token and
-//! intents calls, wrapping, staking, storage deposits, DeFi and bulk payments (guide sections 3
-//! and 4; rulings 2, 3, 4, 10, 14, 15, 16, 17, 21 and 27). FunctionCall actions to `v1.signer`
-//! method `sign` belong to `hash::check`, and this module emits nothing for them, their attached
-//! NEAR included. Every other kind is `policy::decode`'s.
+//! intents calls, wrapping, staking, storage deposits, DeFi, bulk payments and Kaap's own
+//! enrolment call (guide sections 3 and 4; rulings 2, 3, 4, 10, 14, 15, 16, 17, 21 and 27).
+//! FunctionCall actions to `v1.signer` method `sign` belong to `hash::check`, and this module
+//! emits nothing for them, their attached NEAR included. Every other kind is `policy::decode`'s.
 //!
 //! A method means something only on the exact receiver the kind names (C3, `known::classify`),
 //! and a token's value is looked up by its exact contract id. Anything this module cannot read
@@ -18,6 +18,7 @@ use super::intents;
 use super::json::{self, Parsed};
 use super::known::{self, is_lookalike, Known};
 use crate::canonical::canonical_kind;
+use crate::enrolment;
 use crate::types::{Effect, FindingCode, MsgKind, ProposalInput, Prices, StakingOp, WrapOp};
 
 /// Sputnik stores native NEAR as an empty `token_id` (`OLD_BASE_TOKEN`); the guide writes it
@@ -397,6 +398,9 @@ fn known_effects(
             Ok(decoded)
         }
         Known::StakingPool => staking(receiver, method, args, deposit),
+        Known::Other if method == enrolment::METHOD && input.guard_account.as_deref() == Some(receiver) => {
+            guard_enrol(receiver, args, deposit)
+        }
         Known::Other => token_method(receiver, method, args, &input.dao),
         Known::Signer | Known::BulkPayment => Err(Refusal::Unreadable),
     }
@@ -464,6 +468,20 @@ fn wrap(receiver: &str, method: &str, args: &Value, deposit: &BigUint, dao: &str
         }
         _ => return token_method(receiver, method, args, dao),
     }
+    Ok(decoded)
+}
+
+/// Kaap's own enrolment call on the enrolled guard account (`enrolment`, C30). The attached NEAR
+/// pays the guard's storage for this DAO's entry and the guard refunds what is left, so it is this
+/// effect, not a payment. Only the template's exact shape is read: no arguments, and at most the
+/// template's deposit. Anything else on the guard is an unknown call (fail closed).
+fn guard_enrol(guard: &str, args: &Value, deposit: &BigUint) -> Result<Decoded, Refusal> {
+    if !object(args)?.is_empty() || *deposit > BigUint::from(enrolment::DEPOSIT_YOCTO) {
+        return Err(Refusal::Unreadable);
+    }
+    let mut decoded = Decoded::default();
+    decoded.push(Effect::GuardEnrol { guard: guard.into(), deposit: deposit.to_string() }, None);
+    decoded.takes_deposit = true;
     Ok(decoded)
 }
 

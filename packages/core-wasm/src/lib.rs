@@ -83,6 +83,16 @@ mod bindings {
         api::enrolment_drafts(guard).map_err(thrown)
     }
 
+    #[wasm_bindgen(js_name = decoderVersion)]
+    pub fn decoder_version() -> String {
+        api::decoder_version()
+    }
+
+    #[wasm_bindgen(js_name = receiversHash)]
+    pub fn receivers_hash(pairs_json: &str) -> Result<String, JsError> {
+        api::receivers_hash(pairs_json).map_err(thrown)
+    }
+
     #[wasm_bindgen(js_name = pricesFromTokens)]
     pub fn prices_from_tokens(tokens_json: &str) -> Result<String, JsError> {
         api::prices_json(tokens_json).map_err(thrown)

@@ -46,6 +46,22 @@ fn sorted(mut items: Vec<String>) -> Vec<String> {
     items
 }
 
+/// JSON text with every object's keys in byte order at every depth. serde_json keeps insertion
+/// order when its `preserve_order` feature is on, which a build that includes kaap-sealed turns
+/// on, so plain `to_string` would make two equal effects differ by key order alone.
+fn sorted_keys(v: &Value) -> String {
+    match v {
+        Value::Object(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            let fields: Vec<String> = keys.iter().map(|k| format!("{}:{}", Value::from(k.as_str()), sorted_keys(&map[*k]))).collect();
+            format!("{{{}}}", fields.join(","))
+        }
+        Value::Array(items) => format!("[{}]", items.iter().map(sorted_keys).collect::<Vec<_>>().join(",")),
+        other => other.to_string(),
+    }
+}
+
 #[test]
 fn hash_eval() {
     let prices = census_prices();
@@ -64,7 +80,8 @@ fn hash_eval() {
         let a = analyze(&input_of(record, &prices).unwrap());
         let label = &record["label"];
         let key_effects: Vec<Effect> = serde_json::from_value(label["effects"].clone()).unwrap();
-        let effect_keys = |effects: &[Effect]| sorted(effects.iter().map(|e| serde_json::to_string(e).unwrap()).collect());
+        let effect_keys =
+            |effects: &[Effect]| sorted(effects.iter().map(|e| sorted_keys(&serde_json::to_value(e).unwrap())).collect());
         let pairs = [
             (
                 sorted(label["findings"].as_array().unwrap().iter().map(|f| f["code"].as_str().unwrap().to_string()).collect()).join(","),

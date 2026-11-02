@@ -161,12 +161,12 @@ fn overall(runs: &[Run]) -> Value {
             if map.get("type").and_then(Value::as_str) == Some("policy_change") {
                 for list in map.values_mut() {
                     if let Value::Array(items) = list {
-                        items.sort_by_key(|item| item.to_string());
+                        items.sort_by_key(sorted_keys);
                     }
                 }
             }
         }
-        v.to_string()
+        sorted_keys(&v)
     }
     fn read<T: DeserializeOwned>(v: &Value) -> Result<T, ()> {
         serde_json::from_value(v.clone()).map_err(|_| ())
@@ -245,7 +245,7 @@ fn value(runs: &[Run]) -> Value {
                 }
             }
         }
-        v.to_string()
+        sorted_keys(&v)
     }
     let effects_of = |effects: &[Effect], fold: bool| {
         let mut keys: Vec<String> = effects.iter().map(|e| effect_key(e, fold)).collect();
@@ -309,7 +309,7 @@ fn policy(runs: &[Run]) -> Value {
         [PolicyAddsApprover, PolicyLowersThreshold, PolicyReplacesRole, PolicyRemovesMember, PolicyBeforeUnknown, PolicyDuplicateRoleNames, GuardWeakened, CodeUpgrade, OtherRiskyKind];
     fn effect_key(effect: &Effect) -> String {
         fn sort(items: &mut [Value]) {
-            items.sort_by_key(|item| item.to_string());
+            items.sort_by_key(sorted_keys);
         }
         let mut v = serde_json::to_value(effect).unwrap_or(Value::Null);
         if let Some(map) = v.as_object_mut() {
@@ -327,7 +327,7 @@ fn policy(runs: &[Run]) -> Value {
                 }
             }
         }
-        v.to_string()
+        sorted_keys(&v)
     }
     let effects_of = |effects: &[Effect]| {
         let mut keys: Vec<String> = effects.iter().map(effect_key).collect();
@@ -423,7 +423,8 @@ fn hash(runs: &[Run]) -> Value {
     for run in &chosen {
         let (label, a) = (&run.record["label"], &run.analysis);
         let key_effects = label_effects(run.record).unwrap_or_default();
-        let effect_keys = |effects: &[Effect]| sorted(effects.iter().map(|e| serde_json::to_string(e).unwrap_or_default()).collect());
+        let effect_keys =
+            |effects: &[Effect]| sorted(effects.iter().map(|e| serde_json::to_value(e).map(|v| sorted_keys(&v)).unwrap_or_default()).collect());
         let pairs = [
             (
                 sorted(label["findings"].as_array().map(|fs| fs.iter().filter_map(|f| f["code"].as_str().map(str::to_string)).collect()).unwrap_or_default()).join(","),
@@ -445,6 +446,23 @@ fn hash(runs: &[Run]) -> Value {
         format!("Hash check: {real} real sign requests and {} planted hash records", of - real),
         fields.iter().zip(agree).map(|(f, n)| (*f, n, of)).collect(),
     )
+}
+
+/// JSON text with every object's keys in byte order at every depth, as `tests/hash_eval.rs` writes
+/// it. serde_json keeps insertion order when its `preserve_order` feature is on, which a build that
+/// includes kaap-sealed turns on, so plain `to_string` would make two equal effects differ by key
+/// order alone.
+fn sorted_keys(v: &Value) -> String {
+    match v {
+        Value::Object(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            let fields: Vec<String> = keys.iter().map(|k| format!("{}:{}", Value::from(k.as_str()), sorted_keys(&map[*k]))).collect();
+            format!("{{{}}}", fields.join(","))
+        }
+        Value::Array(items) => format!("[{}]", items.iter().map(sorted_keys).collect::<Vec<_>>().join(",")),
+        other => other.to_string(),
+    }
 }
 
 /// Reads the two labels files and the token list under `repo` and runs `scoreboards`, for the

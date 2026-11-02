@@ -13,6 +13,7 @@ use super::sputnik::{
     object, permissions_allow, Action, Policy, PolicyParameters, Role, RoleKind, VotePolicy, WeightKind, WeightOrRatio,
     LABELS,
 };
+use crate::enrolment;
 use crate::types::{Effect, FindingCode, PermissionChange, RoleMember, VotePolicyChange};
 
 /// A policy kind as Sputnik's serde types read it (proposals.rs 67-121).
@@ -265,20 +266,45 @@ fn guard_weakened(before: &Policy, after: &Policy) -> bool {
 /// it could cast a VoteReject before and holds that right through no role after, which catches a
 /// default vote policy or another role's change that weakens it. Those two read both sides by the
 /// rules `guard_arming` uses. A role called `guard` that does not hold the account is not read.
+///
+/// The one change to the guard's roles that does not count is Kaap's own enrolment (`enrols`):
+/// it arms the guard, so reading it as a weakening would have Kaap warn a DAO against itself.
 fn guard_account_weakened(before: &Policy, after: &Policy, guard: &str) -> bool {
     let holds_guard = |role: &Role| role.members().is_some_and(|members| members.contains(guard));
-    let roles_named = |policy: &Policy, name: &str| policy.roles.iter().filter(|r| r.name == name).cloned().collect::<Vec<_>>();
+    let enrolment = enrols(before, after, guard);
     let role_changed = before
         .roles
         .iter()
         .chain(&after.roles)
-        .filter(|role| holds_guard(role))
+        .filter(|role| holds_guard(role) && !(enrolment && role.name == GUARD_ROLE))
         .any(|role| roles_named(before, &role.name) != roles_named(after, &role.name));
     role_changed
         || LABELS.iter().any(|label| {
             (one_reject_decides(before, guard, label) && !one_reject_decides(after, guard, label))
                 || (may_reject(before, guard, label) && !may_reject(after, guard, label))
         })
+}
+
+/// Every role of the name, in policy order, so two roles of one name are compared as Sputnik
+/// holds them (C1).
+fn roles_named(policy: &Policy, name: &str) -> Vec<Role> {
+    policy.roles.iter().filter(|r| r.name == name).cloned().collect()
+}
+
+/// True when the change makes exactly the role Kaap's enrolment template adds for `guard`
+/// (`enrolment::role`, C30), and that role gives the account only reject rights it did not have:
+/// no role called `GUARD_ROLE` before, exactly the template's role after, and no VoteReject for
+/// the account on any of the template's labels before, through any role. The template is read
+/// through the same parser as the policy, so both sides compare as Sputnik would hold them
+/// (standard 2). A second member, any right or rule more or less, a role of that name already
+/// there, or a guard that could already reject is not the template, and the change is read as any
+/// other (fail closed). It says nothing about other roles; the caller still compares every other
+/// role that holds the account.
+fn enrols(before: &Policy, after: &Policy, guard: &str) -> bool {
+    let Some(template) = Role::from_json(&enrolment::role(guard)) else { return false };
+    roles_named(before, GUARD_ROLE).is_empty()
+        && matches!(roles_named(after, GUARD_ROLE).as_slice(), [role] if *role == template)
+        && !template.vote_policy.keys().any(|label| may_reject(before, guard, label))
 }
 
 /// What the kind alone shows when the policy before is not known (guide section 7).

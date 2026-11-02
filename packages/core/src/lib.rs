@@ -10,6 +10,7 @@ pub mod describe;
 pub mod floor;
 pub mod hash;
 pub mod policy;
+pub mod receipt;
 pub mod severity;
 pub mod types;
 
@@ -18,6 +19,54 @@ pub use kaap_verdict::{canonical, verdict};
 pub use canonical::{canonical_kind, canonical_policy, kind_hash, policy_hash, CanonError};
 pub use types::*;
 pub use verdict::{verdict_bytes, verdict_hash};
+
+/// Kaap's enrolment template (C30): the two proposals a DAO files to arm Kaap's guard. The first
+/// adds the role `role` returns; the second calls the guard's `METHOD` with no arguments,
+/// `DEPOSIT_YOCTO` and `GAS`. core-wasm builds its drafts from these items and `analyze` reads
+/// Kaap's own enrolment back from them, so what Kaap asks a DAO to file and how Kaap reads it can
+/// never drift apart.
+pub mod enrolment {
+    use serde_json::{json, Map, Value};
+
+    use crate::policy::sputnik::LABELS;
+    use crate::policy::GUARD_ROLE;
+
+    /// The one kind the guard leaves alone, so a DAO can always remove Kaap with an ordinary
+    /// proposal (threat model C15, C17).
+    pub const OWN_REMOVAL: &str = "remove_member_from_role";
+
+    /// The guard's own entry point (packages/contracts/guard `enroll`).
+    pub const METHOD: &str = "enroll";
+
+    /// 0.01 NEAR, which always covers the guard's storage for the DAO's entry: the guard keeps what
+    /// the entry takes, about 0.0024 NEAR for a 64-character id, and refunds the rest
+    /// (packages/contracts/GAS.md). It is also the most an `enroll` call may attach and still read
+    /// as enrolment.
+    pub const DEPOSIT_YOCTO: u128 = 10_000_000_000_000_000_000_000;
+
+    /// 10 Tgas, of which `enroll` burns 1.88 (packages/contracts/GAS.md).
+    pub const GAS: u64 = 10_000_000_000_000;
+
+    /// Every Sputnik label but `OWN_REMOVAL`, in `LABELS` order.
+    pub fn labels() -> Vec<&'static str> {
+        LABELS.iter().copied().filter(|label| *label != OWN_REMOVAL).collect()
+    }
+
+    /// The role as the DAO files it: named `GUARD_ROLE`, `guard` its only member, VoteReject on
+    /// each of `labels`, and on each of those a rule of its own that one vote decides (RoleWeight,
+    /// quorum 0, threshold 1), so no default vote policy can change it. The role is created with
+    /// its member in the same proposal, so the policy never holds it in any other shape.
+    pub fn role(guard: &str) -> Value {
+        let labels = labels();
+        let rule = json!({ "weight_kind": "RoleWeight", "quorum": "0", "threshold": "1" });
+        json!({
+            "name": GUARD_ROLE,
+            "kind": { "Group": [guard] },
+            "permissions": labels.iter().map(|label| format!("{label}:VoteReject")).collect::<Vec<_>>(),
+            "vote_policy": labels.iter().map(|label| (label.to_string(), rule.clone())).collect::<Map<_, _>>(),
+        })
+    }
+}
 
 /// Runs every plain-code check on one proposal: `decode::value`, `policy::decode` and
 /// `hash::check`, whose effects and codes are joined in that order, then `describe::check` over
