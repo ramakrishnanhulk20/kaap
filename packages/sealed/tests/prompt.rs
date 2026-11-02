@@ -20,6 +20,7 @@ fn input(kind: &str, description: &str) -> ProposalInput {
         supplied_text: None,
         guard_account: None,
         config_before: None,
+        block_timestamp_ns: None,
     }
 }
 

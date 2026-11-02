@@ -16,7 +16,9 @@ pub const IN_PROGRESS: &str = "InProgress";
 /// replaces with today's policy. The policy is parsed from kaap-core's canonical bytes, so it is
 /// read by the same strict parser that the verdict's policy hash used (standard 2). There is no
 /// payment history and no price list in this job yet, so `history` is `None` (not available)
-/// and every token is unpriced (UNKNOWN_VALUE, never zero, C2).
+/// and every token is unpriced (UNKNOWN_VALUE, never zero, C2). `block_timestamp_ns` is the
+/// time of the block every read was pinned to, so a supplied text's deadline is judged against
+/// the same moment as the proposal.
 pub fn proposal_input(network: Network, dao: &str, proposal_id: u64, read: &ChainRead) -> ProposalInput {
     let policy_before = if read.proposal.status == IN_PROGRESS {
         canonical_policy(&read.policy_json).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok())
@@ -36,6 +38,7 @@ pub fn proposal_input(network: Network, dao: &str, proposal_id: u64, read: &Chai
         supplied_text: None,
         guard_account: None,
         config_before: None,
+        block_timestamp_ns: Some(read.block.timestamp_ns),
     }
 }
 

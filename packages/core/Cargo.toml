@@ -19,3 +19,6 @@ bs58.workspace = true
 base64.workspace = true
 num-bigint.workspace = true
 unicode-normalization.workspace = true
+# Checks 1Click's quote signature against the pinned key (C7). The version kaap-sealed already
+# locks; pure Rust on every target this crate builds for. The contracts link only kaap-verdict.
+ed25519-dalek = { version = "=3.0.0", default-features = false }

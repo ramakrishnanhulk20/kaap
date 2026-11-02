@@ -46,6 +46,11 @@ pub struct ProposalInput {
     /// but the ChangeConfig flags reads it.
     #[serde(default)]
     pub config_before: Option<Value>,
+    /// The timestamp of the block the proposal was read at, in nanoseconds since 1970 as NEAR
+    /// writes it. A supplied text whose deadline is not after it can never execute, so it is not
+    /// counted as verified. `None` means not known, and the deadline is then not judged.
+    #[serde(default)]
+    pub block_timestamp_ns: Option<u64>,
 }
 
 /// Payment history before this proposal (guide section 8, `context.history`).
@@ -69,13 +74,19 @@ pub struct Prices {
     pub usd_by_token: BTreeMap<String, (u8, f64)>,
 }
 
-/// A text handed in for a `sign_request`, hashed exactly as received (C6).
+/// A text handed in for a `sign_request`, hashed exactly as received (C6). For a NEP-461 text,
+/// `message` is the base64 of the borsh delegate action and `nonce` and `recipient` are unused.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SuppliedText {
     pub message: String,
     pub nonce: [u8; 32],
     pub recipient: String,
     pub standard: TextStandard,
+    /// 1Click quote responses exactly as 1Click returned them. A transfer to a deposit address
+    /// names its real payee only through one of these whose signature checks against the pinned
+    /// 1Click key (C7); none means every deposit address stays the payee as written.
+    #[serde(default)]
+    pub quotes: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

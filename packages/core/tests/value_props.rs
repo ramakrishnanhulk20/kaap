@@ -358,6 +358,7 @@ fn input(kind: Vec<u8>) -> ProposalInput {
         supplied_text: None,
         guard_account: None,
         config_before: None,
+        block_timestamp_ns: None,
     }
 }
 

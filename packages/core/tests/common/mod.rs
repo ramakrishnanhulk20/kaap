@@ -81,6 +81,7 @@ pub fn input_of(record: &Value, prices: &Prices) -> Result<ProposalInput, String
         supplied_text,
         guard_account: None,
         config_before: None,
+        block_timestamp_ns: None,
     })
 }
 
@@ -97,6 +98,7 @@ fn supplied(t: &Value) -> Result<SuppliedText, String> {
             None | Some(Value::Null) => TextStandard::Nep413,
             Some(s) => serde_json::from_value(s.clone()).map_err(|e| format!("standard: {e}"))?,
         },
+        quotes: Vec::new(),
     })
 }
 

@@ -1782,6 +1782,7 @@ dependencies = [
  "base64 0.23.1",
  "borsh",
  "bs58 0.5.1",
+ "ed25519-dalek 3.0.0",
  "kaap-verdict",
  "num-bigint 0.5.1",
  "serde",
