@@ -221,6 +221,9 @@ fn a_short_description_can_still_be_contradicted() {
 
 fn input_with_kind(kind: &[u8], with_policy: bool) -> ProposalInput {
     let mut input = input_of(&record(PLANTED, "planted:01"), &prices()).unwrap();
+    // planted:01's payroll text would make an approver change a described-but-unmade payment
+    // (guide ruling 28); these tests are about the kind alone.
+    input.description = "For the council to review.".into();
     input.kind_json = kind.to_vec();
     if !with_policy {
         input.policy_before = None;
