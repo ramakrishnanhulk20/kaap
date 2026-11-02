@@ -44,6 +44,20 @@ pub struct ProposalInput {
     pub prices: Prices,
     pub dao_version: Option<String>,
     pub supplied_text: Option<SuppliedText>,
+    /// The guard account enrolled for this DAO. When set, GUARD_WEAKENED follows what a policy
+    /// change does to this account's own reject, whatever the roles holding it are called. `None`
+    /// means not known: GUARD_WEAKENED then keys on the role named `guard`, so a guard role under
+    /// another name is missed. It does not say whether the account is really Kaap's guard; the
+    /// caller vouches for that.
+    #[serde(default)]
+    pub guard_account: Option<String>,
+    /// The DAO's `get_config` before this proposal. When it reads as Sputnik's config (`name`,
+    /// `purpose` and base64 `metadata`, nothing else), a ChangeConfig's two flags compare against
+    /// it field by field. `None`, or a value that does not read that way, means not known, and the
+    /// flags stay `"unknown"` (guide ruling 21). It is not checked against the chain, and nothing
+    /// but the ChangeConfig flags reads it.
+    #[serde(default)]
+    pub config_before: Option<Value>,
 }
 
 /// Payment history before this proposal (guide section 8, `context.history`).

@@ -7,6 +7,8 @@
 
 mod common;
 
+use std::collections::BTreeMap;
+
 use common::{read_jsonl, record, repo_root, PLANTED};
 use kaap_core::policy::arming::guard_arming;
 use kaap_core::policy::sputnik::LABELS;
@@ -101,6 +103,45 @@ fn a_second_guard_member_disarms_only_a_ratio_guard() {
 }
 
 #[test]
+fn others_who_reject_alone_lists_a_second_guard_member() {
+    // On M1 the owner and the demo member reject only through Approver and Admin, which need 2 of
+    // 2, so nobody but the guard decides with one reject.
+    let (mut policy, guard) = m1();
+    assert!(guard_arming(&policy, &guard).others_who_reject_alone.is_empty());
+
+    // A second member of the M1 guard role meets the same fixed "1", on every label the guard does.
+    role_mut(&mut policy, "guard")["kind"]["Group"].as_array_mut().unwrap().push(json!("second-guard.testnet"));
+    let a = guard_arming(&policy, &guard);
+    let expected: BTreeMap<String, Vec<String>> =
+        all_but(&[OWN_REMOVAL]).into_iter().map(|l| (l, vec!["second-guard.testnet".to_string()])).collect();
+    assert_eq!(a.others_who_reject_alone, expected);
+
+    // On the harness's 1/2 guard role a second member disarms both, so neither is listed.
+    let mut harness = record(PLANTED, "planted:01")["context"]["policy_before"].clone();
+    role_mut(&mut harness, "guard")["kind"]["Group"].as_array_mut().unwrap().push(json!("second-guard.sandbox"));
+    assert!(guard_arming(&harness, "guard.sandbox").others_who_reject_alone.is_empty());
+}
+
+#[test]
+fn others_who_reject_alone_reads_every_group_role_and_only_armed_labels() {
+    // A watch role with its own "1" on transfer and on remove_member_from_role. The guard cannot
+    // reject remove_member_from_role, so only transfer is listed, with the two accounts sorted.
+    let (mut policy, guard) = m1();
+    let one = json!({ "weight_kind": "RoleWeight", "quorum": "0", "threshold": "1" });
+    policy["roles"].as_array_mut().unwrap().push(json!({
+        "name": "watch",
+        "kind": { "Group": ["zed.testnet", "amy.testnet"] },
+        "permissions": ["transfer:VoteReject", "remove_member_from_role:VoteReject"],
+        "vote_policy": { "transfer": one, "remove_member_from_role": one },
+    }));
+    let a = guard_arming(&policy, &guard);
+    assert!(!a.rejects_alone.contains(&OWN_REMOVAL.to_string()));
+    let expected: BTreeMap<String, Vec<String>> =
+        [("transfer".to_string(), vec!["amy.testnet".to_string(), "zed.testnet".to_string()])].into();
+    assert_eq!(a.others_who_reject_alone, expected);
+}
+
+#[test]
 fn an_everyone_role_gives_the_guard_its_rights() {
     let (mut policy, guard) = m1();
     policy["roles"].as_array_mut().unwrap().push(json!({
@@ -148,6 +189,7 @@ fn an_unreadable_policy_is_disarmed() {
     assert!(a.rejects_alone.is_empty());
     assert_eq!(a.cannot_reject, all_but(&[]));
     assert_eq!(a.extra_rights, ["*:*"]);
+    assert!(a.others_who_reject_alone.is_empty());
     assert!(a.approval_votes_needed.values().all(|v| *v == 0));
 }
 

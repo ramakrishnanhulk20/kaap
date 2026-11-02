@@ -6,6 +6,7 @@
 
 use serde_json::{json, Map, Value};
 
+use super::arming::{may_reject, one_reject_decides};
 use super::members::changes;
 use super::roles::{can_approve, count, has_duplicate_names, names, permissions, Holders, GUARD_ROLE};
 use super::sputnik::{
@@ -75,15 +76,22 @@ impl Edit {
 }
 
 /// The effect and findings of the policy kind `variant` with this `body`, against `before`, the
-/// policy before as guide section 7 defines it.
+/// policy before as guide section 7 defines it. `guard` is the enrolled guard account, `None` when
+/// it is not known.
 ///
 /// A body Sputnik could not have stored gives no effect, and UNKNOWN_CALL, or POLICY_BEFORE_UNKNOWN
 /// when there is no policy before either. A policy before that is missing, or that the strict
 /// parser refuses, is not known (standard 4): the effect carries `before_unknown` and only what the
 /// kind itself shows, a removed or added member counts as an approver (C2), and the findings are
 /// POLICY_BEFORE_UNKNOWN plus the two the kind proves alone: duplicate role names in a full
-/// policy, and GUARD_WEAKENED for a shortcut kind that names the guard role.
-pub(crate) fn decode(variant: &str, body: &Value, before: Option<&Value>) -> (Vec<Effect>, Vec<FindingCode>) {
+/// policy, and GUARD_WEAKENED for a shortcut kind that names the guard role or removes the guard
+/// account from a role.
+pub(crate) fn decode(
+    variant: &str,
+    body: &Value,
+    before: Option<&Value>,
+    guard: Option<&str>,
+) -> (Vec<Effect>, Vec<FindingCode>) {
     let before = before.and_then(Policy::from_json);
     let Some(edit) = Edit::read(variant, body) else {
         let code = if before.is_some() { FindingCode::UnknownCall } else { FindingCode::PolicyBeforeUnknown };
@@ -102,19 +110,22 @@ pub(crate) fn decode(variant: &str, body: &Value, before: Option<&Value>) -> (Ve
             Edit::AddOrUpdateRole(role) => Some(role.name.as_str()),
             _ => None,
         };
-        if role == Some(GUARD_ROLE) {
+        // Without a policy before, the roles that hold the guard account are not known, so the
+        // template's role name still counts, and so does a removal that names the account itself.
+        let removes_guard = matches!((&edit, guard), (Edit::RemoveMember { member, .. }, Some(g)) if member == g);
+        if role == Some(GUARD_ROLE) || removes_guard {
             codes.push(FindingCode::GuardWeakened);
         }
         return (vec![unknown_before(&edit)], codes);
     };
     let after = edit.apply(&before);
     let change = compare(&before, &after);
-    let codes = findings(&edit, &before, &after, &change);
+    let codes = findings(&edit, &before, &after, &change, guard);
     (vec![change.into_effect(false)], codes)
 }
 
 /// The guide section 4 codes a policy change fires, measured on the two policies.
-fn findings(edit: &Edit, before: &Policy, after: &Policy, change: &Change) -> Vec<FindingCode> {
+fn findings(edit: &Edit, before: &Policy, after: &Policy, change: &Change, guard: Option<&str>) -> Vec<FindingCode> {
     let mut codes = Vec::new();
     // Sputnik reads permissions from the last role of a name and votes from the first (C1), so
     // two roles of one name never mean what a reader expects.
@@ -127,7 +138,11 @@ fn findings(edit: &Edit, before: &Policy, after: &Policy, change: &Change) -> Ve
     if lowers_threshold(before, after) {
         codes.push(FindingCode::PolicyLowersThreshold);
     }
-    if guard_weakened(before, after) {
+    let weakened = match guard {
+        Some(account) => guard_account_weakened(before, after, account),
+        None => guard_weakened(before, after),
+    };
+    if weakened {
         codes.push(FindingCode::GuardWeakened);
     }
     if change.members_added.iter().any(|m| m.approver) {
@@ -216,7 +231,7 @@ fn token_rule_may_ask_less(was: &VotePolicy, now: &VotePolicy) -> bool {
 /// appears, goes, or differs in who it covers, its permissions or its own vote rules; or the
 /// default vote policy changes so that the guard needs more votes on a label it can reject and has
 /// no rule of its own for. A default that asks for fewer votes leaves one guard vote at least as
-/// strong, so it is not counted.
+/// strong, so it is not counted. This is the rule when the guard account is not known.
 fn guard_weakened(before: &Policy, after: &Policy) -> bool {
     let guard_roles = |policy: &Policy| policy.roles.iter().filter(|r| r.name == GUARD_ROLE).cloned().collect::<Vec<_>>();
     let now = guard_roles(after);
@@ -239,6 +254,31 @@ fn guard_weakened(before: &Policy, after: &Policy) -> bool {
         };
         relies_on_default && asks_more
     })
+}
+
+/// True when the change touches the guard account's roles or takes something from its own reject
+/// (GUARD_WEAKENED with the account known, C17). The guard's roles are every role that names the
+/// account as a Group member, before or after the change; the finding fires when the roles of any
+/// of those names differ at all: members, permissions, own vote rules, kind, or a role of the
+/// name added or removed (guide section 4, "any change to the Guard role"). It also fires when, on
+/// some label, the account's one VoteReject decided a fresh proposal before and no longer does, or
+/// it could cast a VoteReject before and holds that right through no role after, which catches a
+/// default vote policy or another role's change that weakens it. Those two read both sides by the
+/// rules `guard_arming` uses. A role called `guard` that does not hold the account is not read.
+fn guard_account_weakened(before: &Policy, after: &Policy, guard: &str) -> bool {
+    let holds_guard = |role: &Role| role.members().is_some_and(|members| members.contains(guard));
+    let roles_named = |policy: &Policy, name: &str| policy.roles.iter().filter(|r| r.name == name).cloned().collect::<Vec<_>>();
+    let role_changed = before
+        .roles
+        .iter()
+        .chain(&after.roles)
+        .filter(|role| holds_guard(role))
+        .any(|role| roles_named(before, &role.name) != roles_named(after, &role.name));
+    role_changed
+        || LABELS.iter().any(|label| {
+            (one_reject_decides(before, guard, label) && !one_reject_decides(after, guard, label))
+                || (may_reject(before, guard, label) && !may_reject(after, guard, label))
+        })
 }
 
 /// What the kind alone shows when the policy before is not known (guide section 7).

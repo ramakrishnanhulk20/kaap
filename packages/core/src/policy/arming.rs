@@ -3,7 +3,7 @@
 //! counted (`update_votes`, proposals.rs 256-283) and what decides a proposal (`proposal_status`,
 //! policy.rs 380-433). Never from what the enrolment template meant to give the guard.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
@@ -30,6 +30,13 @@ pub struct GuardArming {
     /// Every right the guard holds beyond VoteReject, as `label:Action`, across every role it
     /// matches, Everyone and Member roles included.
     pub extra_rights: Vec<String>,
+    /// For each label in `rejects_alone`, every other account named in a Group role whose own one
+    /// VoteReject on a fresh proposal also gives Rejected, by the same rule as the guard's. Accounts
+    /// sorted, the guard left out, labels with nobody left out. It does not cover a reject that
+    /// counts only through an Everyone role, which Sputnik never lets decide (policy.rs 405), nor
+    /// one that also counts through a token-weighted rule or a Member role, whose outcome depends on
+    /// delegated balances no policy holds: such an account is not listed.
+    pub others_who_reject_alone: BTreeMap<String, Vec<String>>,
     /// For each label, the fewest votes that pass a proposal of that kind under Sputnik's own
     /// thresholds for every role that can act on it, `u128::MAX` where nothing can pass it.
     pub approval_votes_needed: BTreeMap<String, u128>,
@@ -46,13 +53,14 @@ pub fn guard_arming(policy: &Value, guard: &str) -> GuardArming {
             rejects_alone: Vec::new(),
             cannot_reject: LABELS.iter().map(|l| l.to_string()).collect(),
             extra_rights: vec!["*:*".into()],
+            others_who_reject_alone: BTreeMap::new(),
             approval_votes_needed: LABELS.iter().map(|l| (l.to_string(), 0)).collect(),
             race_note: "The policy could not be read, so the guard counts as disarmed, holding every right, \
                         and Kaap assumes nothing about the votes a proposal needs."
                 .into(),
         };
     };
-    let (rejects_alone, cannot_reject) =
+    let (rejects_alone, cannot_reject): (Vec<String>, Vec<String>) =
         LABELS.iter().map(|l| l.to_string()).partition(|label| one_reject_decides(&policy, guard, label));
     let mut extra_rights = Vec::new();
     for label in LABELS {
@@ -62,20 +70,50 @@ pub fn guard_arming(policy: &Value, guard: &str) -> GuardArming {
             }
         }
     }
+    let others_who_reject_alone = others_who_reject_alone(&policy, guard, &rejects_alone);
     let approval_votes_needed: BTreeMap<String, u128> =
         LABELS.iter().map(|label| (label.to_string(), votes_to_pass(&policy, label))).collect();
     let race_note = race_note(&approval_votes_needed);
-    GuardArming { rejects_alone, cannot_reject, extra_rights, approval_votes_needed, race_note }
+    GuardArming { rejects_alone, cannot_reject, extra_rights, others_who_reject_alone, approval_votes_needed, race_note }
 }
 
-/// True when the guard's one VoteReject on a fresh proposal labelled `label` gives Rejected. The
+/// The accounts other than `guard` that a Group role names and whose one reject decides a label in
+/// `labels`, by `one_reject_decides`. An account outside every Group role reaches a vote only
+/// through an Everyone or a Member role, where `one_reject_decides` is never true, so the Group
+/// members are every candidate.
+fn others_who_reject_alone(policy: &Policy, guard: &str, labels: &[String]) -> BTreeMap<String, Vec<String>> {
+    let named: BTreeSet<&str> = policy
+        .roles
+        .iter()
+        .filter_map(|role| role.members())
+        .flatten()
+        .map(String::as_str)
+        .filter(|account| *account != guard)
+        .collect();
+    labels
+        .iter()
+        .filter_map(|label| {
+            let who: Vec<String> =
+                named.iter().filter(|account| one_reject_decides(policy, account, label)).map(|a| a.to_string()).collect();
+            (!who.is_empty()).then(|| (label.clone(), who))
+        })
+        .collect()
+}
+
+/// True when `account` may cast a VoteReject on `label` through any role it matches, Everyone and
+/// Member roles included, read the same way as in `one_reject_decides`.
+pub(crate) fn may_reject(policy: &Policy, account: &str, label: &str) -> bool {
+    can_execute_action_weighted(policy, account, ANY_BALANCE, label, Action::VoteReject).1
+}
+
+/// True when `account`'s one VoteReject on a fresh proposal labelled `label` gives Rejected. The
 /// vote counts once in each role that allows it (proposals.rs 256-283), and `proposal_status`
 /// returns the first of those roles to decide, in a hash-map order no one controls (policy.rs
 /// 397-433). So every such role other than an Everyone role must be a RoleWeight Group with a
 /// threshold of one or more at its size, and one of them must need exactly one. A Member role or
-/// a TokenWeight rule gives false, since the guard's delegated balance is in no policy.
-fn one_reject_decides(policy: &Policy, guard: &str, label: &str) -> bool {
-    let (roles, allowed) = can_execute_action_weighted(policy, guard, ANY_BALANCE, label, Action::VoteReject);
+/// a TokenWeight rule gives false, since the account's delegated balance is in no policy.
+pub(crate) fn one_reject_decides(policy: &Policy, account: &str, label: &str) -> bool {
+    let (roles, allowed) = can_execute_action_weighted(policy, account, ANY_BALANCE, label, Action::VoteReject);
     if !allowed {
         return false;
     }

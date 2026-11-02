@@ -356,6 +356,8 @@ fn input(kind: Vec<u8>) -> ProposalInput {
         prices,
         dao_version: Some("3.2".into()),
         supplied_text: None,
+        guard_account: None,
+        config_before: None,
     }
 }
 

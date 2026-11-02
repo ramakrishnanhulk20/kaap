@@ -24,7 +24,8 @@
 // one allowed account per kind; proposal expiry.
 //
 // One more test uses the same sandbox setup: `guard_arming_agrees_with_the_binary` checks
-// `policy::arming` (C16) on the M1 testnet policy and three edits of it.
+// `policy::arming` (C16) on the M1 testnet policy and three edits of it, the guard's own reject and
+// the other accounts `others_who_reject_alone` lists.
 //
 // Run inside WSL after `bash scripts/fetch-sputnik-wasm.sh`. NEAR_SANDBOX_BIN_PATH may point at a
 // neard sandbox binary already on disk; otherwise near-sandbox downloads one.
@@ -740,8 +741,10 @@ fn add_to_guard_role(policy: &mut Value, account: &str) {
 /// C16 against the binary. For the M1 testnet policy and three edits of it, the guard tries to
 /// file one proposal of every kind, then casts one VoteReject on a proposal of that kind, and the
 /// binary's answer is compared with `guard_arming`: the filing with `extra_rights`, the reject
-/// with `rejects_alone`. It prints one line per kind. It does NOT cover approval races, a guard
-/// with delegated tokens, or kinds nobody in the policy may file (listed as notes).
+/// with `rejects_alone`. Then every account `others_who_reject_alone` lists for the kind casts one
+/// VoteReject on its own fresh proposal, which must come out Rejected. It prints one line per
+/// check. It does NOT cover approval races, a guard with delegated tokens, kinds nobody in the
+/// policy may file (listed as notes), or accounts left off `others_who_reject_alone`.
 #[tokio::test(flavor = "multi_thread")]
 async fn guard_arming_agrees_with_the_binary() -> Result<()> {
     let code = sputnik_wasm()?;
@@ -817,6 +820,21 @@ async fn check_arming(name: &'static str, policy_json: Value, guard: String, cod
         let rejected = binary == "Rejected" || (label == "bounty_done" && binary.contains(NO_BOUNTY));
         let verdict = if says { "rejects alone" } else { "cannot reject" };
         lines.push((format!("{label:<34} one guard reject: guard_arming {verdict}, binary {binary}"), says == rejected));
+        // Each other account listed gets its own fresh proposal, so the guard's vote is not in it.
+        for other in arming.others_who_reject_alone.get(label).into_iter().flatten() {
+            let filer = dao.accounts.iter().find(|a| can_execute_action(&dao.policy, a, label, Action::AddProposal).1);
+            let Some(filer) = filer else { bail!("{name} {label}: a proposal was filed, yet nobody may file one") };
+            let id = match dao.file(filer, &kind).await? {
+                Actual::Done(id) => id.as_u64().ok_or_else(|| anyhow::anyhow!("{name} {label}: add_proposal returned {id}"))?,
+                Actual::Refused(why) => bail!("{name} {label}: {filer} may file but was refused: {why}"),
+            };
+            let binary = match dao.act(other, id, Action::VoteReject, &kind).await? {
+                Actual::Done(_) => dao.status(id).await?,
+                Actual::Refused(why) => why,
+            };
+            let rejected = binary == "Rejected" || (label == "bounty_done" && binary.contains(NO_BOUNTY));
+            lines.push((format!("{label:<34} one reject by {other}: others_who_reject_alone lists it, binary {binary}"), rejected));
+        }
     }
     Ok((name.to_string(), lines))
 }

@@ -24,8 +24,8 @@ pub fn decode(input: &ProposalInput) -> (Vec<Effect>, Vec<FindingCode>) {
     match sputnik::label_of(&variant) {
         None | Some("transfer" | "call") => (Vec::new(), Vec::new()),
         Some(label) if sputnik::POLICY_LABELS.contains(&label) => {
-            change::decode(&variant, &body, input.policy_before.as_ref())
+            change::decode(&variant, &body, input.policy_before.as_ref(), input.guard_account.as_deref())
         }
-        Some(_) => governance::decode(&variant, &body),
+        Some(_) => governance::decode(&variant, &body, input.config_before.as_ref()),
     }
 }

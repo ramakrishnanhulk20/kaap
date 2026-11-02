@@ -34,6 +34,8 @@ pub fn proposal_input(network: Network, dao: &str, proposal_id: u64, read: &Chai
         prices: Prices::default(),
         dao_version: None,
         supplied_text: None,
+        guard_account: None,
+        config_before: None,
     }
 }
 

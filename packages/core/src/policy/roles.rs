@@ -8,8 +8,8 @@ use std::collections::BTreeSet;
 use super::sputnik::{Policy, RoleKind};
 
 /// The name the enrolment template gives Kaap's reject-only role (scripts/WO-02c-setup-testnet.mjs
-/// `GUARD_ROLE`, C30). `ProposalInput` carries no guard account, so this name is how a proposal is
-/// recognised as touching the guard.
+/// `GUARD_ROLE`, C30). It is the fallback for recognising a proposal that touches the guard when
+/// `ProposalInput::guard_account` is `None`; with the account known, its roles are found by member.
 pub const GUARD_ROLE: &str = "guard";
 
 /// Who the roles of one name cover.

@@ -4,16 +4,19 @@
 // every record that differs, then fails below the work order's bars. The effects multiset is
 // printed but not held to a bar. It does not score the codes of other modules, and it never
 // judges whether the key or the decoder is right where they differ; DISAGREEMENTS-WO-03b.md does.
-// A second test pins a known gap of GUARD_WEAKENED: a guard role under another name.
+// The other tests cover the two optional inputs: GUARD_WEAKENED with and without the guard account
+// (pinning the gap of a guard role under another name when it is not known), and the ChangeConfig
+// flags with and without the config before. They do not read either input from chain.
 
 mod common;
 
 use std::collections::BTreeSet;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
-use common::{census_prices, codes as codes_of, input_of, read_jsonl, record, repo_root, PLANTED, REAL};
+use base64::Engine as _;
+use common::{census_prices, codes as codes_of, input_of, label_effects, read_jsonl, record, repo_root, PLANTED, REAL};
 use kaap_core::*;
-use serde_json::Value;
+use serde_json::{json, Value};
 use FindingCode::*;
 
 /// Sputnik's kinds other than Transfer and FunctionCall, which `policy::decode` owns.
@@ -135,9 +138,9 @@ fn policy_eval() {
 
 #[test]
 fn known_gap_a_guard_role_under_another_name_gets_no_guard_weakened() {
-    // ProposalInput carries no guard account, so the guard role is recognised only by the
-    // enrolment template's name, `guard`. The same removal from the same role under another name
-    // is only POLICY_REMOVES_MEMBER. Closing this needs the guard account in the input (WO-03c).
+    // With no guard account in the input, the guard role is recognised only by the enrolment
+    // template's name, `guard`, so the same removal from the same role under another name is only
+    // POLICY_REMOVES_MEMBER. With the account set, the finding follows the account instead.
     let named = input_of(&record(PLANTED, "planted:48"), &census_prices()).unwrap();
     assert!(codes_of(&analyze(&named)).contains(&GuardWeakened), "control: the role named guard");
 
@@ -151,6 +154,174 @@ fn known_gap_a_guard_role_under_another_name_gets_no_guard_weakened() {
     let codes = codes_of(&analyze(&renamed));
     assert!(codes.contains(&PolicyRemovesMember), "{codes:?}");
     assert!(!codes.contains(&GuardWeakened), "the gap is closed; update this test and the guide");
+
+    let mut known = renamed.clone();
+    known.guard_account = Some("guard.sandbox".into());
+    let codes = codes_of(&analyze(&known));
+    assert!(codes.contains(&GuardWeakened) && codes.contains(&PolicyRemovesMember), "{codes:?}");
+}
+
+const GUARD: Option<&str> = Some("guard.sandbox");
+
+/// The codes `analyze` gives `kind` against `policy`, with the guard account `guard`, on planted:48.
+fn guard_codes(kind: Value, policy: Option<Value>, guard: Option<&str>) -> Vec<FindingCode> {
+    let mut input = input_of(&record(PLANTED, "planted:48"), &census_prices()).unwrap();
+    input.kind_json = serde_json::to_vec(&kind).unwrap();
+    input.policy_before = policy;
+    input.guard_account = guard.map(str::to_string);
+    codes_of(&analyze(&input))
+}
+
+/// The planted harness policy, with its guard role renamed `kaap` and holding rules of its own at
+/// "1", so a second member leaves the guard's one reject deciding (to_weight is min(1, size)).
+fn harness_with_a_kaap_role() -> Value {
+    let mut policy = record(PLANTED, "planted:48")["context"]["policy_before"].clone();
+    let one = json!({ "weight_kind": "RoleWeight", "quorum": "0", "threshold": "1" });
+    for role in policy["roles"].as_array_mut().unwrap().iter_mut().filter(|r| r["name"] == "guard") {
+        role["name"] = json!("kaap");
+        role["vote_policy"] = policy::sputnik::LABELS.iter().map(|l| (l.to_string(), one.clone())).collect::<serde_json::Map<_, _>>().into();
+    }
+    policy
+}
+
+#[test]
+fn with_the_guard_account_known_a_second_member_in_its_role_fires() {
+    let add = json!({ "AddMemberToRole": { "member_id": "second.sandbox", "role": "kaap" } });
+    assert!(guard_codes(add.clone(), Some(harness_with_a_kaap_role()), GUARD).contains(&GuardWeakened));
+    assert!(!guard_codes(add, Some(harness_with_a_kaap_role()), None).contains(&GuardWeakened), "the role-name rule misses it");
+}
+
+#[test]
+fn with_the_guard_account_known_an_edit_of_a_role_without_it_does_not_fire() {
+    let add = json!({ "AddMemberToRole": { "member_id": "dave.sandbox", "role": "contributors" } });
+    assert!(!guard_codes(add, Some(harness_with_a_kaap_role()), GUARD).contains(&GuardWeakened));
+
+    // A role called `guard` that does not hold the guard account is an ordinary role.
+    let mut policy = harness_with_a_kaap_role();
+    policy["roles"].as_array_mut().unwrap().push(json!({
+        "name": "guard", "kind": { "Group": ["eve.sandbox"] }, "permissions": ["*:AddProposal"], "vote_policy": {}
+    }));
+    let add = json!({ "AddMemberToRole": { "member_id": "frank.sandbox", "role": "guard" } });
+    assert!(!guard_codes(add.clone(), Some(policy.clone()), GUARD).contains(&GuardWeakened));
+    assert!(guard_codes(add, Some(policy), None).contains(&GuardWeakened), "the role-name rule fires on the name");
+}
+
+#[test]
+fn with_the_guard_account_known_guard_weakened_follows_its_reject() {
+    let harness = record(PLANTED, "planted:48")["context"]["policy_before"].clone();
+    let guard_role = harness["roles"].as_array().unwrap().iter().find(|r| r["name"] == "guard").unwrap().clone();
+    let codes = guard_codes;
+    let g = GUARD;
+
+    // A second member on the harness's 1/2 guard role: the guard's one reject stops deciding.
+    let add = json!({ "AddMemberToRole": { "member_id": "second.sandbox", "role": "guard" } });
+    assert!(codes(add, Some(harness.clone()), g).contains(&GuardWeakened));
+
+    // Where the guard already needs a second reject, removing it still takes its reject right away.
+    let mut two_guards = harness.clone();
+    for role in two_guards["roles"].as_array_mut().unwrap().iter_mut().filter(|r| r["name"] == "guard") {
+        role["kind"]["Group"].as_array_mut().unwrap().push(json!("second.sandbox"));
+    }
+    let remove = json!({ "RemoveMemberFromRole": { "member_id": "guard.sandbox", "role": "guard" } });
+    assert!(codes(remove, Some(two_guards), g).contains(&GuardWeakened));
+
+    // Rules of its own at "1" on the guard role leave every reject as it was, but they change the
+    // guard's role, so both rules fire.
+    let mut ones = guard_role.clone();
+    let one = json!({ "weight_kind": "RoleWeight", "quorum": "0", "threshold": "1" });
+    ones["vote_policy"] = policy::sputnik::LABELS.iter().map(|l| (l.to_string(), one.clone())).collect::<serde_json::Map<_, _>>().into();
+    let update = json!({ "ChangePolicyAddOrUpdateRole": { "role": ones } });
+    assert!(codes(update.clone(), Some(harness.clone()), g).contains(&GuardWeakened));
+    assert!(codes(update, Some(harness), None).contains(&GuardWeakened));
+
+    // With no policy before, a removal that names the guard account still fires.
+    let remove_renamed = json!({ "RemoveMemberFromRole": { "member_id": "guard.sandbox", "role": "kaap" } });
+    assert!(codes(remove_renamed.clone(), None, g).contains(&GuardWeakened));
+    assert!(!codes(remove_renamed, None, None).contains(&GuardWeakened));
+}
+
+#[test]
+fn config_flags_compare_with_the_config_before() {
+    let config_change = |record: &Value, before: Option<Value>| {
+        let mut input = input_of(record, &census_prices()).unwrap();
+        input.config_before = before;
+        analyze(&input).effects
+    };
+    let b64 = |text: &str| base64::engine::general_purpose::STANDARD.encode(text);
+
+    // hh 4 recolours the theme. The config before is rebuilt from the label's note: proposal 3 had
+    // the same name and purpose and primaryColor #3B82F6. Purpose false, metadata true.
+    let hh = record(REAL, "mainnet:hh.sputnik-dao.near:4");
+    let new = hh["kind"]["ChangeConfig"]["config"].clone();
+    let shown = String::from_utf8(base64::engine::general_purpose::STANDARD.decode(new["metadata"].as_str().unwrap()).unwrap()).unwrap();
+    let mut before = new.clone();
+    before["metadata"] = json!(b64(&shown.replace("#000000", "#3B82F6")));
+    assert_eq!(config_change(&hh, Some(before)), label_effects(&hh));
+
+    // planted 65 renames the DAO and rewrites its purpose; the metadata stays empty. Purpose true,
+    // metadata false.
+    let planted = record(PLANTED, "planted:65");
+    let before = json!({ "name": "Kaap", "purpose": "A test DAO", "metadata": "" });
+    assert_eq!(config_change(&planted, Some(before)), label_effects(&planted));
+
+    // An unchanged config gives false on both.
+    let same = planted["kind"]["ChangeConfig"]["config"].clone();
+    let unchanged = Effect::ConfigChange { name: "Kaap Treasury".into(), purpose_changed: ChangeFlag::Unchanged, metadata_changed: ChangeFlag::Unchanged };
+    assert_eq!(config_change(&planted, Some(same)), [unchanged]);
+}
+
+#[test]
+fn a_config_before_that_does_not_read_leaves_the_flags_unknown() {
+    let planted = record(PLANTED, "planted:65");
+    let unknown = [Effect::ConfigChange { name: "Kaap Treasury".into(), purpose_changed: ChangeFlag::Unknown, metadata_changed: ChangeFlag::Unknown }];
+    for before in [
+        None,
+        Some(json!(null)),
+        Some(json!({ "name": "Kaap", "purpose": "A test DAO" })),
+        Some(json!({ "name": "Kaap", "purpose": "A test DAO", "metadata": "", "extra": 1 })),
+    ] {
+        let mut input = input_of(&planted, &census_prices()).unwrap();
+        input.config_before = before.clone();
+        assert_eq!(analyze(&input).effects, unknown, "{before:?}");
+    }
+    // A metadata that is not base64 makes only that flag unknown.
+    let mut input = input_of(&planted, &census_prices()).unwrap();
+    input.config_before = Some(json!({ "name": "Kaap", "purpose": "Guarded DAO treasury", "metadata": "not base64!" }));
+    let flags = [Effect::ConfigChange { name: "Kaap Treasury".into(), purpose_changed: ChangeFlag::Unchanged, metadata_changed: ChangeFlag::Unknown }];
+    assert_eq!(analyze(&input).effects, flags);
+}
+
+#[test]
+fn a_config_field_of_the_wrong_type_leaves_only_its_flag_unknown() {
+    let planted = record(PLANTED, "planted:65");
+    let flags = |before: Value, kind: Option<Value>| {
+        let mut input = input_of(&planted, &census_prices()).unwrap();
+        input.config_before = Some(before);
+        if let Some(kind) = kind {
+            input.kind_json = serde_json::to_vec(&kind).unwrap();
+        }
+        match analyze(&input).effects.as_slice() {
+            [Effect::ConfigChange { purpose_changed, metadata_changed, .. }] => (*purpose_changed, *metadata_changed),
+            other => panic!("{other:?}"),
+        }
+    };
+    use ChangeFlag::{Changed, Unchanged, Unknown};
+    let same_purpose = "Guarded DAO treasury";
+
+    // On the config before.
+    for purpose in [json!(5), json!(null), json!(["Guarded DAO treasury"]), json!({ "text": same_purpose })] {
+        assert_eq!(flags(json!({ "name": "Kaap", "purpose": purpose, "metadata": "" }), None), (Unknown, Unchanged), "{purpose}");
+    }
+    for metadata in [json!(0), json!(null), json!([]), json!({}), json!(true)] {
+        assert_eq!(flags(json!({ "name": "Kaap", "purpose": same_purpose, "metadata": metadata }), None), (Unchanged, Unknown), "{metadata}");
+    }
+
+    // On the new config, with a config before that reads.
+    let before = json!({ "name": "Kaap", "purpose": "A test DAO", "metadata": "" });
+    let kind = |purpose: Value, metadata: Value| json!({ "ChangeConfig": { "config": { "name": "Kaap Treasury", "purpose": purpose, "metadata": metadata } } });
+    assert_eq!(flags(before.clone(), Some(kind(json!(7), json!("")))), (Unknown, Unchanged));
+    assert_eq!(flags(before.clone(), Some(kind(json!(same_purpose), json!(null)))), (Changed, Unknown));
+    assert_eq!(flags(before, Some(kind(json!(same_purpose), json!("%%%")))), (Changed, Unknown));
 }
 
 fn variant(kind: &Value) -> &str {

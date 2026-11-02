@@ -49,7 +49,11 @@ fn analyze_runs_on_exactly_that_input() {
         let r = read(name);
         let (input, analysis) = judge(Network::Testnet, fx["dao"].as_str().unwrap(), fx["proposal_id"].as_u64().unwrap(), &r);
         assert_eq!(analysis, analyze(&input), "{name}");
-        assert_ne!(analysis.risk_floor, Severity::Low, "{name}: nothing here is a priced, known payment");
+        if name == "vote.json" {
+            assert_eq!(analysis.risk_floor, Severity::Low, "a Vote proposal moves nothing");
+        } else {
+            assert_ne!(analysis.risk_floor, Severity::Low, "{name}: nothing here is a priced, known payment");
+        }
     }
     let (_, ft) = judge(Network::Testnet, "corm1gu.sputnikv2.testnet", 1, &read("transfer-ft.json"));
     assert!(ft.findings.iter().any(|f| f.code == FindingCode::UnknownValue), "an unpriced token is UNKNOWN_VALUE");

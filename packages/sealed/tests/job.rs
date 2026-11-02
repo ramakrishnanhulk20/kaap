@@ -109,10 +109,11 @@ fn an_unverified_ai_answer_raises_to_high_at_most_and_the_key_never_shows() {
         .to_string()
         .into_bytes()
     };
-    let fx = fixture("vote.json");
+    // An unknown call keeps a high floor; a Vote proposal has moved nothing since WO-03b, so its floor is low.
+    let fx = fixture("function-call.json");
     for (said, want) in [("critical", Severity::High), ("low", Severity::High), ("high", Severity::High)] {
         let ai = Scripted(vec![Response { status: 200, body: list.clone() }, Response { status: 200, body: answer(said) }], Vec::new());
-        let out = run(input("r7thmvr8maey.sputnikv2.testnet", 11, "").as_bytes(), Some("testnet"), Some(key), connections(&fx, ai));
+        let out = run(input("r7thmvr8maey.sputnikv2.testnet", 10, "").as_bytes(), Some("testnet"), Some(key), connections(&fx, ai));
         assert!(!out.contains(key), "the NEAR AI key is never printed");
         let (v, json) = open(&out);
         assert_eq!(v.ai_status, AiStatus::Unverified);
@@ -121,7 +122,7 @@ fn an_unverified_ai_answer_raises_to_high_at_most_and_the_key_never_shows() {
         assert!(json["explanation"].as_str().unwrap().starts_with("The token transfer"));
     }
     let ai = Scripted(vec![Response { status: 200, body: list }, Response { status: 200, body: b"{}".to_vec() }], Vec::new());
-    let (v, json) = open(&run(input("r7thmvr8maey.sputnikv2.testnet", 11, "").as_bytes(), Some("testnet"), Some(key), connections(&fx, ai)));
+    let (v, json) = open(&run(input("r7thmvr8maey.sputnikv2.testnet", 10, "").as_bytes(), Some("testnet"), Some(key), connections(&fx, ai)));
     assert_eq!((v.ai_status, v.model_id.as_str()), (AiStatus::Unavailable, ""));
     assert_eq!(json["explanation"], "AI unavailable: the NEAR AI response could not be read.");
 }

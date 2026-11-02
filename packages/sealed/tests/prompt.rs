@@ -18,6 +18,8 @@ fn input(kind: &str, description: &str) -> ProposalInput {
         prices: Prices::default(),
         dao_version: None,
         supplied_text: None,
+        guard_account: None,
+        config_before: None,
     }
 }
 

@@ -79,6 +79,8 @@ pub fn input_of(record: &Value, prices: &Prices) -> Result<ProposalInput, String
         prices: prices.clone(),
         dao_version: context["dao_version"].as_str().map(str::to_string),
         supplied_text,
+        guard_account: None,
+        config_before: None,
     })
 }
 
