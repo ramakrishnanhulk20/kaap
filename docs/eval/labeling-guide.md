@@ -47,6 +47,8 @@ One object per effect. Fields not listed are not used.
 | `other_kind` | `kind`, `summary` | SetStakingContract, FactoryInfoUpdate, bounties, Vote |
 | `unknown_call` | `receiver`, `method`, `args` (decoded JSON, `{}` for no arguments, or `"not_json"`), `deposit` | every call not covered above, including lockup contracts, liquid staking contracts, bridges, oracles, admin methods, and calls whose method name suggests an upgrade (names are not proof) |
 
+Names in effect fields are written in lower case: `defi_call.protocol` is `burrow`, `ref-finance` or `ref-dcl`, never `Burrow` (2 Nov 2026; the 5 key rows that used a capital were changed to match).
+
 ## 4. Findings (the plain-code checks)
 Each finding has a code and a fixed severity. A finding fires only from facts in the proposal and the DAO's state, never from a guess. One entry per code per record.
 

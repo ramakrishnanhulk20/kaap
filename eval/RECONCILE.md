@@ -3035,7 +3035,7 @@ The labels were redone in two layers by eval-e12b: 29 real relabels for the reco
 | planted | planted:49 | high; must false; allowed true; should true | critical; must true; allowed true; should true | -DESC_CONTRADICTS high, +DESC_CONTRADICTS critical | ruling 23: removing the guard role fires GUARD_WEAKENED, a change of control, so DESC_CONTRADICTS is critical; a miss of the plain-code floor becomes a plain-code catch |
 
 Labels that changed with no move in the floor or veto fields (findings, effects, description check or notes, mostly because the policy before is now known):
-- real: 25: blockz:3, chicago:2, fast-auth-maintainer:4, jhptc:3, lesyk:4, linear:208, my-new-confff:3, myy-bizz:4, nearlytrade:12, nearlytrade:13, nearlytrade:6, phala-team:8, qa-stage:114, ref-labs:231, ref-labs:232, rhea-airdrop:12, roma6:2, roundvest5367:0, stader-nearx:94, sweat-multisig:0, sweat-multisig:4, testing-astradao:580, wali619:2, warpdrive:44, zeus:3.
+- real: 30: blockz:3, burrow:1445, burrow:1465, burrow:1499, burrow:1573, burrow:1654, chicago:2, fast-auth-maintainer:4, jhptc:3, lesyk:4, linear:208, my-new-confff:3, myy-bizz:4, nearlytrade:12, nearlytrade:13, nearlytrade:6, phala-team:8, qa-stage:114, ref-labs:231, ref-labs:232, rhea-airdrop:12, roma6:2, roundvest5367:0, stader-nearx:94, sweat-multisig:0, sweat-multisig:4, testing-astradao:580, wali619:2, warpdrive:44, zeus:3.
 - planted: 0.
 - The record context is now taken from eval/real/sample.jsonl, so the published labels carry the chain re-read: 29 real records (the 29 relabelled ones), planted 0.
 
@@ -3060,7 +3060,7 @@ fast-auth-maintainer #4, jhptc #3, sweat-multisig #0 and #4 were labelled blind 
 
 | output | sha256 |
 |---|---|
-| eval/real/labels.jsonl | 8f128a7739c7fbd6f9cdca03c6f48f7031f0c989825b540e8de8ec701f92a7d7 |
+| eval/real/labels.jsonl | 14d7c812147b609f6e120be457613043850674ec8ae996a4e67ebd4b4ff4c6ba |
 | eval/planted/labels.jsonl | a06c6ed720f4273868556fb23ea112ac770096faf42fd89b2524c15efadd036d |
 | eval/STATS.md | b17c4611e938a66b0b800936aa6ed477b10b7e63abd3e43368e47c0914665ecf |
 | eval/planted/planted.jsonl | fa925f8d0da39a4b40a2b931ea7758cda0c0d37452c52c4bcbac6b9b3cfcf451 |
