@@ -1789,6 +1789,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "kaap-core-diff"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "kaap-core",
+ "near-api",
+ "near-api-types",
+ "near-sandbox",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "kaap-core-wasm"
 version = "0.1.0"
 

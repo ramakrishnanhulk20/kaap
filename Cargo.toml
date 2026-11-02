@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "packages/core",
+    "packages/core-diff",
     "packages/core-wasm",
     "packages/contracts/guard",
     "packages/contracts/registry",

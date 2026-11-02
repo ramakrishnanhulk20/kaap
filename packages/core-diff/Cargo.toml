@@ -1,0 +1,29 @@
+[package]
+name = "kaap-core-diff"
+description = "Checks kaap-core's port of Sputnik's policy rules against the real Sputnik DAO 3.2 binary in a local sandbox."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+# The same sandbox stack, at the same pins, as packages/contracts/guard, so the workspace compiles
+# one copy of it. near-api-types is held at 0.8.3 for the reason given there.
+[dev-dependencies]
+kaap-core = { path = "../core" }
+near-sandbox = "=0.3.16"
+near-api = { version = "=0.8.3", default-features = false }
+near-api-types = "=0.8.3"
+tokio = { version = "=1.54.1", features = ["macros", "rt-multi-thread", "sync"] }
+serde_json.workspace = true
+anyhow = "=1.0.104"
+
+# Turns on the tests kept in tests/private, which git ignores. Off by default, so the public build
+# never needs those files.
+[features]
+private-tests = []
+
+[lints]
+workspace = true

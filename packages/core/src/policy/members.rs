@@ -1,68 +1,36 @@
-//! AddMemberToRole, applied to the policy before it the way Sputnik's
-//! `Policy::add_member_to_role` applies it (policy.rs 292-305): the member joins the first role
-//! with exactly that name if it is a `Group` role; a missing role or a role of another kind only
-//! writes a log line, and adding an account already in the role changes nothing.
+//! The members a policy change adds and removes, role name by role name (guide section 3).
 
-use serde_json::Value;
+use super::roles::{can_approve, names, Holders};
+use super::sputnik::Policy;
+use crate::types::RoleMember;
 
-use super::roles::read_roles;
-use crate::types::{Effect, FindingCode, RoleMember};
-
-/// The effect and findings of an AddMemberToRole `body` against `before`, the policy before as
-/// guide section 7 defines it.
+/// The accounts that hold a role name in `after` but not in `before` (added), and the reverse
+/// (removed). Names come in the order `before` lists them, then the names new in `after`; the
+/// accounts of a name are sorted. An added member's `approver` reads the policy after the change,
+/// a removed member's the policy before it.
 ///
-/// With `before` known (and readable): one `policy_change`, listing the member in
-/// `members_added` only when the policy really changes, with POLICY_ADDS_APPROVER when the role
-/// can approve. With `before` unknown or unreadable: `before_unknown`, the member and role the
-/// kind names with `approver: true` (an unknown role is treated as one that can approve, C2), and
-/// POLICY_BEFORE_UNKNOWN, with no finding that needs the policy before (guide section 7). A body
-/// without a string `member_id` and `role` is not understood: no effect, and UNKNOWN_CALL, or
-/// POLICY_BEFORE_UNKNOWN when there is no policy before either.
-pub(crate) fn add_member_to_role(body: &Value, before: Option<&Value>) -> (Vec<Effect>, Vec<FindingCode>) {
-    let roles = before.and_then(read_roles);
-    let field = |name: &str| body.get(name).and_then(Value::as_str);
-    let (Some(member), Some(role)) = (field("member_id"), field("role")) else {
-        let code = if roles.is_some() { FindingCode::UnknownCall } else { FindingCode::PolicyBeforeUnknown };
-        return (Vec::new(), vec![code]);
-    };
-
-    let Some(roles) = roles else {
-        let effect = Effect::PolicyChange {
-            roles_added: Vec::new(),
-            roles_removed: Vec::new(),
-            members_added: vec![RoleMember { role: role.into(), member: member.into(), approver: true }],
-            members_removed: Vec::new(),
-            permissions_changed: Vec::new(),
-            vote_policy_changed: Vec::new(),
-            bond_or_period_changed: false,
-            before_unknown: true,
-        };
-        return (vec![effect], vec![FindingCode::PolicyBeforeUnknown]);
-    };
-
-    let mut codes = Vec::new();
-    let mut members_added = Vec::new();
-    let target = roles.iter().find(|r| r.name == role);
-    if let Some(Some(members)) = target.map(|r| &r.members) {
-        if !members.contains(&member) {
-            // With two roles of one name, Sputnik's permission lookup may read either one, so the
-            // member counts as an approver if any role of that name can approve (C1, fail closed).
-            let approver = roles.iter().any(|r| r.name == role && r.can_approve());
-            if approver {
-                codes.push(FindingCode::PolicyAddsApprover);
-            }
-            members_added.push(RoleMember { role: role.into(), member: member.into(), approver });
+/// A name counts every role of that name, so when a shortcut kind adds an account to the first of
+/// two roles it already sits in through the second, nothing is reported: its rights do not change.
+/// `Everyone` and `Member` roles have no list, so a change to who they cover shows up only through
+/// POLICY_REPLACES_ROLE, never here.
+pub(crate) fn changes(before: &Policy, after: &Policy) -> (Vec<RoleMember>, Vec<RoleMember>) {
+    let mut order = names(before);
+    for name in names(after) {
+        if !order.contains(&name) {
+            order.push(name);
         }
     }
-    let effect = Effect::PolicyChange {
-        roles_added: Vec::new(),
-        roles_removed: Vec::new(),
-        members_added,
-        members_removed: Vec::new(),
-        permissions_changed: Vec::new(),
-        vote_policy_changed: Vec::new(),
-        bond_or_period_changed: false,
-        before_unknown: false,
-    };
-    (vec![effect], codes)
+    let (mut added, mut removed) = (Vec::new(), Vec::new());
+    for name in order {
+        let (was, now) = (Holders::of(before, name).accounts, Holders::of(after, name).accounts);
+        let approver_after = can_approve(after, name);
+        let approver_before = can_approve(before, name);
+        for member in now.difference(&was) {
+            added.push(RoleMember { role: name.into(), member: member.clone(), approver: approver_after });
+        }
+        for member in was.difference(&now) {
+            removed.push(RoleMember { role: name.into(), member: member.clone(), approver: approver_before });
+        }
+    }
+    (added, removed)
 }

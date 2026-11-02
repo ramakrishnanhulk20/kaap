@@ -262,20 +262,32 @@ fn malformed_kind_json_gives_a_high_finding_and_never_panics() {
 
 #[test]
 fn a_kind_nothing_decodes_yet_gets_one_high_finding() {
-    let cases: [(&[u8], bool, FindingCode); 8] = [
+    let cases: [(&[u8], bool, FindingCode); 5] = [
         (br#"{"FunctionCall":{"receiver_id":"x.near","actions":[]}}"#, true, UnknownCall),
         (br#"{"FunctionCall":{"receiver_id":"v1.signer","actions":[{"method_name":"sign","args":"","deposit":"1","gas":"1"}]}}"#, true, UnknownCall),
         (br#"{"RemoveMemberFromRole":{"member_id":"bob.sandbox","role":"council"}}"#, false, PolicyBeforeUnknown),
         (br#"{"ChangePolicyRemoveRole":{"role":"council"}}"#, false, PolicyBeforeUnknown),
         (br#"{"AddMemberToRole":{"member_id":7,"role":"council"}}"#, false, PolicyBeforeUnknown),
-        (br#"{"RemoveMemberFromRole":{"member_id":"bob.sandbox","role":"council"}}"#, true, OtherRiskyKind),
-        (br#"{"UpgradeSelf":{"hash":"11111111111111111111111111111111"}}"#, true, OtherRiskyKind),
-        (br#""Vote""#, false, OtherRiskyKind),
     ];
     for (kind, with_policy, expected) in cases {
         let a = analyze(&input_with_kind(kind, with_policy));
         let shown = String::from_utf8_lossy(kind);
         assert_eq!(codes(&a), vec![expected], "{shown}");
         assert_eq!(a.risk_floor, Severity::High, "{shown}");
+    }
+}
+
+#[test]
+fn a_kind_the_policy_engine_decodes_gets_its_own_code() {
+    let cases: [(&[u8], bool, &[FindingCode], Severity); 3] = [
+        (br#"{"RemoveMemberFromRole":{"member_id":"bob.sandbox","role":"council"}}"#, true, &[PolicyRemovesMember], Severity::High),
+        (br#"{"UpgradeSelf":{"hash":"11111111111111111111111111111111"}}"#, true, &[CodeUpgrade], Severity::High),
+        (br#""Vote""#, false, &[], Severity::Low),
+    ];
+    for (kind, with_policy, expected, floor) in cases {
+        let a = analyze(&input_with_kind(kind, with_policy));
+        let shown = String::from_utf8_lossy(kind);
+        assert_eq!(codes(&a), expected, "{shown}");
+        assert_eq!(a.risk_floor, floor, "{shown}");
     }
 }
