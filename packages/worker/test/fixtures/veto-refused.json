@@ -1,0 +1,281 @@
+{
+ "final_execution_status": "FINAL",
+ "receipts": [
+  {
+   "predecessor_id": "kaap-worker-1029053612.testnet",
+   "priority": 0,
+   "receipt": {
+    "Action": {
+     "actions": [
+      {
+       "FunctionCall": {
+        "args": "eyJ2ZXJkaWN0IjoiQVIwQUFBQnJZV0Z3TFdkMVlYSmtMVEV3TWprd05qRXlNVEV1ZEdWemRHNWxkQUViQUFBQWEyRmhjQzFrWVc4dE1UQXlPVEEyTkRBd09DNTBaWE4wYm1WMEF3QUFBQUFBQUFEaGQvM1lrVUJjMEcrR1dRQXNVMmZzVTA0eVRSOUFWbzdxb21VN0Y1am1INkl2cWJwSzBuSUhteTl1dXJGYW1yWGh3WlhpUE5UdUZ1bWVnd0w4OHU1aDBWbXdFYWhLRUo2S1lSWVYyalpHTUFZZ1haTzlCMzRDcmtXdVZzeXc4K0RxUEdnUUFBQUFBQUlDQVFBQUFBOEZBQUFBTUM0eExqQUFBQUFBQXZBeWZZZU1FU1AwVW5IY2U1aFBldTVERWF4Y0dqRU1tT0thT1p2Vi8wendEYTZJaHFFQkFBQT0iLCJzaWduYXR1cmUiOiJSNnY2UWE3MlF5c25tcjRyakRXajRXQzVkMnRVOE9LNWFzQUpTMVc1eTJIRDNpVTY2OGQ5a1RqRnQraExsMGdQajRmNG1CeURFSTJPc1daSWhEa3lDdz09Iiwia2luZF9qc29uIjoie1wiVHJhbnNmZXJcIjp7XCJ0b2tlbl9pZFwiOlwiXCIsXCJyZWNlaXZlcl9pZFwiOlwiYm9iLm0xLTEwMjkwNzEwMTAua2FhcC1tZW1iZXItMTAyOTA2NDAwMS50ZXN0bmV0XCIsXCJhbW91bnRcIjpcIjUwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMFwiLFwibXNnXCI6bnVsbH19In0=",
+        "deposit": "0",
+        "gas": 300000000000000,
+        "method_name": "veto"
+       }
+      }
+     ],
+     "gas_price": "1000000000",
+     "input_data_ids": [],
+     "is_promise_yield": false,
+     "output_data_receivers": [],
+     "signer_id": "kaap-worker-1029053612.testnet",
+     "signer_public_key": "ed25519:9CwZQbLPHWx9jFJy6FYBja3DjP2uN27rMS6SRJLrAb8B"
+    }
+   },
+   "receipt_id": "BTnwqeUy9BrLQA9SXciaq1EkS3Y6nmndbJmCNLrusZa4",
+   "receiver_id": "kaap-guard-1029061211.testnet"
+  },
+  {
+   "predecessor_id": "system",
+   "priority": 0,
+   "receipt": {
+    "Action": {
+     "actions": [
+      {
+       "Transfer": {
+        "deposit": "300728846912346100000000"
+       }
+      }
+     ],
+     "gas_price": "0",
+     "input_data_ids": [],
+     "is_promise_yield": false,
+     "output_data_receivers": [],
+     "signer_id": "kaap-worker-1029053612.testnet",
+     "signer_public_key": "ed25519:9CwZQbLPHWx9jFJy6FYBja3DjP2uN27rMS6SRJLrAb8B"
+    }
+   },
+   "receipt_id": "31uKMxLc3b8LW6ZY41xuZ7RUKYsNJAkiHKd9neDQPvF4",
+   "receiver_id": "kaap-worker-1029053612.testnet"
+  }
+ ],
+ "receipts_outcome": [
+  {
+   "block_hash": "GTSBhsi2sBVUhzF3RxohqzY97ubjA2QTZhiMCRx3W7k6",
+   "id": "BTnwqeUy9BrLQA9SXciaq1EkS3Y6nmndbJmCNLrusZa4",
+   "outcome": {
+    "executor_id": "kaap-guard-1029061211.testnet",
+    "gas_burnt": 1605876870639,
+    "logs": [],
+    "metadata": {
+     "contracts": [
+      {
+       "local": "77fyhhxdRnHzb8efe9HBYL8C3KcUpEbbRjLvrNyqoxbP"
+      }
+     ],
+     "gas_profile": [
+      {
+       "cost": "BASE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "3441985443"
+      },
+      {
+       "cost": "CONTRACT_LOADING_BASE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "35445963"
+      },
+      {
+       "cost": "CONTRACT_LOADING_BYTES",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "240527228950"
+      },
+      {
+       "cost": "ED25519_VERIFY_BASE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "210000000000"
+      },
+      {
+       "cost": "ED25519_VERIFY_BYTE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "2295000000"
+      },
+      {
+       "cost": "READ_MEMORY_BASE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "18269042400"
+      },
+      {
+       "cost": "READ_MEMORY_BYTE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "1661182521"
+      },
+      {
+       "cost": "READ_REGISTER_BASE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "10068660744"
+      },
+      {
+       "cost": "READ_REGISTER_BYTE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "76385550"
+      },
+      {
+       "cost": "SHA256_BASE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "4540970250"
+      },
+      {
+       "cost": "SHA256_BYTE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "795872583"
+      },
+      {
+       "cost": "STORAGE_HAS_KEY_BASE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "54039896625"
+      },
+      {
+       "cost": "STORAGE_HAS_KEY_BYTE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "985307040"
+      },
+      {
+       "cost": "STORAGE_READ_BASE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "56356845749"
+      },
+      {
+       "cost": "STORAGE_READ_KEY_BYTE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "154762665"
+      },
+      {
+       "cost": "STORAGE_READ_VALUE_BYTE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "577933412"
+      },
+      {
+       "cost": "UTF8_DECODING_BASE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "3111779061"
+      },
+      {
+       "cost": "UTF8_DECODING_BYTE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "4665287664"
+      },
+      {
+       "cost": "WASM_INSTRUCTION",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "76579660212"
+      },
+      {
+       "cost": "WRITE_MEMORY_BASE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "14018974305"
+      },
+      {
+       "cost": "WRITE_MEMORY_BYTE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "2154503652"
+      },
+      {
+       "cost": "WRITE_REGISTER_BASE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "11462089944"
+      },
+      {
+       "cost": "WRITE_REGISTER_BYTE",
+       "cost_category": "WASM_HOST_COST",
+       "gas_used": "623456496"
+      }
+     ],
+     "version": 4
+    },
+    "receipt_ids": [
+     "31uKMxLc3b8LW6ZY41xuZ7RUKYsNJAkiHKd9neDQPvF4"
+    ],
+    "status": {
+     "Failure": {
+      "ActionError": {
+       "index": 0,
+       "kind": {
+        "FunctionCallError": {
+         "ExecutionError": "Smart contract panicked: ERR_NOT_VETOABLE"
+        }
+       }
+      }
+     }
+    },
+    "tokens_burnt": "160587687063900000000"
+   },
+   "proof": []
+  },
+  {
+   "block_hash": "BAQX7LQu3TzXxVY9RrcbNETyqYV2obBqLtzazpP8UZhM",
+   "id": "31uKMxLc3b8LW6ZY41xuZ7RUKYsNJAkiHKd9neDQPvF4",
+   "outcome": {
+    "executor_id": "kaap-worker-1029053612.testnet",
+    "gas_burnt": 223182562500,
+    "logs": [],
+    "metadata": {
+     "contracts": [
+      null
+     ],
+     "gas_profile": [],
+     "version": 4
+    },
+    "receipt_ids": [],
+    "status": {
+     "SuccessValue": ""
+    },
+    "tokens_burnt": "0"
+   },
+   "proof": []
+  }
+ ],
+ "status": {
+  "Failure": {
+   "ActionError": {
+    "index": 0,
+    "kind": {
+     "FunctionCallError": {
+      "ExecutionError": "Smart contract panicked: ERR_NOT_VETOABLE"
+     }
+    }
+   }
+  }
+ },
+ "transaction": {
+  "actions": [
+   {
+    "FunctionCall": {
+     "args": "eyJ2ZXJkaWN0IjoiQVIwQUFBQnJZV0Z3TFdkMVlYSmtMVEV3TWprd05qRXlNVEV1ZEdWemRHNWxkQUViQUFBQWEyRmhjQzFrWVc4dE1UQXlPVEEyTkRBd09DNTBaWE4wYm1WMEF3QUFBQUFBQUFEaGQvM1lrVUJjMEcrR1dRQXNVMmZzVTA0eVRSOUFWbzdxb21VN0Y1am1INkl2cWJwSzBuSUhteTl1dXJGYW1yWGh3WlhpUE5UdUZ1bWVnd0w4OHU1aDBWbXdFYWhLRUo2S1lSWVYyalpHTUFZZ1haTzlCMzRDcmtXdVZzeXc4K0RxUEdnUUFBQUFBQUlDQVFBQUFBOEZBQUFBTUM0eExqQUFBQUFBQXZBeWZZZU1FU1AwVW5IY2U1aFBldTVERWF4Y0dqRU1tT0thT1p2Vi8wendEYTZJaHFFQkFBQT0iLCJzaWduYXR1cmUiOiJSNnY2UWE3MlF5c25tcjRyakRXajRXQzVkMnRVOE9LNWFzQUpTMVc1eTJIRDNpVTY2OGQ5a1RqRnQraExsMGdQajRmNG1CeURFSTJPc1daSWhEa3lDdz09Iiwia2luZF9qc29uIjoie1wiVHJhbnNmZXJcIjp7XCJ0b2tlbl9pZFwiOlwiXCIsXCJyZWNlaXZlcl9pZFwiOlwiYm9iLm0xLTEwMjkwNzEwMTAua2FhcC1tZW1iZXItMTAyOTA2NDAwMS50ZXN0bmV0XCIsXCJhbW91bnRcIjpcIjUwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMFwiLFwibXNnXCI6bnVsbH19In0=",
+     "deposit": "0",
+     "gas": 300000000000000,
+     "method_name": "veto"
+    }
+   }
+  ],
+  "hash": "6DScqQ3g7NqGcnpNsa2tYF6u5J5Z59T81reCRberwvrd",
+  "nonce": 275256892000025,
+  "priority_fee": 0,
+  "public_key": "ed25519:9CwZQbLPHWx9jFJy6FYBja3DjP2uN27rMS6SRJLrAb8B",
+  "receiver_id": "kaap-guard-1029061211.testnet",
+  "signature": "ed25519:5DNPwWKSf235U9D8CU8yxyh1rx5SKujkBHFN5L5zeLT6rHcEqhWFedhXM8r4XNik52Ha2gwQjDiXHd2kMZ4KiC5r",
+  "signer_id": "kaap-worker-1029053612.testnet"
+ },
+ "transaction_outcome": {
+  "block_hash": "975wY4M9v79BkrWjVS1CqcNS76Uzh2wsfYv9dCk44Xpj",
+  "id": "6DScqQ3g7NqGcnpNsa2tYF6u5J5Z59T81reCRberwvrd",
+  "outcome": {
+   "executor_id": "kaap-worker-1029053612.testnet",
+   "gas_burnt": 337384984725,
+   "logs": [],
+   "metadata": {
+    "gas_profile": null,
+    "version": 1
+   },
+   "receipt_ids": [
+    "BTnwqeUy9BrLQA9SXciaq1EkS3Y6nmndbJmCNLrusZa4"
+   ],
+   "status": {
+    "SuccessReceiptId": "BTnwqeUy9BrLQA9SXciaq1EkS3Y6nmndbJmCNLrusZa4"
+   },
+   "tokens_burnt": "33738498472500000000"
+  },
+  "proof": []
+ }
+}

@@ -1,0 +1,35 @@
+[package]
+name = "kaap-worker-bridge"
+description = "kaap-core's canonical forms, verdict encoding and veto rule, compiled to plain WebAssembly for the Node worker."
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.93"
+license = "MIT"
+publish = false
+
+# A workspace of its own, so the worker can build it without the root workspace listing it. The
+# lockfile next to this file started as a copy of the root Cargo.lock, so every crate shared with
+# the sealed job and the guard resolves to the same version.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+# The same exact pins as the root [workspace.dependencies] (packages/core/VERSIONS.md).
+[dependencies]
+kaap-core = { path = "../../core" }
+borsh = { version = "=1.8.1", features = ["derive"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+# raw_value hands over the exact bytes of a proposal's `kind`, as the sealed job reads them.
+serde_json = { version = "=1.0.154", features = ["raw_value"] }
+sha2 = "=0.11.1"
+base64 = "=0.23.1"
+near-account-id = { version = "=3.0.0", default-features = false }
+
+[profile.release]
+codegen-units = 1
+opt-level = "s"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true

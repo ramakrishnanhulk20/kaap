@@ -2,5 +2,26 @@
   "name": "@kaap/worker",
   "version": "0.1.0",
   "private": true,
-  "license": "MIT"
+  "license": "MIT",
+  "description": "Kaap's always-on worker: watches every enrolled DAO, has the sealed program judge each new proposal, records the verdict and sends the guard its veto.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build:bridge": "bash bridge/build.sh",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "bash bridge/build.sh && tsc -p tsconfig.json && node --test --test-concurrency=1 \"test/*.test.ts\"",
+    "start": "node src/main.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "13.0.3",
+    "near-api-js": "7.4.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  }
 }
