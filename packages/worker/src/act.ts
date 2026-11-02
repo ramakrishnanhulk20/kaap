@@ -5,7 +5,7 @@
 
 import type { DecodedVerdict } from './bridge.ts';
 import type { CapGuard } from './caps.ts';
-import type { Health } from './health.ts';
+import type { Health, Signal } from './health.ts';
 import type { Logger } from './log.ts';
 import { TGAS, formatNear, worstCase } from './near.ts';
 import { events, receiptBlock, refusal } from './outcome.ts';
@@ -23,6 +23,23 @@ export const RECORD_DEPOSIT = 20n * 10n ** 21n;
 export const EXPIRY_MARGIN_MS = 30_000;
 /** Record and veto outcomes are final within a few blocks; this is generous. */
 const SHORT_WINDOW_BLOCKS = 60;
+
+/** The per-DAO signals one proposal's veto or record raises, each with the stored state that
+ *  keeps it true. */
+const HELD_BY_PROPOSAL: ReadonlyArray<readonly [Signal, 'veto_state' | 'record_state', string]> = [
+  ['veto_held', 'veto_state', 'held'],
+  ['veto_refused', 'veto_state', 'refused'],
+  ['record_refused', 'record_state', 'refused'],
+];
+
+/** Clears each of those signals for `dao` once no proposal the worker still sees open (the rule
+ *  of `Store.open`) is in the state that raised it. Called whenever a proposal of `dao` is seen
+ *  leaving InProgress, whatever it moved to: a held or refused action stops mattering once its
+ *  proposal can no longer pass. */
+export function clearClosed(store: Store, health: Health, network: string, dao: string): void {
+  const open = store.open(network, dao);
+  for (const [signal, column, state] of HELD_BY_PROPOSAL) if (!open.some((r) => r[column] === state)) health.clear(signal, dao);
+}
 
 export type Decision =
   | { act: 'veto' }
@@ -111,6 +128,15 @@ export class Actor {
     }
     const live = await this.#gate(dao, id);
     if (live.kind !== 'live') {
+      // Sputnik deletes a removed proposal, so its live read fails on both providers. That is a
+      // closed proposal, not a held veto, once both agree the id is gone.
+      if (await this.#deleted(dao, id)) {
+        this.#store.setProposalStatus(this.#s.network, dao, id, 'Removed');
+        this.#store.setVetoState(this.#s.network, dao, id, 'not_open');
+        this.#log.info('no_veto', { dao, proposal_id: id, why: 'not_open', status: 'Removed' });
+        this.#settleClosed(dao);
+        return { kind: 'not_needed', why: 'not_open' };
+      }
       this.#store.setVetoState(this.#s.network, dao, id, 'held');
       this.#log.error('refused', { what: 'veto', dao, proposal_id: id, reason: 'live state not agreed', problem: live });
       this.#health.raise('veto_held', dao, { proposal_id: id, problem: live.kind, item: live.item });
@@ -122,8 +148,7 @@ export class Actor {
       this.#store.setVetoState(this.#s.network, dao, id, d.why === 'not_open' ? 'not_open' : 'not_needed');
       this.#log.info('no_veto', { dao, proposal_id: id, why: d.why, status: live.status });
       if (d.why === 'not_open') {
-        // A missing veto outcome stops mattering once the proposal is closed, however it closed.
-        this.#clearNoOutcome('veto_no_outcome', dao);
+        this.#settleClosed(dao);
         // A sent veto that never got an answer on a proposal that then passed is the worst
         // outcome Kaap has, so it gets its own critical alert, not a quiet "not needed".
         if (live.status === 'Approved' && (before === 'no_outcome' || before === 'sent')) {
@@ -210,6 +235,21 @@ export class Actor {
   #alreadySigned(key: string): boolean {
     const row = this.#store.spend(key);
     return row !== undefined && row.state !== 'rejected';
+  }
+
+  /** For a proposal this actor just saw closed. Its status already left InProgress in the store,
+   *  so the re-judge watch will not see it close; the signals it held are settled here. A missing
+   *  veto outcome stops mattering too, however the proposal closed. */
+  #settleClosed(dao: string): void {
+    this.#clearNoOutcome('veto_no_outcome', dao);
+    clearClosed(this.#store, this.#health, this.#s.network, dao);
+  }
+
+  /** Whether both providers agree, at one block, that proposal `id` of `dao` no longer exists.
+   *  False when that could not be read, so a provider failure still holds the veto. */
+  async #deleted(dao: string, id: number): Promise<boolean> {
+    const state = await this.#reads.watchState(dao, [id]);
+    return state.kind === 'live' && state.asked.includes(id) && !state.proposals.some((p) => p.id === id);
   }
 
   /** Signals are kept per DAO, so one is cleared only once no proposal of that DAO is still

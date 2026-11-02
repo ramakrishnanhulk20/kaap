@@ -1,18 +1,23 @@
 // Member alerts (C24, C27): attacker strings go out inert, the only link is Kaap's own, batches
 // form per DAO and per proposer while a critical verdict goes at once, batched messages are capped
-// per chat, and a send Telegram refused is retried or ends the chat's subscriptions. Not covered:
-// how a Telegram client draws the text, which only a real chat shows (DONE MEANS 2).
+// per chat, a send Telegram refused is retried or ends the chat's subscriptions, and a restart
+// drops the health changes an earlier process left queued. Not covered: how a Telegram client
+// draws the text, which only a real chat shows (DONE MEANS 2).
 
 import assert from 'node:assert/strict';
+import { mkdtempSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { Alerts, plainText, proposalLink, render, type AlertBody } from '../src/alerts.ts';
 import { ALL, Health } from '../src/health.ts';
+import { Store } from '../src/store.ts';
 import { Subscriptions } from '../src/subscriptions.ts';
 import { BotApi } from '../src/telegram.ts';
-import { DAO, FakeTelegram, NETWORK, clock, events, memoryLog, memoryStore, noSleep } from './helpers.ts';
+import { DAO, FakeTelegram, NETWORK, T0, clock, events, memoryLog, memoryStore, noSleep } from './helpers.ts';
 
 const SITE = 'https://kaap.example';
 const CHAT = '5550001234';
@@ -181,4 +186,59 @@ test('a send nobody received is tried again later, Telegram failing is raised, a
   await s.alerts.flush();
   assert.deepEqual(s.store.subscribers(NETWORK, DAO).map((r) => r.chat_id), [OTHER_CHAT], 'the chat that blocked the bot is unsubscribed');
   assert.equal(s.telegram.to(OTHER_CHAT).length, 1, 'the other chat still got it');
+});
+
+/** What an earlier worker process leaves queued in its SQLite file when it stops: a "guard
+ *  degraded" change, and high verdicts on proposal 7 (still open) and 8 (approved since). */
+function leftQueued(): string {
+  const path = join(mkdtempSync(join(tmpdir(), 'kaap-worker-alerts-')), 'worker.sqlite');
+  const store = new Store(path, () => T0);
+  const { log } = memoryLog();
+  const health = new Health(log, () => T0);
+  const alerts = new Alerts({ store, telegram: new FakeTelegram(), log, now: () => T0, sleep: noSleep }, { network: NETWORK, siteUrl: SITE, batchMs: 60_000, capPerHour: 30 });
+  health.on((e) => alerts.health(e));
+  const subs = new Subscriptions(store, NETWORK, log);
+  subs.redeem(subs.issue(DAO).token, CHAT);
+  for (const id of [7, 8]) store.queueNew(NETWORK, DAO, id, 'new', 'InProgress');
+  health.raise('provider_silent', DAO);
+  alerts.verdict(DAO, 7, verdict('high', 'h7'), 'alice.testnet');
+  alerts.verdict(DAO, 8, verdict('high', 'h8'), 'alice.testnet');
+  store.setProposalStatus(NETWORK, DAO, 8, 'Approved');
+  store.close();
+  return path;
+}
+
+function restarted(path: string) {
+  const c = clock(T0 + 5_000);
+  const store = new Store(path, c.now);
+  const { log, lines } = memoryLog();
+  const telegram = new FakeTelegram();
+  const alerts = new Alerts({ store, telegram, log, now: c.now, sleep: noSleep }, { network: NETWORK, siteUrl: SITE, batchMs: 60_000, capPerHour: 30 });
+  return { c, store, telegram, alerts, lines };
+}
+
+test('on boot, the health changes an earlier process left queued are dropped and logged once', async () => {
+  const s = restarted(leftQueued());
+  assert.equal(s.alerts.dropStale(), 2);
+  assert.equal(s.alerts.dropStale(), 0, 'nothing is left to drop a second time');
+  const dropped = events(s.lines, 'stale_alerts_dropped');
+  assert.equal(dropped.length, 1);
+  assert.deepEqual([dropped[0]?.count, dropped[0]?.health, dropped[0]?.closed_proposals], [2, 1, 1]);
+  s.c.advance(60_000);
+  await s.alerts.flush();
+  assert.ok(!s.telegram.sent.some((m) => /guard update|Degraded/.test(m.text)), 'the old "degraded" never goes out');
+  assert.ok(!s.telegram.sent.some((m) => m.text.includes('Proposal 8')), 'nor the verdict on a proposal approved since');
+  s.store.close();
+});
+
+test('on boot, a verdict an earlier process queued for a proposal still open is kept and sent', async () => {
+  const s = restarted(leftQueued());
+  s.alerts.dropStale();
+  s.c.advance(60_000);
+  await s.alerts.flush();
+  const texts = s.telegram.to(CHAT);
+  assert.equal(texts.length, 1);
+  assert.match(texts[0]!, /^Kaap: 1 proposal on treasury\[\.\]sputnik\[\.\]testnet by alice\[\.\]testnet needs a look\.\nProposal 7: HIGH risk/);
+  assert.equal(events(s.lines, 'alert_sent').length, 1);
+  s.store.close();
 });

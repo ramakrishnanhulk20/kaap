@@ -224,7 +224,7 @@ export interface SubscriptionRow {
   ended_ms: number | null;
 }
 
-export type AlertState = 'queued' | 'sent' | 'no_subscribers' | 'failed';
+export type AlertState = 'queued' | 'sent' | 'no_subscribers' | 'failed' | 'stale';
 export type DeliveryState = 'sent' | 'failed' | 'capped';
 
 export interface AlertRow {
@@ -494,6 +494,11 @@ export class Store {
 
   dueAlerts(network: string, now: number, limit: number): AlertRow[] {
     return this.db.prepare("SELECT * FROM alerts WHERE network = ? AND state = 'queued' AND due_ms <= ? ORDER BY urgent DESC, id LIMIT ?").all(network, now, limit) as AlertRow[];
+  }
+
+  /** Every alert on `network` still waiting to go out, due or not. */
+  queuedAlerts(network: string): AlertRow[] {
+    return this.db.prepare("SELECT * FROM alerts WHERE network = ? AND state = 'queued' ORDER BY id").all(network) as AlertRow[];
   }
 
   finishAlerts(ids: number[], state: AlertState): void {

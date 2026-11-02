@@ -11,7 +11,9 @@
 // Sending: a critical verdict, a veto cast, a lost veto and "guard offline" go at once. Everything
 // else waits in a batch per DAO and per proposer (health changes batch per DAO), so a flood of
 // proposals from one account becomes one message. Batched messages are capped per chat per hour;
-// urgent ones are never capped or delayed. The queue lives in the store, so a restart loses none.
+// urgent ones are never capped or delayed. The queue lives in the store, so a restart loses no
+// verdict, veto or notice. Health changes an earlier process left queued are dropped at boot: they
+// describe that process's state, and the new one raises again whatever is still wrong.
 
 import { ACCOUNT_ID } from './config.ts';
 import { ALL, SAYS, levelOf, type HealthEvent, type Notice, type Signal } from './health.ts';
@@ -217,6 +219,32 @@ export class Alerts implements AlertSink {
     if (signal === 'alerts_failing') return;
     const urgent = event.kind === 'raised' && levelOf(signal) === 'offline';
     this.#queue(dao, 'health', null, urgent, urgent ? `offline:${signal}` : 'health', { t: 'health', change: event.kind, signal });
+  }
+
+  /** Drops what an earlier process left queued that is no longer true. Run once at boot, before
+   *  this process queues anything. Health changes go, since this process's own Health starts
+   *  empty and raises again whatever is still wrong; so does a verdict on a proposal the worker
+   *  last saw closed, by the same rule as `Store.open`. A verdict on an open proposal, a veto
+   *  cast and a notice are facts that still hold, and stay. Returns how many were dropped. */
+  dropStale(): number {
+    const { store, log } = this.#d;
+    const health: number[] = [];
+    const closed: number[] = [];
+    for (const row of store.queuedAlerts(this.#s.network)) {
+      if (row.kind === 'health') {
+        health.push(row.id);
+        continue;
+      }
+      const body = row.kind === 'verdict' ? readBody(row.body) : null;
+      if (body?.t !== 'verdict') continue;
+      const status = store.judged(this.#s.network, row.dao, body.id)?.proposal_status ?? null;
+      if (status !== null && status !== 'InProgress') closed.push(row.id);
+    }
+    const stale = [...health, ...closed];
+    if (stale.length === 0) return 0;
+    store.finishAlerts(stale, 'stale');
+    log.info('stale_alerts_dropped', { count: stale.length, health: health.length, closed_proposals: closed.length });
+    return stale.length;
   }
 
   /** Sends every alert that is due. Calls made while a flush runs share it. */

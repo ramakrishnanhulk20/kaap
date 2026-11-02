@@ -1,8 +1,9 @@
 // Sends that got no answer: a veto or record whose outcome never came back, or that a restart cut
 // off, is sent again by its idempotency key (the same signed bytes, never a second signing) until
 // it is final or, for a veto, no longer needed, and a health signal stays raised meanwhile.
-// A lost veto on a proposal that then passes raises its own critical alert, the missing-outcome
-// signal clears when the proposal closes, and a watch tick never overlaps a resume pass.
+// A lost veto on a proposal that then passes raises its own critical alert, the missing-outcome,
+// held and refused signals clear when the proposal closes (a deleted, removed one included), and
+// a watch tick never overlaps a resume pass.
 // Not covered: a transaction whose signed bytes expire before the chain takes them, which the
 // Submitter's own re-sign path handles and its tests prove.
 
@@ -13,14 +14,14 @@ import { Actor, type Signed } from '../src/act.ts';
 import { Alerts } from '../src/alerts.ts';
 import { Subscriptions } from '../src/subscriptions.ts';
 import { CapGuard } from '../src/caps.ts';
-import { Health } from '../src/health.ts';
+import { Health, type Signal } from '../src/health.ts';
 import { Judge } from '../src/judge.ts';
 import type { TxOutcome } from '../src/outcome.ts';
 import { Reads } from '../src/reads.ts';
 import { RejudgeWatch } from '../src/rejudge.ts';
 import { Submitter } from '../src/submit.ts';
 import { Worker } from '../src/worker.ts';
-import { DAO, FakeChain, FakeTelegram, GUARD, NETWORK, REGISTRY, T0, bothSet, bridge, events, memoryLog, memoryStore, noSleep, okOutcome, proposalText, sealedOutput, testKey, twoProviders, verdictFields } from './helpers.ts';
+import { DAO, FakeChain, FakeTelegram, GUARD, NETWORK, REGISTRY, T0, bothSet, bridge, events, failedOutcome, memoryLog, memoryStore, noSleep, okOutcome, proposalText, sealedOutput, testKey, twoProviders, verdictFields } from './helpers.ts';
 
 const recordedOutcome = (): TxOutcome => {
   const o = okOutcome(undefined, ['EVENT_JSON:{"standard":"kaap-registry","version":"1.0.0","event":"verdict_recorded","data":[{"index":0,"storage_cost":"6380000000000000000000"}]}']);
@@ -200,14 +201,86 @@ test('veto_no_outcome clears when the proposal closes, whatever the closing stat
     s.chain.respond = () => null;
     await s.actor.veto(DAO, 2, s.signed);
     assert.equal(s.health.has('veto_no_outcome', DAO), true, status);
-    bothSet([s.a, s.b], (p) => p.proposals.set(2, proposalText(2, { status })));
+    // Sputnik deletes a removed proposal, so Removed is never read back: it just disappears.
+    bothSet([s.a, s.b], (p) => (status === 'Removed' ? p.proposals.delete(2) : p.proposals.set(2, proposalText(2, { status }))));
     await s.worker.start();
     await s.worker.stop();
     assert.equal(s.health.has('veto_no_outcome', DAO), false, status);
+    assert.equal(s.row().proposal_status, status);
     assert.equal(events(s.lines, 'veto_lost').length, 0, `${status} is not a lost veto`);
     assert.equal(events(s.lines, 'guard_recovered').filter((l) => l.signal === 'veto_no_outcome').length, 1, status);
   }
 });
+
+test('a resumed veto whose proposal was deleted counts it closed: nothing sent, nothing held, veto_no_outcome cleared', async () => {
+  const s = setup();
+  s.chain.respond = () => null;
+  await s.actor.veto(DAO, 2, s.signed);
+  const sends = s.chain.broadcasts.length;
+  bothSet([s.a, s.b], (p) => p.proposals.delete(2));
+
+  await s.worker.start();
+  await s.worker.stop();
+  assert.deepEqual([s.row().veto_state, s.row().proposal_status], ['not_open', 'Removed'], 'both providers agree the id is gone');
+  assert.deepEqual([s.health.has('veto_no_outcome', DAO), s.health.has('veto_held', DAO)], [false, false]);
+  assert.equal(events(s.lines, 'guard_degraded').filter((l) => l.signal === 'veto_held').length, 0, 'a deleted proposal is never reported as a held veto');
+  assert.equal(s.chain.broadcasts.length, sends, 'the stored bytes are not sent again');
+  assert.deepEqual(s.store.pendingActions(NETWORK), []);
+
+  // One provider still showing it is not agreement: the veto is held, as before.
+  const h = setup();
+  h.chain.respond = () => null;
+  await h.actor.veto(DAO, 2, h.signed);
+  h.a.proposals.delete(2);
+  await h.worker.start();
+  await h.worker.stop();
+  assert.deepEqual([h.row().veto_state, h.health.has('veto_held', DAO)], ['held', true]);
+});
+
+/** Each signal raised for proposal 2 the way the worker really raises it. */
+const raisedBy: Array<[Signal, (s: ReturnType<typeof setup>) => Promise<void>]> = [
+  [
+    'veto_held',
+    async (s) => {
+      s.b.proposals.set(2, proposalText(2, { receiver: 'mallory.testnet' }));
+      assert.equal((await s.actor.veto(DAO, 2, s.signed)).kind, 'held');
+      s.b.proposals.set(2, proposalText(2));
+    },
+  ],
+  [
+    'veto_refused',
+    async (s) => {
+      bothSet([s.a, s.b], (p) => p.vetoResults.set(s.signed.verdict.verdict_hash, 'Failed'));
+      assert.equal((await s.actor.veto(DAO, 2, s.signed)).kind, 'refused_by_dao');
+    },
+  ],
+  [
+    'record_refused',
+    async (s) => {
+      s.chain.respond = () => failedOutcome('ERR_TOO_LARGE');
+      assert.equal(await s.actor.record(DAO, 2, s.signed), 'refused');
+    },
+  ],
+];
+
+for (const [signal, raise] of raisedBy) {
+  test(`${signal} stays raised while the proposal is open and clears when it leaves InProgress, whatever the status`, async () => {
+    for (const status of ['Approved', 'Rejected', 'Expired', 'Moved', 'Failed', 'Removed']) {
+      const s = setup();
+      await raise(s);
+      await s.worker.start();
+      await s.worker.watchTick();
+      assert.equal(s.health.has(signal, DAO), true, `${status}: raised while the proposal is open`);
+      // Sputnik deletes a removed proposal, so Removed is never read back: it just disappears.
+      bothSet([s.a, s.b], (p) => (status === 'Removed' ? p.proposals.delete(2) : p.proposals.set(2, proposalText(2, { status }))));
+      await s.worker.watchTick();
+      await s.worker.stop();
+      assert.equal(s.health.has(signal, DAO), false, status);
+      assert.equal(events(s.lines, 'guard_recovered').filter((l) => l.signal === signal).length, 1, status);
+      assert.equal(s.row().proposal_status, status);
+    }
+  });
+}
 
 test('the watch tick waits for the resume pass to finish; the two never overlap', async () => {
   const s = setup();

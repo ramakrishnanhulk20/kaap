@@ -4,10 +4,12 @@
 //
 // /status is built only from signal names, levels, times and Kaap's fixed sentences, never from
 // a signal's fields, so no key, token, chat id or provider text can reach it. Token requests are
-// counted per connecting address, which a caller cannot choose (6e). Behind a reverse proxy that
-// address is the proxy's, so the hosting setup must pass the real one through its own socket.
+// counted per client address, which a caller cannot choose (6e): the connecting address, or for a
+// request from the HTTPS proxy on the same machine, the one address that proxy adds to
+// X-Forwarded-For (HOSTING.md).
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { BlockList, isIP } from 'node:net';
 
 import { z } from 'zod';
 
@@ -35,6 +37,34 @@ export interface StatusDeps {
   log: Logger;
   now: () => number;
   watching: () => string[];
+}
+
+/** Where the HTTPS proxy on the same machine connects from. */
+const LOOPBACK = new BlockList();
+LOOPBACK.addSubnet('127.0.0.0', 8, 'ipv4');
+LOOPBACK.addAddress('::1', 'ipv6');
+
+/** One written form per address, so one client is one count: an IPv4 address written inside
+ *  IPv6 is read as plain IPv4. Null for anything that is not an IP address. */
+function oneForm(text: string): string | null {
+  const a = text.trim().toLowerCase();
+  const inside = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(a)?.[1];
+  if (inside !== undefined && isIP(inside) === 4) return inside;
+  return isIP(a) === 0 ? null : a;
+}
+
+/** The address a request is counted against. A request from loopback came through the HTTPS
+ *  proxy on the same machine, which adds the address its client connected from as the last entry
+ *  of X-Forwarded-For: that one entry is trusted, and anything a client wrote before it is not.
+ *  Any other peer is counted as it connects, its header ignored. A missing or unreadable entry
+ *  counts against the proxy itself, which only ever makes the limit stricter. Not covered: a
+ *  client that holds many addresses, such as an IPv6 range, which gets one count per address. */
+export function clientAddress(peer: string | undefined, forwardedFor: string | string[] | undefined): string {
+  const direct = oneForm(peer ?? '');
+  if (direct === null) return 'unknown';
+  if (!LOOPBACK.check(direct, isIP(direct) === 4 ? 'ipv4' : 'ipv6')) return direct;
+  const header = Array.isArray(forwardedFor) ? forwardedFor.join(',') : (forwardedFor ?? '');
+  return oneForm(header.split(',').at(-1) ?? '') ?? direct;
 }
 
 const shown = (r: Raised) => ({ signal: r.signal, level: levelOf(r.signal), since: new Date(r.since).toISOString(), says: SAYS[r.signal] });
@@ -106,7 +136,7 @@ export class StatusServer {
   }
 
   async #subscribe(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const address = req.socket.remoteAddress ?? 'unknown';
+    const address = clientAddress(req.socket.remoteAddress, req.headers['x-forwarded-for']);
     const now = this.#d.now();
     const recent = (this.#asked.get(address) ?? []).filter((t) => now - t < HOUR);
     if (recent.length >= this.#s.tokensPerAddressHour) {

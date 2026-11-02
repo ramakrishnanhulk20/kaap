@@ -6,7 +6,11 @@
 //   - an open proposal moving to Failed (Sputnik can run a Failed proposal again).
 // The last values seen are kept in the store, so a change made while the worker was down is still
 // caught on the next pass. On a DAO's first pass the open verdicts' own pins stand in for them.
+//
+// The same pass is where the worker sees a tracked proposal close, so it also settles the signals
+// a held or refused action raised for it (C18: a signal clears once its cause is gone).
 
+import { clearClosed } from './act.ts';
 import type { Bridge } from './bridge.ts';
 import type { Health } from './health.ts';
 import type { Logger } from './log.ts';
@@ -74,9 +78,21 @@ export class RejudgeWatch {
     }
 
     const statuses = new Map(live.proposals.map((p) => [p.id, p]));
+    const asked = new Set(live.asked);
+    let closed = false;
     for (const t of tracked) {
       const p = statuses.get(t.proposal_id);
-      if (!p) continue;
+      if (!p) {
+        // Both providers agree, at one block, that a proposal they were asked for is gone. Only
+        // a removal deletes one, so it is recorded as Removed and is never read again.
+        if (asked.has(t.proposal_id)) {
+          this.#store.setProposalStatus(this.#network, dao, t.proposal_id, 'Removed');
+          this.#log.info('proposal_gone', { dao, proposal_id: t.proposal_id, why: 'neither provider returns it: Sputnik deletes a removed proposal' });
+          closed = true;
+        }
+        continue;
+      }
+      if (p.status !== 'InProgress') closed = true;
       if (firstPass && p.status === 'InProgress' && t.receivers_hash !== null) {
         let accounts: string[] = [];
         try {
@@ -90,6 +106,7 @@ export class RejudgeWatch {
       if (p.status === 'Failed' && t.proposal_status !== 'Failed') fired.add('failed');
       if (p.status !== t.proposal_status) this.#store.setProposalStatus(this.#network, dao, t.proposal_id, p.status);
     }
+    if (closed) clearClosed(this.#store, this.#health, this.#network, dao);
 
     if (fired.size === 0) return [];
     const why = [...fired].sort();

@@ -61,6 +61,8 @@ async function main(): Promise<void> {
     { store, telegram, log, now, sleep, onDelivery: (working) => (working ? health.clear('alerts_failing', ALL) : health.raise('alerts_failing', ALL)) },
     { network: config.KAAP_NETWORK, siteUrl: config.KAAP_SITE_URL ?? null, batchMs: config.KAAP_ALERT_BATCH_MS, capPerHour: config.KAAP_ALERT_CAP_PER_HOUR },
   );
+  // Nothing in this process has queued an alert yet, so everything queued is an earlier one's.
+  alerts.dropStale();
   health.on((event) => alerts.health(event));
   const subs = new Subscriptions(store, config.KAAP_NETWORK, log);
   const chatBot = new Bot({ subs, telegram, store, log, now, sleep }, bot.username);

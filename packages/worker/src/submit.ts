@@ -7,7 +7,8 @@
 // nonce or block hash), which means it can never land, and at most once per call. A busy shard
 // (ShardCongested, ShardStuck) is not such a refusal: the same bytes are sent again, on this call
 // and on every later pass, until they land or the chain calls their block hash Expired, which
-// then takes the re-sign path like any other refusal.
+// then takes the re-sign path like any other refusal. A caller that will never send such bytes
+// again (a sealed run moving on to its next attempt) releases what they reserved under the caps.
 
 import type { Chain } from './chain.ts';
 import type { Logger } from './log.ts';
@@ -35,7 +36,9 @@ export interface SubmitRequest {
 
 export type SubmitResult =
   | { kind: 'final'; hash: string; outcome: TxOutcome }
-  | { kind: 'no_outcome'; hash: string }
+  /** `taken` is false only when every send was turned away by a busy shard, so no node holds the
+   *  bytes and they cannot land unless they are sent again. */
+  | { kind: 'no_outcome'; hash: string; taken: boolean }
   | { kind: 'not_sent'; detail: string };
 
 export interface SubmitOptions {
@@ -78,6 +81,19 @@ export class Submitter {
     return { kind: 'final', hash: row.tx_hash, outcome };
   }
 
+  /** Gives back what the bytes under `key` reserved under the daily NEAR cap, for a caller that
+   *  will never send them again. Only for a submit that just returned `taken: false`; bytes ever
+   *  marked sent may still land and keep their reservation until their outcome is final. The
+   *  row is marked rejected, so a later submit under the same key signs anew instead of sending
+   *  these bytes. Returns whether anything was released. */
+  release(key: string, why: string): boolean {
+    const row = this.#store.spend(key);
+    if (row?.state !== 'signed') return false;
+    this.#store.markRejected(key, why);
+    this.#log.info('tx_released', { kind: row.kind, key, tx: row.tx_hash, released_near: formatNear(BigInt(row.reserved_yocto)), why });
+    return true;
+  }
+
   async submit(req: SubmitRequest): Promise<SubmitResult> {
     let row = this.#store.spend(req.key);
     if (!row || row.state === 'rejected') {
@@ -91,7 +107,7 @@ export class Submitter {
       const known = await this.#chain.outcome(row.tx_hash);
       if (known) return this.#final(req, row, known);
       // A transaction that was final once is never sent again, even if its outcome is gone.
-      if (row.state === 'final') return { kind: 'no_outcome', hash: row.tx_hash };
+      if (row.state === 'final') return { kind: 'no_outcome', hash: row.tx_hash, taken: true };
     }
 
     let resigned = false;
@@ -137,7 +153,7 @@ export class Submitter {
       // the window for their outcome would only delay the alert. They stay stored unsent, and the
       // caller's next pass sends them again.
       this.#log.warn('tx_not_taken', { kind: req.kind, key: req.key, tx: row.tx_hash, why: 'the receiver shard stayed busy' });
-      return { kind: 'no_outcome', hash: row.tx_hash };
+      return { kind: 'no_outcome', hash: row.tx_hash, taken: false };
     }
 
     const sentAt = await this.#chain.head().catch(() => null);
@@ -153,7 +169,7 @@ export class Submitter {
       from ??= head;
       if (head !== null && from !== null && head > from + req.windowBlocks) {
         this.#log.warn('tx_no_outcome', { kind: req.kind, key: req.key, tx: row.tx_hash, sent_at_block: from, head, window_blocks: req.windowBlocks });
-        return { kind: 'no_outcome', hash: row.tx_hash };
+        return { kind: 'no_outcome', hash: row.tx_hash, taken: true };
       }
       await this.#o.sleep(this.#o.pollMs);
     }

@@ -6,7 +6,8 @@
 // out, about 200 blocks, and returns null. The worker treats null, or nothing final within its
 // window, as a failed run, raises "guard degraded" (C18) and tries once more, under a new
 // idempotency key, because the first run is finished. Each attempt keeps its own key, so a crash
-// and restart re-sends an attempt's signed bytes rather than paying for a second run.
+// and restart re-sends an attempt's signed bytes rather than paying for a second run. An attempt
+// a busy shard never took gives its reservation back under the daily cap when it is finished.
 
 import { PublicKey } from 'near-api-js';
 import { z } from 'zod';
@@ -138,6 +139,11 @@ export class Judge {
         return { kind: 'verdict', verdict: result.verdict, verdictB64: result.verdictB64, signatureB64: result.signatureB64, runTx: result.tx };
       }
       this.#store.finishRun(key, result.state, result.detail);
+      // A finished attempt is never sent again, so bytes no node took can never land, and what
+      // they reserved goes back under the NEAR cap before the next attempt reserves its own. The
+      // run is marked finished first: a crash in between leaves the reservation counted, which
+      // errs on the side of spending less.
+      if (res.kind === 'no_outcome' && !res.taken) this.#submitter.release(key, 'never taken: the receiver shard stayed busy, and this run attempt is finished');
       this.#log.warn('run_without_verdict', { dao, proposal_id: id, generation, attempt, state: result.state, detail: result.detail, run_tx: result.tx, retry: attempt < RUN_ATTEMPTS && result.state !== 'refused' });
       if (result.state === 'no_answer') this.#health.raise('run_no_answer', dao, { proposal_id: id, attempt });
       // A refused input is refused again, so it is not worth a second payment.

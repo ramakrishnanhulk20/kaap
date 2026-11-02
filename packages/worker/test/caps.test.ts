@@ -1,6 +1,7 @@
 // The daily ceilings (C29): sealed runs and registry writes per DAO, and NEAR for the whole
 // worker, counted from the store so a restart never resets them, with transactions still in flight
-// counted at their worst case. Not covered: a second worker process sharing one key, which the
+// counted at their worst case, and a sealed run a busy shard never took giving its reservation
+// back before the retry. Not covered: a second worker process sharing one key, which the
 // deployment never runs.
 
 import assert from 'node:assert/strict';
@@ -12,7 +13,7 @@ import { test } from 'node:test';
 import { Actor } from '../src/act.ts';
 import { CapGuard } from '../src/caps.ts';
 import { Health } from '../src/health.ts';
-import { Judge } from '../src/judge.ts';
+import { Judge, RUN_DEPOSIT, RUN_GAS } from '../src/judge.ts';
 import { worstCase, TGAS } from '../src/near.ts';
 import { Reads } from '../src/reads.ts';
 import { Store } from '../src/store.ts';
@@ -83,6 +84,32 @@ test('the global NEAR cap counts worst cases in flight and refuses what would cr
   store.addSpend({ idempotency_key: 'veto:c', kind: 'veto', network: NETWORK, dao: DAO, proposal_id: 3, tx_hash: 'h3', signed_b64: 'x', nonce: '3', reserved_yocto: run.toString() });
   store.markRejected('veto:c', 'InvalidNonce');
   assert.equal(store.spentOn('2026-11-02'), 4n * 10n ** 21n);
+});
+
+test('a congested sealed run releases its first attempt before the retry, so the retry fits under the NEAR cap', async () => {
+  const run = worstCase(RUN_GAS, RUN_DEPOSIT);
+  // Room for one run in flight and half of another: the retry fits only if attempt 1 gave back.
+  const caps = { runsPerDaoDay: 10, recordsPerDaoDay: 10, nearPerDay: run + run / 2n };
+  const store = new Store(':memory:', () => T0);
+  const s = setup(store, caps, () => T0);
+  s.chain.plan = ['retry', 'retry'];
+  const got = await s.judge.judge(DAO, 1, 1);
+  assert.equal(got.kind, 'verdict', 'attempt 2 was not capped');
+  assert.equal(s.chain.calls('request_execution').length, 2);
+  const first = store.spend(`run:${NETWORK}:${DAO}:1:g1:a1`)!;
+  const second = store.spend(`run:${NETWORK}:${DAO}:1:g1:a2`)!;
+  assert.deepEqual([first.state, first.actual_yocto], ['rejected', '0'], 'attempt 1 counts nothing');
+  assert.equal(store.spentOn('2026-11-02'), BigInt(second.actual_yocto!), 'only what attempt 2 really cost is counted');
+  assert.equal(s.health.has('cap_reached', DAO), false);
+  assert.equal(s.lines().find((l) => l.event === 'tx_released')?.released_near, '0.050000');
+
+  // Bytes a node did take may still land, so their reservation stays and the same retry is capped.
+  const kept = new Store(':memory:', () => T0);
+  const k = setup(kept, caps, () => T0);
+  k.chain.respond = () => null;
+  assert.equal((await k.judge.judge(DAO, 1, 1)).kind, 'capped');
+  assert.equal(kept.spend(`run:${NETWORK}:${DAO}:1:g1:a1`)?.state, 'sent');
+  assert.equal(kept.spentOn('2026-11-02'), run);
 });
 
 test('the counts live in the SQLite file, so a restart does not reset them', async () => {

@@ -33,6 +33,9 @@ export interface WatchState {
   kind: 'live';
   height: number;
   policyHash: string;
+  /** The ids this read covered. One of them missing from `proposals` no longer exists: Sputnik
+   *  deletes a proposal that is removed. */
+  asked: number[];
   proposals: ProposalRead[];
   codeHashes: Map<string, string>;
 }
@@ -210,7 +213,7 @@ export class Reads {
       if ('kind' in codes) return codes;
       codeHashes.set(account, codes.codeHash);
     }
-    return { kind: 'live', height, policyHash, proposals, codeHashes };
+    return { kind: 'live', height, policyHash, asked: wanted, proposals, codeHashes };
   }
 
   /** Who filed proposal `id`, used only to group alerts. It never leads to a vote, so one

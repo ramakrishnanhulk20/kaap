@@ -6,8 +6,9 @@ the guard stops too, because the guard can only veto what the worker hands it. H
 asks hosted demos to stay up until 18 Nov 2026, ideally 25 Nov 2026, so whatever we pick has to run
 unattended from the day it starts until at least 25 Nov.
 
-Prices below were read from each provider's public pricing page on 29 Oct 2026. Nothing has been
-signed up for. Ram picks.
+Prices below were read from each provider's public pricing page on 29 Oct 2026. Ram picked option
+A, the Google Cloud e2-micro, on 2 Nov 2026. How it serves the public `/status` page safely is in
+the last section.
 
 ## What the worker needs from a host
 
@@ -16,8 +17,9 @@ signed up for. Ram picks.
 - The worker account's key as a file only it can read (`chmod 600`), never pasted into a dashboard
   or an environment variable. A plain virtual machine makes that easy: the file is copied once
   over SSH.
-- Outbound HTTPS to two RPC providers and the NEAR testnet. No inbound port for this order; the
-  public `/status` page in WO-06b will need one HTTPS port.
+- Outbound HTTPS to two RPC providers, the NEAR testnet and Telegram. Inbound, only HTTPS (443,
+  plus 80 for the certificate) to a proxy in front of the public `/status` page; the worker's own
+  port stays on loopback.
 - Memory: about 100 to 150 MB for the process. 512 MB of RAM is enough, 1 GB is comfortable.
 
 ## Requests a day, times the price
@@ -76,3 +78,64 @@ free tier is not available on his account, option B at $6 is the same setup on a
 Whichever he picks, on day one the setup also adds a daily copy of the SQLite file off the
 machine, a reboot test (restart the VM and check the worker comes back by itself), and the
 balance check above, so nobody has to remember to ask whether the guard is still awake.
+
+## Serving /status safely on the e2-micro
+
+The worker's small web face (`GET /status`, `POST /subscribe`) listens on `127.0.0.1:8787` only,
+which is what `KAAP_HTTP_HOST` and `KAAP_HTTP_PORT` default to. Keep it that way on the VM. The
+public reaches it through Caddy, an HTTPS server on the same VM that gets and renews its own
+certificate:
+
+1. Reserve the VM's external IP address as static (VPC network, IP addresses), so it survives a
+   stop and start, and point a DNS name at it with an A record, for example `status.example.org`
+   on a domain Ram controls.
+2. In the VM's firewall, allow TCP 80 and 443 from anywhere. Caddy needs 80 to get its certificate
+   and to send plain HTTP visitors to HTTPS. Port 8787 is never opened.
+3. Install Caddy from its official Debian package (caddyserver.com/docs/install), put this in
+   `/etc/caddy/Caddyfile`, then run `sudo systemctl reload caddy`:
+   ```
+   status.example.org {
+       reverse_proxy 127.0.0.1:8787
+   }
+   ```
+4. From any other machine, `curl https://status.example.org/status` returns the health report.
+
+### The rate limit behind the proxy
+
+`POST /subscribe` gives each address 10 tokens an hour (`TOKENS_PER_ADDRESS_HOUR` in
+`src/main.ts`), counted on an address the caller cannot choose. Behind the proxy, every request
+reaches the worker from 127.0.0.1. Counted by that address, everyone in the world would share one
+count of 10, and one person could use it up for all the others.
+
+The fix is built and tested, not left as a step: the worker trusts exactly one proxy hop. A
+request whose connecting address is loopback (127.0.0.0/8 or ::1) came through the proxy on the
+same machine, so the worker counts the last address in its `X-Forwarded-For` header, the one the
+proxy added for the client it was talking to. Anything a client wrote earlier in that header is
+ignored. A request from any other address is counted by that address, and its header is ignored.
+A missing or unreadable header counts against the proxy's own address, which only makes the limit
+stricter. Code: `clientAddress` in `src/status.ts`. Test: "behind the HTTPS proxy on the same
+machine, POST /subscribe counts each client by the address the proxy saw" in
+`test/health.test.ts`.
+
+Two conditions keep this true on the VM:
+
+- The proxy must add its client's address at the end of `X-Forwarded-For`. Caddy's
+  `reverse_proxy` does that by itself. nginx does not: it passes a client's own header through
+  untouched unless its config says `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`,
+  and without that line anyone could pick their own count.
+- Nothing else on the VM may pass outside traffic to port 8787, since the worker treats every
+  loopback connection as the proxy.
+
+Check after setup, from a laptop, with an enrolled DAO's account id in place of `<dao>`:
+
+```
+for i in $(seq 1 11); do curl -s -o /dev/null -w '%{http_code} ' -X POST https://status.example.org/subscribe -H 'content-type: application/json' -H "x-forwarded-for: 198.51.100.$i" -d '{"dao":"<dao>"}'; done; echo
+```
+
+Ten `200` and then one `429` shows that a made-up header buys nothing: all eleven requests count
+against the laptop's real address. Each `200` creates an unused subscription token that expires
+after 15 minutes.
+
+Not covered: someone with many addresses, such as an IPv6 range, gets 10 tokens an hour per
+address. A token only lets a chat subscribe to alerts about facts that are public on chain, so
+this limit protects the worker from waste, not a secret.

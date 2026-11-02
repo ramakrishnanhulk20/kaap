@@ -1,7 +1,9 @@
 // Health (C18): watcher lag, a silent provider, failed runs, low balances, a change of the guard's
 // accepted key and providers that disagree each raise "guard offline" or "guard degraded" for the
-// DAO they concern, reach its members, and show on GET /status, which holds no secret. Not
-// covered: a worker process that is down altogether, which only an outside check of /status sees.
+// DAO they concern, reach its members, and show on GET /status, which holds no secret; behind the
+// HTTPS proxy on the same machine, POST /subscribe counts each client by the address the proxy
+// saw. Not covered: a worker process that is down altogether, which only an outside check of
+// /status sees, and the proxy's own behaviour, which HOSTING.md checks on the VM.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -14,11 +16,11 @@ import { Judge } from '../src/judge.ts';
 import { formatNear } from '../src/near.ts';
 import { Reads } from '../src/reads.ts';
 import { RejudgeWatch } from '../src/rejudge.ts';
-import { StatusServer, statusReport } from '../src/status.ts';
+import { StatusServer, clientAddress, statusReport } from '../src/status.ts';
 import { Submitter } from '../src/submit.ts';
 import { Subscriptions } from '../src/subscriptions.ts';
 import { GUARD_FLOOR, WORKER_FLOOR, Worker } from '../src/worker.ts';
-import { DAO, FakeChain, FakeTelegram, GUARD, NETWORK, REGISTRY, bothSet, bridge, clock, memoryLog, memoryStore, noSleep, runOutcome, sealedOutput, testKey, twoProviders, verdictFields } from './helpers.ts';
+import { DAO, FakeChain, FakeTelegram, GUARD, NETWORK, REGISTRY, bothSet, bridge, clock, events, memoryLog, memoryStore, noSleep, runOutcome, sealedOutput, testKey, twoProviders, verdictFields } from './helpers.ts';
 
 const NEAR = 10n ** 24n;
 const WORKER = 'worker.kaap.testnet';
@@ -197,6 +199,27 @@ test('GET /status shows each level with no secret in it, and POST /subscribe han
   assert.equal((await ask(JSON.stringify({ dao: DAO }))).status, 429, 'three tokens an hour from one address');
   assert.equal((await fetch(`${base}/subscribe`)).status, 405);
   assert.equal((await fetch(`${base}/anything`)).status, 404);
+  await http.stop();
+  await s.worker.stop();
+});
+
+test('behind the HTTPS proxy on the same machine, POST /subscribe counts each client by the address the proxy saw', async () => {
+  assert.equal(clientAddress('198.51.100.20', '203.0.113.7'), '198.51.100.20', 'a peer that is not loopback cannot name another address');
+  assert.equal(clientAddress('127.0.0.1', '10.0.0.1, 203.0.113.7'), '203.0.113.7', 'only the entry the proxy added counts');
+  assert.equal(clientAddress('::ffff:127.0.0.1', ['10.0.0.1', '203.0.113.7']), '203.0.113.7');
+  assert.equal(clientAddress('::1', '::FFFF:203.0.113.7'), '203.0.113.7', 'one client, one written form');
+  assert.equal(clientAddress('127.0.0.1', undefined), '127.0.0.1', 'no header counts against the proxy itself');
+  assert.equal(clientAddress('127.0.0.1', '203.0.113.7, not-an-address'), '127.0.0.1');
+  assert.equal(clientAddress(undefined, '203.0.113.7'), 'unknown');
+
+  const s = await started();
+  const http = new StatusServer({ health: s.health, subs: s.subs, log: s.log, now: s.c.now, watching: () => s.worker.watching() }, { host: '127.0.0.1', port: 0, network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 2 });
+  const base = `http://127.0.0.1:${await http.start()}`;
+  const ask = async (forwarded: string) => (await fetch(`${base}/subscribe`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': forwarded }, body: JSON.stringify({ dao: DAO }) })).status;
+  assert.deepEqual([await ask('203.0.113.7'), await ask('203.0.113.7'), await ask('203.0.113.7')], [200, 200, 429]);
+  assert.equal(await ask('198.51.100.9'), 200, 'another client behind the same proxy is not blocked by the first');
+  assert.equal(await ask('198.51.100.1, 203.0.113.7'), 429, 'an address a client writes before the proxy entry changes nothing');
+  assert.equal(events(s.lines(), 'rate_limited').at(-1)?.address, '203.0.113.7');
   await http.stop();
   await s.worker.stop();
 });
