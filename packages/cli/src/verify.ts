@@ -10,18 +10,20 @@
 // be independent. As corroboration, the same contracts' code is read again at the final block from
 // both live providers, and a redeploy since the verdict is a warning.
 //
-// What it does not check, and prints as such: the Intel quote inside OutLayer's attestation (see
-// outlayer.ts). A verdict from another decoder version is a warning, not a failure, since an older
-// verdict was made by an older kaap-core. It only reads: no key, no transaction (C31).
+// What it does not check, and prints as such: Intel's signature on the TDX quote inside OutLayer's
+// attestation, and OutLayer's approval of its measurements (see outlayer.ts and binding.ts). A
+// verdict from another decoder version is a warning, not a failure, since an older verdict was
+// made by an older kaap-core. It only reads: no key, no transaction (C31).
 
 import { z } from 'zod';
 
+import { BindingRefused, quoteReportData, taskHash } from './binding.js';
 import { Held, type Reader } from './chain.js';
 import { type Deps, readers } from './check.js';
 import { type Core, CoreError } from './core.js';
 import { recognise } from './dao.js';
 import { type Deployment, loadDeployment } from './deployment.js';
-import { type AttestationRead, findRun, readAttestation, readRun, type Run, type Search } from './outlayer.js';
+import { type Attestation, type AttestationRead, findRun, readAttestation, readRun, type Run, type Search } from './outlayer.js';
 import { type Block, NETWORKS, type Network, Provider, RpcError } from './rpc.js';
 import { oneLine, utc } from './text.js';
 import { BadVerdict, decodeVerdict, ed25519Valid, edKeyBytes, sha256Hex, signedBytes, type VerdictFields } from './verdict.js';
@@ -137,8 +139,52 @@ function runProblems(run: Run, att: AttestationRead, d: Deployment): { chain: st
   return { chain, attested, hashes };
 }
 
+const seconds = (b: Block) => Number(BigInt(b.timestampNs) / 1_000_000_000n);
+
+/** OutLayer's record against the TDX quote it was served with, then against the chain: the fields
+ *  the quote commits to that the chain also holds must be the chain's, and the record's time must
+ *  fall between the request's block and its completion's. Returns the task hash recomputed from
+ *  the record (null when the quote or the record is refused) and the failures. */
+function bindingProblems(run: Run, a: Attestation, d: Deployment): { hash: string | null; problems: string[] } {
+  const problems: string[] = [];
+  let hash: string | null = null;
+  try {
+    const quote = quoteReportData(a.tdx_quote);
+    hash = taskHash(a).toString('hex');
+    const signed = quote.first.toString('hex');
+    if (hash !== signed) problems.push(`the task hash recomputed from the record, ${short(hash)}, is not the ${short(signed)} the quote commits to`);
+    if (!quote.rest.equals(Buffer.alloc(32))) problems.push('the quote\'s REPORTDATA is not zero after the task hash');
+  } catch (e) {
+    if (!(e instanceof BindingRefused)) throw e;
+    problems.push(e.message);
+  }
+  const r = run.requested;
+  if (r === null) {
+    problems.push(`${d.outlayer} logged no execution_requested to compare it with`);
+    return { hash, problems };
+  }
+  const shown = (v: string | number | null | undefined) => (v === null || v === undefined ? 'none' : oneLine(String(v), 70));
+  const fields: [string, string | null | undefined, string | null][] = [
+    ['build target', a.build_target, r.buildTarget],
+    ['wasm hash', a.wasm_hash, r.build],
+    ['attached usd', a.attached_usd, r.attachedUsd],
+    ['secrets reference', a.secrets_ref, r.secretsRef],
+  ];
+  for (const [name, record, chain] of fields) if ((record ?? null) !== chain) problems.push(`${name} ${shown(record)}, the request names ${shown(chain)}`);
+  const from = run.requestBlock;
+  const to = run.completionBlock;
+  if (from === null) problems.push('the request\'s receipt names no block');
+  else if (a.block_height !== from.height) problems.push(`block height ${shown(a.block_height)}, the request ran in block ${from.height}`);
+  if (to === null) problems.push(`${d.outlayer} logged no execution_completed, so the record's time cannot be bounded`);
+  if (from !== null && to !== null && (a.timestamp < seconds(from) || a.timestamp > seconds(to))) {
+    problems.push(`stamped ${a.timestamp}, outside the request block's time ${seconds(from)} to the completion block's time ${seconds(to)}`);
+  }
+  return { hash, problems };
+}
+
 function runChecks(run: Run, att: AttestationRead, d: Deployment, label: string): Check[] {
   const p = runProblems(run, att, d);
+  const b = att.found ? bindingProblems(run, att.attestation, d) : { hash: null, problems: [att.why] };
   const build = run.requested?.build ? short(run.requested.build) : 'unknown';
   return [
     check(
@@ -152,6 +198,13 @@ function runChecks(run: Run, att: AttestationRead, d: Deployment, label: string)
       `${label}: OutLayer's attestation: ${p.attested.join('; ')}`,
     ),
     check(!p.hashes.length, `${label}: the attested input and output hashes are the sha256 of the transaction's input and output`, `${label}: ${p.hashes.join('; ')}`),
+    // A pass is always V1: the time window puts the record after the request's block, and every
+    // block a Kaap run can sit in is after the V1 cutoff.
+    check(
+      b.hash !== null && !b.problems.length,
+      `${label}: OutLayer's record is the one its TDX quote commits to (task hash ${short(b.hash ?? '')}, V1); Intel's signature on the quote is not checked here`,
+      `${label}: OutLayer's record and its TDX quote: ${b.problems.join('; ')}`,
+    ),
   ];
 }
 
@@ -246,7 +299,7 @@ export async function verify(deps: Deps & { repoRoot: string }, request: VerifyR
     checks.push(pass(`sealed run: transaction ${run.tx} returned exactly this verdict and signature (found in ${search?.blocksRead} blocks)`));
     const att = await readAttestation(request.network, run.tx, deps.transport, deps.limiter);
     checks.push(...runChecks(run, att, d, 'the run'));
-    notChecked.push(`the Intel TDX quote inside the attestation: its signature chain needs Intel's collateral, which this CLI does not carry; OutLayer's record: ${att.url}`);
+    notChecked.push(`Intel's signature on the TDX quote and OutLayer's approval of its measurements (OutLayer's own tool: outlayer-verify tx ${run.tx} --network ${request.network} --api ${NETWORKS[request.network].outlayer}); record: ${att.url}`);
   }
 
   checks.push(...(await keyChecks(archival, deps, request.network, d, guardRaw)));

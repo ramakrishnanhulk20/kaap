@@ -7,17 +7,18 @@
 // the request, and the input and output hashes are recomputed from the transaction.
 //
 // Covered: which program ran, for whom, on what input, with what output, as OutLayer's contract and
-// API record it. Not covered: the Intel TDX quote inside the attestation (its signature chain needs
-// Intel's collateral and DCAP, which this CLI does not carry), and whether the build's source is
-// honest (rebuild it: packages/sealed/README.md).
+// API record it, and that the record is the one the TDX quote OutLayer serves with it commits to
+// (binding.ts). Not covered: Intel's signature on that quote and OutLayer's approval of its
+// measurements (the signature chain needs Intel's collateral and DCAP, which this CLI does not
+// carry), and whether the build's source is honest (rebuild it: packages/sealed/README.md).
 
 import { z } from 'zod';
 
-import { MAX_ATTESTATION_BYTES, RPC_TIMEOUT_MS, RUN_SCAN_AHEAD, RUN_SCAN_BACK } from './caps.js';
+import { MAX_ATTESTATION_BYTES, MAX_VIEW_BODY_BYTES, RPC_TIMEOUT_MS, RUN_SCAN_AHEAD, RUN_SCAN_BACK } from './caps.js';
 import type { Deployment } from './deployment.js';
 import type { RateLimiter } from './limiter.js';
 import { NetError, type Transport } from './net.js';
-import { type Network, NETWORKS, type Provider, RpcError } from './rpc.js';
+import { type Block, type Network, NETWORKS, type Provider, RpcError } from './rpc.js';
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -41,14 +42,26 @@ const txSchema = z.looseObject({
   actions: z.array(z.unknown()),
 });
 
+/** `attached_usd` and `secrets_ref` are typed as OutLayer's worker reads them (out-layer/outlayer
+ *  worker/src/event_monitor.rs `RequestData`), so an event the worker could not read is not read
+ *  here either. */
 const requestSchema = z.looseObject({
   sender_id: z.string(),
   project_id: z.string().nullable().optional(),
   project_uuid: z.string().nullable().optional(),
   input_data: z.string().nullable().optional(),
-  code_source: z.record(z.string(), z.looseObject({ hash: z.string().optional() })),
+  code_source: z.record(z.string(), z.looseObject({ hash: z.string().optional(), build_target: z.string().optional() })),
+  attached_usd: z.string().nullable().optional(),
+  secrets_ref: z.looseObject({ profile: z.string(), account_id: z.string() }).nullable().optional(),
 });
 
+const blockSchema = z.looseObject({
+  header: z.looseObject({ height: z.number().int().nonnegative(), hash: z.string(), timestamp_nanosec: z.string().regex(/^\d{1,20}$/) }),
+});
+
+/** The record as OutLayer's API serves it. The fields from `task_type` on are typed as the
+ *  verifier's `Attestation` reads them (outlayer-verify record.rs): a Rust `Option` with
+ *  `#[serde(default)]` is a key that may be null or missing. */
 const attestationSchema = z.looseObject({
   transaction_hash: z.string(),
   caller_account_id: z.string(),
@@ -57,6 +70,16 @@ const attestationSchema = z.looseObject({
   executed_wasm_sha256: z.string().nullable(),
   input_hash: z.string().nullable(),
   output_hash: z.string(),
+  task_type: z.string(),
+  task_id: z.number().int(),
+  tdx_quote: z.string(),
+  timestamp: z.number().int(),
+  block_height: z.number().int().nonnegative().nullable().optional(),
+  build_target: z.string().nullable().optional(),
+  attached_usd: z.string().nullable().optional(),
+  secrets_ref: z.string().nullable().optional(),
+  repo_url: z.string().nullable().optional(),
+  commit_hash: z.string().nullable().optional(),
 });
 export type Attestation = z.output<typeof attestationSchema>;
 
@@ -66,7 +89,13 @@ export interface Requested {
   project: string | null;
   uuid: string | null;
   build: string | null;
+  buildTarget: string | null;
   inputData: string | null;
+  attachedUsd: string | null;
+  /** `account/profile`, as the worker writes it into the attestation, or null when the request
+   *  names no secrets or leaves either half empty (out-layer/outlayer worker/src/api_client.rs
+   *  `as_attestation_ref`). */
+  secretsRef: string | null;
 }
 
 export interface Run {
@@ -80,6 +109,10 @@ export interface Run {
   sealed: SealedOutput | null;
   /** Null when no receipt of the OutLayer contract logged `execution_requested`. */
   requested: Requested | null;
+  /** The block that ran the OutLayer receipt which logged `execution_requested`, and the block that
+   *  ran the one which logged `execution_completed`. Null when no such receipt. */
+  requestBlock: Block | null;
+  completionBlock: Block | null;
 }
 
 /** The `input_data` of a `request_execution` call in `actions`, or null for any other call. */
@@ -104,37 +137,57 @@ function names(inputData: string, network: Network, dao: string, proposalId: num
   }
 }
 
-/** The `execution_requested` event, read only from a receipt the OutLayer contract itself ran, so
- *  no other contract's log can stand in for it. */
-function requestedBy(outcome: Record<string, unknown>, outlayer: string): Requested | null {
+/** The `execution_requested` event, and the blocks of the receipts that logged it and
+ *  `execution_completed`, read only from receipts the OutLayer contract itself ran, so no other
+ *  contract's log can stand in for them. The first of each counts. */
+function logged(outcome: Record<string, unknown>, outlayer: string): { requested: Requested | null; requestedIn: string | null; completedIn: string | null } {
+  const found: { requested: Requested | null; requestedIn: string | null; completedIn: string | null } = { requested: null, requestedIn: null, completedIn: null };
   const receipts = outcome['receipts_outcome'];
-  if (!Array.isArray(receipts)) return null;
+  if (!Array.isArray(receipts)) return found;
   for (const r of receipts) {
     const o = isRecord(r) ? r['outcome'] : undefined;
     if (!isRecord(o) || o['executor_id'] !== outlayer || !Array.isArray(o['logs'])) continue;
+    const blockHash = isRecord(r) && typeof r['block_hash'] === 'string' ? r['block_hash'] : null;
     for (const line of o['logs']) {
       if (typeof line !== 'string' || !line.startsWith('EVENT_JSON:')) continue;
       try {
         const event: unknown = JSON.parse(line.slice('EVENT_JSON:'.length));
-        if (!isRecord(event) || event['standard'] !== 'near-outlayer' || event['event'] !== 'execution_requested' || !Array.isArray(event['data'])) continue;
+        if (!isRecord(event) || event['standard'] !== 'near-outlayer' || !Array.isArray(event['data'])) continue;
+        if (event['event'] === 'execution_completed') {
+          if (found.requested !== null && found.completedIn === null) found.completedIn = blockHash;
+          continue;
+        }
+        if (event['event'] !== 'execution_requested' || found.requested !== null) continue;
         const data: unknown = event['data'][0];
         const raw = isRecord(data) ? data['request_data'] : undefined;
         const request = requestSchema.safeParse(typeof raw === 'string' ? JSON.parse(raw) : undefined);
         if (!request.success) continue;
         const sources = Object.values(request.data.code_source);
-        return {
+        const secrets = request.data.secrets_ref;
+        found.requested = {
           sender: request.data.sender_id,
           project: request.data.project_id ?? null,
           uuid: request.data.project_uuid ?? null,
           build: sources.length === 1 ? (sources[0]?.hash ?? null) : null,
+          buildTarget: sources.length === 1 ? (sources[0]?.build_target ?? null) : null,
           inputData: request.data.input_data ?? null,
+          attachedUsd: request.data.attached_usd ?? null,
+          secretsRef: secrets && secrets.account_id && secrets.profile ? `${secrets.account_id}/${secrets.profile}` : null,
         };
+        found.requestedIn = blockHash;
       } catch {
         continue;
       }
     }
   }
-  return null;
+  return found;
+}
+
+/** A block's height and time, read by the hash a receipt names. The answer must be that block. */
+async function blockByHash(archival: Provider, hash: string): Promise<Block> {
+  const read = blockSchema.safeParse(await archival.call('block', { block_id: hash }, MAX_VIEW_BODY_BYTES, true));
+  if (!read.success || read.data.header.hash !== hash) throw new RpcError(archival.name, 'shape', `block ${hash.slice(0, 12)} is not readable`);
+  return { height: read.data.header.height, hash, timestampNs: read.data.header.timestamp_nanosec };
 }
 
 /** The run `tx` as the archival node knows it, or null when it does not. */
@@ -157,7 +210,10 @@ export async function readRun(archival: Provider, tx: string, sender: string, ou
       sealed = null;
     }
   }
-  return { tx: parsed.data.hash, signer: parsed.data.signer_id, receiver: parsed.data.receiver_id, inputData, output, sealed, requested: requestedBy(outcome, outlayer) };
+  const events = logged(outcome, outlayer);
+  const requestBlock = events.requestedIn === null ? null : await blockByHash(archival, events.requestedIn);
+  const completionBlock = events.completedIn === null ? null : await blockByHash(archival, events.completedIn);
+  return { tx: parsed.data.hash, signer: parsed.data.signer_id, receiver: parsed.data.receiver_id, inputData, output, sealed, requested: events.requested, requestBlock, completionBlock };
 }
 
 export interface Search {
