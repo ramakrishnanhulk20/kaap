@@ -21,6 +21,8 @@ export const CASES: Record<string, string[]> = {
   // A testnet DAO made through sputnikv2.testnet with the NEAR Business roles, one member in each.
   'enroll-nb': ['enroll', 'kaap-nb-1102140303.sputnikv2.testnet'],
   'arming-nb': ['arming', 'kaap-nb-1102140303.sputnikv2.testnet'],
+  // Its second proposal, the enrolment call `kaap enroll` drafted, filed as printed.
+  'check-nb-enrol': ['check', 'kaap-nb-1102140303.sputnikv2.testnet', '1'],
 };
 
 const wanted = process.argv.slice(2);

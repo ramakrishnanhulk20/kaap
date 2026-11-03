@@ -7,6 +7,7 @@
 import { Held, Reader } from './chain.js';
 import type { CheckAnalysis, Core, History } from './core.js';
 import { recognise } from './dao.js';
+import { loadDeployment, NoDeployment } from './deployment.js';
 import { historyBefore, policyBefore, readAll } from './history.js';
 import type { Clock, RateLimiter } from './limiter.js';
 import type { Transport } from './net.js';
@@ -53,6 +54,9 @@ export interface CheckReport {
   history: History | null;
   history_source: string;
   prices_source: string;
+  /** Kaap's guard on this network, handed to kaap-core so a call enrolling in it reads as Kaap's
+   *  own; null where no deployment is recorded. */
+  guard_account: string | null;
   kind_label: string;
   analysis: CheckAnalysis['analysis'];
   description_reasons: CheckAnalysis['description'];
@@ -71,8 +75,19 @@ async function counter(reader: Reader, dao: string, block: Block): Promise<numbe
   return last as number;
 }
 
+/** Kaap's guard from the repository's deployment record. Where none is recorded (mainnet today) a
+ *  call to `enroll` stays an unknown call, the cautious reading. */
+function kaapGuard(repoRoot: string, network: Network): string | null {
+  try {
+    return loadDeployment(repoRoot, network).guard;
+  } catch (e) {
+    if (e instanceof NoDeployment) return null;
+    throw e;
+  }
+}
+
 /** The report, and the token decimals the price table knows, for showing amounts. */
-export async function check(deps: Deps, request: CheckRequest): Promise<{ report: CheckReport; decimals: Map<string, number> }> {
+export async function check(deps: Deps & { repoRoot: string }, request: CheckRequest): Promise<{ report: CheckReport; decimals: Map<string, number> }> {
   const { core } = deps;
   const reader = readers(deps, request.network);
   const head = await reader.head();
@@ -95,6 +110,7 @@ export async function check(deps: Deps, request: CheckRequest): Promise<{ report
   const prices = await readPrices(request.network, core, deps.transport, deps.limiter);
   const before = policyBefore(core, read, policyNow, past);
   const history = past.complete ? historyBefore(past.proposals, read.submission_time, prices.prices) : null;
+  const guard = kaapGuard(deps.repoRoot, request.network);
 
   const result = core.analyze({
     network: request.network,
@@ -107,6 +123,7 @@ export async function check(deps: Deps, request: CheckRequest): Promise<{ report
     prices: prices.prices,
     dao_version: dao.version,
     block_timestamp_ns: head.timestampNs,
+    ...(guard === null ? {} : { guard_account: guard }),
   });
 
   const report: CheckReport = {
@@ -128,6 +145,7 @@ export async function check(deps: Deps, request: CheckRequest): Promise<{ report
       ? `the DAO's approved payments submitted before this proposal (${past.proposals.length} stored proposals read, USD at today's prices)`
       : 'not available: the DAO\'s earlier proposals could not all be read, so NEW_RECIPIENT and LARGE_AMOUNT are not judged',
     prices_source: prices.source,
+    guard_account: guard,
     kind_label: result.kind_label,
     analysis: result.analysis,
     description_reasons: result.description,
@@ -145,7 +163,20 @@ function decimalsOf(token: unknown, decimals: Map<string, number>): number | nul
   return typeof token === 'string' ? (decimals.get(token) ?? null) : null;
 }
 
+/** The effects a member should read in plain words rather than as fields, shared by every command
+ *  that prints Kaap's decoding. Null for the rest, and for an effect not in its expected shape,
+ *  which then prints field by field. */
+export function plainEffect(effect: Record<string, unknown>): string | null {
+  const { type, guard, deposit } = effect;
+  if (type === 'guard_enrol' && typeof guard === 'string' && typeof deposit === 'string' && /^\d+$/.test(deposit)) {
+    return `enrols this DAO in Kaap's guard ${oneLine(guard, 80)}, attaching ${units(deposit, 24)} NEAR`;
+  }
+  return null;
+}
+
 function effectLine(effect: Record<string, unknown>, decimals: Map<string, number>): string {
+  const words = plainEffect(effect);
+  if (words !== null) return `${String(effect['type'])}: ${words}`;
   const parts: string[] = [];
   for (const [key, value] of Object.entries(effect)) {
     if (key === 'type') continue;
@@ -172,6 +203,7 @@ export function render(report: CheckReport, decimals: Map<string, number> = new 
     `policy before: ${report.policy_before.source}`,
     `history: ${report.history ? `${report.history.approved_payments_before} approved payments before this one, median ${report.history.median_payment_usd_before ?? 'n/a'} USD, ${report.history.recipients_paid_before.length} recipients; ${report.history_source}` : report.history_source}`,
     `prices: ${report.prices_source}`,
+    `Kaap's guard: ${report.guard_account ?? `none recorded on ${report.network}`}`,
     '',
     'effects',
     ...(a.effects.length ? a.effects.map((e) => `  ${effectLine(e, decimals)}`) : ['  none']),

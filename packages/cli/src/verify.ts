@@ -3,16 +3,22 @@
 // hash is recomputed here, with Node's ed25519 and kaap-core's own encoders, from values read off
 // the chain; no service's "valid" is taken (A8, C28). Reads that decide a check are made at one
 // final block and must agree across two providers (C22); the verdict's own block and its sealed run
-// are older than the live providers keep, so those come from one archival node, and say so.
+// are older than the live providers keep, so those come from one archival node, and say so. That
+// covers the policy and the called contracts' code at the verdict's block: both live providers
+// answer that the block is gone (checked 3 Nov), and the one other archival endpoint that answers,
+// archival-rpc.testnet.near.org, is served by the same operator, so a second read there would not
+// be independent. As corroboration, the same contracts' code is read again at the final block from
+// both live providers, and a redeploy since the verdict is a warning.
 //
-// What it does not check, and prints as such: the hash of the called contracts' code (kaap-core has
-// no shared function for it yet), and the Intel quote inside OutLayer's attestation (see
-// outlayer.ts). It only reads: no key, no transaction (C31).
+// What it does not check, and prints as such: the Intel quote inside OutLayer's attestation (see
+// outlayer.ts). A verdict from another decoder version is a warning, not a failure, since an older
+// verdict was made by an older kaap-core. It only reads: no key, no transaction (C31).
 
 import { z } from 'zod';
 
 import { Held, type Reader } from './chain.js';
 import { type Deps, readers } from './check.js';
+import { type Core, CoreError } from './core.js';
 import { recognise } from './dao.js';
 import { type Deployment, loadDeployment } from './deployment.js';
 import { type AttestationRead, findRun, readAttestation, readRun, type Run, type Search } from './outlayer.js';
@@ -36,6 +42,8 @@ export interface VerifyRequest {
 export interface Check {
   ok: boolean;
   text: string;
+  /** Passed, but the reader should know something: shown as "warn", never as a failure. */
+  warning?: boolean;
 }
 
 export interface VerifyReport {
@@ -166,7 +174,7 @@ export async function verify(deps: Deps & { repoRoot: string }, request: VerifyR
   const signature = Buffer.from(record.signature, 'base64');
   const signedHash = sha256Hex(signedBytes(bytes));
   const facts = [
-    `read at final block ${head.height} (${utc(head.timestampNs)}): agreed by ${reader.providers.join(' and ')}; the verdict's own block and its sealed run from ${archival.name} alone, the one archival provider`,
+    `read at final block ${head.height} (${utc(head.timestampNs)}): agreed by ${reader.providers.join(' and ')}; the verdict's own block (the policy and the called contracts' code) and its sealed run from ${archival.name} alone, the one archival provider`,
     `DAO: Sputnik ${dao.version} (code hash ${dao.codeHash})`,
     `Kaap on ${request.network}: guard ${d.guard}, registry ${d.registry}, sealed program ${d.project} called by ${d.worker}`,
     `verdict: record ${record.index} in ${d.registry}, recorded by ${oneLine(record.recorded_by, 80)} at block ${record.recorded_at_block}`,
@@ -210,9 +218,13 @@ export async function verify(deps: Deps & { repoRoot: string }, request: VerifyR
   checks.push(check(guardRaw !== null && registryRaw !== null && guardRaw.equals(registryRaw), 'the registry accepts the same key as the guard', `the registry accepts ${oneLine(registryKey, 60)}, the guard ${oneLine(guardKey, 60)}`));
 
   if (v !== null) {
-    checks.push(await kindCheck(reader, deps, request, head, v, notes));
+    const kind = await storedKind(reader, request, head, notes);
+    checks.push(kindCheck(core, request, v, kind));
     checks.push(await policyCheck(archival, deps, request, v));
-    notChecked.push(`receivers hash ${short(v.receivers_hash)} (the DAO's and the called contracts' code): kaap-core has no shared function for it yet, so it is shown, not recomputed`);
+    const receivers = await receiversCheck(archival, core, request, v, kind);
+    checks.push(receivers.check);
+    if (receivers.pairs !== null) checks.push(await receiversNow(reader, head, receivers.pairs));
+    checks.push(decoderCheck(v.decoder_version, core.decoderVersion()));
   }
 
   let search: Search | null = null;
@@ -251,16 +263,22 @@ export async function verify(deps: Deps & { repoRoot: string }, request: VerifyR
   return { title: `kaap verify ${request.dao} #${request.id} on ${request.network}`, facts, checks, notChecked, notes };
 }
 
-async function kindCheck(reader: Reader, deps: Deps, request: VerifyRequest, head: Block, v: VerdictFields, notes: string[]): Promise<Check> {
+/** The proposal's kind as both providers store it now, or null when the DAO no longer stores it. */
+async function storedKind(reader: Reader, request: VerifyRequest, head: Block, notes: string[]): Promise<string | null> {
   try {
     const { read } = await reader.proposal(request.dao, request.id, head);
     notes.push(`proposal ${request.id} is ${oneLine(read.status, 40)} at block ${head.height}`);
-    const kindHash = deps.core.kindHash(read.kind_json);
-    return check(kindHash === v.kind_hash, `kind hash: kaap-core recomputes ${short(kindHash)} from proposal ${request.id} as stored`, `kind hash: kaap-core gives ${short(kindHash)} from the stored proposal, the verdict says ${short(v.kind_hash)}`);
+    return read.kind_json;
   } catch (e) {
-    if (e instanceof RpcError && e.failure === 'no_proposal') return fail(`kind hash: proposal ${request.id} is no longer stored, so its kind cannot be hashed again`);
+    if (e instanceof RpcError && e.failure === 'no_proposal') return null;
     throw e;
   }
+}
+
+function kindCheck(core: Core, request: VerifyRequest, v: VerdictFields, kind: string | null): Check {
+  if (kind === null) return fail(`kind hash: proposal ${request.id} is no longer stored, so its kind cannot be hashed again`);
+  const kindHash = core.kindHash(kind);
+  return check(kindHash === v.kind_hash, `kind hash: kaap-core recomputes ${short(kindHash)} from proposal ${request.id} as stored`, `kind hash: kaap-core gives ${short(kindHash)} from the stored proposal, the verdict says ${short(v.kind_hash)}`);
 }
 
 async function policyCheck(archival: Provider, deps: Deps, request: VerifyRequest, v: VerdictFields): Promise<Check> {
@@ -272,6 +290,114 @@ async function policyCheck(archival: Provider, deps: Deps, request: VerifyReques
     if (e instanceof RpcError) return fail(`policy hash: the policy at block ${v.block_height} could not be read (${e.message})`);
     throw e;
   }
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** The DAO, then every contract whose code runs when the kind executes, exactly as the sealed job
+ *  picks them (packages/sealed/src/reads.rs `called_accounts`): the receiver of a FunctionCall or
+ *  an UpgradeRemote, the token of a non-NEAR Transfer, and that Transfer's receiver when it
+ *  carries a `msg`. kaap-core does not export this pick, so it is copied here. A copy that picks
+ *  differently can only fail the receivers check, never pass it, because the hash covers every
+ *  account by name. A kind kaap-core cannot read adds nothing, as in the sealed job. Null when an
+ *  account is not a valid id, a kind the sealed job refuses to judge. */
+export function calledAccounts(core: Core, dao: string, kindJson: string): string[] | null {
+  const accounts = [dao];
+  let kind: unknown = null;
+  try {
+    kind = JSON.parse(core.canonicalKind(kindJson));
+  } catch (e) {
+    if (!(e instanceof CoreError) && !(e instanceof SyntaxError)) throw e;
+  }
+  const entries = isRecord(kind) ? Object.entries(kind) : [];
+  if (entries.length === 1 && entries[0] !== undefined) {
+    const [variant, body] = entries[0];
+    const field = (name: string) => {
+      const value = isRecord(body) ? body[name] : undefined;
+      return typeof value === 'string' ? value : null;
+    };
+    const add = (account: string | null) => {
+      if (account !== null) accounts.push(account);
+    };
+    if (variant === 'FunctionCall' || variant === 'UpgradeRemote') add(field('receiver_id'));
+    if (variant === 'Transfer') {
+      const token = field('token_id');
+      if (token) {
+        add(token);
+        if (field('msg') !== null) add(field('receiver_id'));
+      }
+    }
+  }
+  const unique = [...new Set(accounts)];
+  return unique.every((a) => core.isAccountId(a)) ? unique : null;
+}
+
+/** C4: the verdict pins the code of the DAO and of every contract the kind calls, at its block.
+ *  Returns the (account, code hash) pairs read there, or null when they could not all be read. */
+async function receiversCheck(archival: Provider, core: Core, request: VerifyRequest, v: VerdictFields, kind: string | null): Promise<{ check: Check; pairs: [string, string][] | null }> {
+  const at = v.block_height;
+  const refused = (text: string) => ({ check: fail(`receivers hash: ${text}`), pairs: null });
+  if (kind === null) return refused(`proposal ${request.id} is no longer stored, so the contracts it calls cannot be named`);
+  const accounts = calledAccounts(core, request.dao, kind);
+  if (accounts === null) return refused('the proposal names a receiver that is not a valid account id, which Kaap\'s sealed program never judges');
+  const pairs: [string, string][] = [];
+  for (const account of accounts) {
+    try {
+      const state = await archival.account(account, at);
+      if (state.blockHeight !== at) return refused(`${archival.name} answered for block ${state.blockHeight} when asked for ${oneLine(account, 80)} at block ${at}`);
+      pairs.push([account, state.codeHash]);
+    } catch (e) {
+      if (!(e instanceof RpcError)) throw e;
+      const why = e.failure === 'missing_account' ? 'no such account at that block' : e.message;
+      return refused(`the code of ${oneLine(account, 80)} at block ${at} could not be read (${why})`);
+    }
+  }
+  const hash = core.receiversHash(pairs);
+  const named = accounts.map((a) => oneLine(a, 80)).join(', ');
+  const source = `(archival node, one provider: no independent archive keeps block ${at})`;
+  return {
+    check: check(
+      hash === v.receivers_hash,
+      `receivers hash: kaap-core recomputes ${short(hash)} from the code of ${named} at block ${at} ${source}`,
+      `receivers hash: kaap-core gives ${short(hash)} from the code of ${named} at block ${at} ${source}, the verdict says ${short(v.receivers_hash)}`,
+    ),
+    pairs,
+  };
+}
+
+/** C4 again, now: the same contracts' code at the final block, agreed by both live providers (C22).
+ *  A contract redeployed after the verdict does not forge it, but the verdict judged code that no
+ *  longer runs, so a change warns instead of failing. A disagreement, or a read that fails, fails. */
+async function receiversNow(reader: Reader, head: Block, pinned: [string, string][]): Promise<Check> {
+  const changed: string[] = [];
+  for (const [account, then] of pinned) {
+    let now: string;
+    try {
+      now = (await reader.account(account, head)).codeHash;
+    } catch (e) {
+      if (e instanceof Held) return fail(`receivers now: ${e.message} at block ${head.height}`);
+      if (e instanceof RpcError) return fail(`receivers now: the code of ${oneLine(account, 80)} at block ${head.height} could not be read (${e.failure === 'missing_account' ? 'no such account' : e.message})`);
+      throw e;
+    }
+    if (now !== then) changed.push(oneLine(account, 80));
+  }
+  if (!changed.length) return pass(`receivers now: the code of ${pinned.map(([a]) => oneLine(a, 80)).join(', ')} at block ${head.height} is unchanged since the verdict (two providers)`);
+  return {
+    ok: true,
+    warning: true,
+    text: `receivers now: changed since the verdict: ${changed.join(', ')} (block ${head.height}, two providers); a redeploy after the verdict does not forge it, but the verdict judged the code of its own block`,
+  };
+}
+
+/** A verdict names the kaap-core that judged it. Another version is a warning, not a failure: a
+ *  verdict made before an upgrade carries the decoder of its day. */
+export function decoderCheck(verdictDecoder: string, ours: string): Check {
+  if (verdictDecoder === ours) return pass(`decoder: the verdict names kaap-core ${ours}, the decoder this CLI runs`);
+  return {
+    ok: true,
+    warning: true,
+    text: `decoder: the verdict names decoder ${oneLine(verdictDecoder, 20)}, this CLI runs kaap-core ${ours}; an older verdict may come from an older decoder, so what kaap check prints today can differ from it`,
+  };
 }
 
 /** The guard's key must be the one a run of this project, caller and published build printed in
@@ -306,18 +432,23 @@ function aiEvidence(v: VerdictFields | null): string {
 
 export function render(r: VerifyReport): string {
   const failed = r.checks.filter((c) => !c.ok).length;
+  const warned = r.checks.filter((c) => c.ok && c.warning).length;
+  const result =
+    failed > 0
+      ? `result: ${failed} of ${r.checks.length} checks fail`
+      : warned > 0
+        ? `result: no check fails; ${r.checks.length - warned} pass and ${warned} ${warned === 1 ? 'warns' : 'warn'}`
+        : `result: all ${r.checks.length} checks pass`;
   return [
     r.title,
     ...r.facts,
     '',
     'checks',
-    ...r.checks.map((c) => `  ${c.ok ? 'pass' : 'fail'}  ${c.text}`),
+    ...r.checks.map((c) => `  ${!c.ok ? 'fail' : c.warning ? 'warn' : 'pass'}  ${c.text}`),
     '',
-    'not checked here',
-    ...r.notChecked.map((t) => `  ${t}`),
-    '',
+    ...(r.notChecked.length ? ['not checked here', ...r.notChecked.map((t) => `  ${t}`), ''] : []),
     ...r.notes,
     '',
-    failed === 0 ? `result: all ${r.checks.length} checks pass` : `result: ${failed} of ${r.checks.length} checks fail`,
+    result,
   ].join('\n');
 }

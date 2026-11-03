@@ -30,6 +30,8 @@ interface Bindings {
   guardArming(policy: string, guard: string): string;
   whoActs(policy: string, label: string): string;
   enrolmentDrafts(guard: string): string;
+  decoderVersion(): string;
+  receiversHash(pairs: string): string;
   pricesFromTokens(tokens: string): string;
   evalScoreboards(real: string, planted: string, tokens: string): string;
 }
@@ -43,6 +45,7 @@ export class CoreError extends Error {
 
 const severity = z.enum(['low', 'medium', 'high', 'critical', 'unknown']);
 const findingCode = z.string().regex(/^[A-Z_]{3,40}$/);
+const hex32 = z.string().regex(/^[0-9a-f]{64}$/);
 
 const analysisSchema = z.strictObject({
   analysis: z.strictObject({
@@ -208,6 +211,17 @@ export class Core {
   /** Kaap's one enrolment template for `guard` (C30). */
   enrolmentDrafts(guard: string): EnrolmentDrafts {
     return draftsSchema.parse(JSON.parse(this.#run('enrolmentDrafts', () => this.#b.enrolmentDrafts(guard))));
+  }
+
+  /** kaap-core's `receipt::DECODER_VERSION`, the decoder a verdict made by this kaap-core names. */
+  decoderVersion(): string {
+    return z.string().min(1).max(40).parse(this.#run('decoderVersion', () => this.#b.decoderVersion()));
+  }
+
+  /** Hex of kaap-core's `receipt::receivers_hash` over (account, code hash) pairs in any order:
+   *  the `receivers_hash` a verdict carries. */
+  receiversHash(pairs: readonly (readonly [string, string])[]): string {
+    return hex32.parse(this.#run('receiversHash', () => this.#b.receiversHash(JSON.stringify(pairs))));
   }
 
   pricesFromTokens(tokens: string): Prices {

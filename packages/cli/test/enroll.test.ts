@@ -111,11 +111,14 @@ test('enroll: a NEAR Business treasury gets two drafts, the role filed by Admin 
   const enrol = args(call).proposal.kind['FunctionCall'] as { receiver_id: string; actions: { method_name: string; deposit: string; gas: string; args: string }[] };
   assert.deepEqual([enrol.receiver_id, enrol.actions], [GUARD, [{ args: 'e30=', deposit: '10000000000000000000000', gas: '10000000000000', method_name: 'enroll' }]]);
 
-  // Kaap's own decoding of each draft, by the decoder that judges every proposal.
+  // Kaap's own decoding of each draft, by the decoder that judges every proposal: kaap-core reads
+  // its own enrolment as nothing to warn about, so neither draft carries a finding or a note.
   assert.match(role, /policy_change: .*"members_added":\[\{"approver":false,"member":"kaap-guard-1029061211\.testnet","role":"guard"\}\].*"roles_added":\["guard"\]/);
-  assert.match(role, /findings: GUARD_WEAKENED high\n.*must_veto false\n {4}note: kaap-core flags every change to a role that holds the guard/);
-  assert.match(call, /unknown_call: .*"method":"enroll","receiver":"kaap-guard-1029061211\.testnet"/);
-  assert.match(call, /must_veto false/);
+  assert.match(call, /^ {4}guard_enrol: enrols this DAO in Kaap's guard kaap-guard-1029061211\.testnet, attaching 0\.01 NEAR$/m);
+  for (const draft of [role, call]) {
+    assert.match(draft, /^ {4}findings: none\n {4}risk floor low; description check \w+; must_veto false$/m, draft);
+    assert.doesNotMatch(draft, /note:|GUARD_WEAKENED|unknown_call/, draft);
+  }
 
   assert.match(out, /^after these pass \(Sputnik's rules on the policy they leave\):\n {2}armed: yes\./m);
   assert.match(out, new RegExp(`^ {2}also able to veto alone: ${NB_MEMBER} \\(on add_bounty, `, 'm'), 'the one member decides alone too');

@@ -4,10 +4,11 @@
 // providers run the same contract on the same state at the same block and return the same bytes,
 // so a difference is a lie or a fault, never a race.
 //
-// Covered: the block, the DAO's code hash, the factory's list of Sputnik versions, the proposal
-// counter, the proposal and the policy. Not covered: both providers lying the same way (a named
-// non-goal), and the history pages, which come from the first provider alone because they only
-// add medium findings and the policy rebuild, never a critical one.
+// Covered: the block, the code hash of the DAO and of the contracts a verdict pinned (callers pass
+// only ids kaap-core accepts, so the id is safe to print), the factory's list of Sputnik versions,
+// the proposal counter, the proposal and the policy. Not covered: both providers lying the same way
+// (a named non-goal), and the history pages, which come from the first provider alone because they
+// only add medium findings and the policy rebuild, never a critical one.
 
 import type { Core, ProposalRead } from './core.js';
 import { MAX_VIEW_BODY_BYTES } from './caps.js';
@@ -49,7 +50,7 @@ export class Reader {
     this.#pinned('the account', a, block);
     this.#pinned('the account', b, block);
     if (a.codeHash !== b.codeHash || a.globalContractHash !== b.globalContractHash || a.globalContractAccount !== b.globalContractAccount) {
-      throw new Held('the two providers disagree on the DAO\'s code hash');
+      throw new Held(`the two providers disagree on the code of ${account}`);
     }
     return a;
   }

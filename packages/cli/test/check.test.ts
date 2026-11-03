@@ -1,7 +1,7 @@
 // `kaap check` against recorded mainnet and testnet answers: a description that contradicts the
 // amount sent, with and without prices, a NEAR Business confidential payment, Kaap's testnet DAO,
-// an account that is not Sputnik code, two providers that disagree or cannot be compared, the
-// read-only promise, and the terminal escaping of attacker text. The fixtures were recorded while
+// a DAO's call enrolling in Kaap's guard, an account that is not Sputnik code, two providers that
+// disagree or cannot be compared, the read-only promise, and the terminal escaping of attacker text. The fixtures were recorded while
 // 1Click's list answered HTTP 521, so the priced cases serve the census's own 1Click list instead.
 // It does not cover the live providers changing after the recording (DONE MEANS 2 runs live), the
 // AI step or the guard, which run only in the sealed program, or a policy rebuilt from a full
@@ -45,7 +45,16 @@ test('a payment whose description states another amount is DESC_CONTRADICTS, cri
   assert.match(out, /risk floor: critical/);
   assert.match(out, /description check: contradicts/);
   assert.match(out, /must_veto: true/);
+  assert.match(out, /^Kaap's guard: none recorded on mainnet$/m);
   assert.ok(out.endsWith(ADVISORY));
+});
+
+test("a DAO's call enrolling in Kaap's guard reads in plain words, with no finding", async () => {
+  const { code, out } = await run('check-nb-enrol');
+  assert.equal(code, 0, out);
+  assert.match(out, /^Kaap's guard: kaap-guard-1029061211\.testnet$/m);
+  assert.match(out, /^effects\n {2}guard_enrol: enrols this DAO in Kaap's guard kaap-guard-1029061211\.testnet, attaching 0\.01 NEAR\nfindings\n {2}none\nrisk floor: low$/m);
+  assert.match(out, /^must_veto: false$/m);
 });
 
 // The census's own 1Click token list (`GET /v0/tokens` of 20 Oct 2026, kept byte for byte in
@@ -163,7 +172,7 @@ test('when the second provider cannot be read, nothing is compared and the check
 test('the CLI only reads: view calls to the fixed providers, the 1Click list, and no key in its code (C31)', async () => {
   const views = new Set(['get_proposal', 'get_policy', 'get_proposals', 'get_last_proposal_id', 'get_contracts_metadata']);
   const hosts = new Set([...Object.values(NETWORKS).flatMap((n) => [n.primary, n.secondary]), 'https://1click.chaindefuser.com/v0/tokens']);
-  for (const fixture of ['check-survival-132', 'check-kmxv7-13', 'check-testnet-7', 'check-wrap-near']) {
+  for (const fixture of ['check-survival-132', 'check-kmxv7-13', 'check-testnet-7', 'check-wrap-near', 'check-nb-enrol']) {
     const { log } = await run(fixture);
     for (const r of log) {
       assert.ok(hosts.has(r.url), r.url);

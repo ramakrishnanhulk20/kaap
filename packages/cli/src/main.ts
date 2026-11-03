@@ -91,7 +91,7 @@ export async function main(argv: string[], env: Env, io: Io): Promise<number> {
     const deps = { core, transport: env.transport, limiter: env.limiter ?? new RateLimiter(REQUESTS_PER_SECOND, env.clock), clock: env.clock };
     switch (command.command) {
       case 'check': {
-        const { report, decimals } = await check(deps, command);
+        const { report, decimals } = await check({ ...deps, repoRoot: env.repoRoot }, command);
         io.out(json ? JSON.stringify({ ok: true, ...report }, null, 2) : renderCheck(report, decimals));
         return 0;
       }

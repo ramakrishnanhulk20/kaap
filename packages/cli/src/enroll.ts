@@ -11,7 +11,7 @@
 
 import { armingLines, armingState, readGuard } from './arming.js';
 import { Held } from './chain.js';
-import type { Deps } from './check.js';
+import { type Deps, plainEffect } from './check.js';
 import type { CheckAnalysis, WhoActs } from './core.js';
 import { readPrices } from './prices.js';
 import type { Network } from './rpc.js';
@@ -142,13 +142,10 @@ function decodingLines(a: CheckAnalysis): string[] {
   const x = a.analysis;
   return [
     '  Kaap\'s decoding of this draft:',
-    ...x.effects.map((e) => `    ${String(e['type'])}: ${oneLine(JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k]) => k !== 'type'))), 600)}`),
+    ...x.effects.map((e) => `    ${String(e['type'])}: ${plainEffect(e) ?? oneLine(JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k]) => k !== 'type'))), 600)}`),
     `    findings: ${x.findings.map((f) => `${f.code} ${f.severity}`).join(', ') || 'none'}`,
     `    risk floor ${x.risk_floor}; description check ${x.description_check}; must_veto ${x.must_veto}`,
     ...a.description.contradictions.map((why) => `    contradicts: ${oneLine(why, 300)}`),
-    ...(x.findings.some((f) => f.code === 'GUARD_WEAKENED') && x.effects.some((e) => e['type'] === 'policy_change')
-      ? ['    note: kaap-core flags every change to a role that holds the guard as GUARD_WEAKENED, and this draft creates one; the effect above shows what it changes']
-      : []),
   ];
 }
 
