@@ -13,7 +13,7 @@ import { CapGuard } from './caps.ts';
 import { NearChain, loadKey } from './chain.ts';
 import { ConfigError, loadConfig } from './config.ts';
 import { ALL, Health } from './health.ts';
-import { Judge } from './judge.ts';
+import { Judge, aiSecrets } from './judge.ts';
 import { addSecret, createLogger } from './log.ts';
 import { formatNear } from './near.ts';
 import { Reads } from './reads.ts';
@@ -70,9 +70,10 @@ async function main(): Promise<void> {
   const reads = new Reads(primary, secondary, bridge, 1_000, sleep);
   const submitter = new Submitter(store, chain, config.KAAP_NETWORK, log, { pollMs: 1_500, sendTries: 4, sleep, explorer });
   const acceptedKey = { value: null as string | null };
+  const secretsRef = aiSecrets(config, log);
   const judge = new Judge(
     { store, submitter, caps, bridge, health, log, acceptedKey: () => acceptedKey.value, now },
-    { network: config.KAAP_NETWORK, guard: config.KAAP_GUARD, outlayer: config.KAAP_OUTLAYER, project: config.KAAP_SEALED_PROJECT, verdictTtlMs: config.KAAP_VERDICT_TTL_MS, windowBlocks: config.KAAP_RUN_WINDOW_BLOCKS },
+    { network: config.KAAP_NETWORK, guard: config.KAAP_GUARD, outlayer: config.KAAP_OUTLAYER, project: config.KAAP_SEALED_PROJECT, verdictTtlMs: config.KAAP_VERDICT_TTL_MS, windowBlocks: config.KAAP_RUN_WINDOW_BLOCKS, secretsRef },
   );
   const actor = new Actor({ store, submitter, caps, reads, health, log, now, sleep }, { network: config.KAAP_NETWORK, guard: config.KAAP_GUARD, registry: config.KAAP_REGISTRY, gateTries: 3, gateRetryMs: 1_500 });
   let worker: Worker | null = null;
@@ -103,6 +104,7 @@ async function main(): Promise<void> {
     guard: config.KAAP_GUARD,
     registry: config.KAAP_REGISTRY,
     sealed_project: config.KAAP_SEALED_PROJECT,
+    ai_secrets: secretsRef ?? 'none, so verdicts have no AI second opinion',
     providers: [primary.name, secondary.name],
     caps: { runs_per_dao_day: config.KAAP_CAP_RUNS_PER_DAO_DAY, records_per_dao_day: config.KAAP_CAP_RECORDS_PER_DAO_DAY, near_per_day: formatNear(config.KAAP_CAP_NEAR_PER_DAY) },
     poll_ms: config.KAAP_POLL_MS,

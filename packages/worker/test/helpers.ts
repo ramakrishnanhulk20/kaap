@@ -272,7 +272,7 @@ export function sealedOutput(fields: VerdictFields, key: KeyPair): { v: 1; statu
   const verdict = bridge.encodeVerdict(fields);
   const decoded = bridge.decodeVerdict(Buffer.from(verdict, 'base64'));
   const signature = Buffer.from(key.sign(Buffer.from(decoded.signed_b64, 'base64')).signature).toString('base64');
-  return { v: 1, status: 'ok', verdict, signature, public_key: key.getPublicKey().toString(), explanation: 'AI unavailable: no NEAR AI key is set for this project yet.' };
+  return { v: 1, status: 'ok', verdict, signature, public_key: key.getPublicKey().toString(), explanation: 'AI unavailable (ai_key_missing): no NEAR AI key reached this run.' };
 }
 
 /** A request_execution outcome returning `output`, with OutLayer's completion event. */

@@ -8,7 +8,7 @@
 //! hands back to `kaap_free`. Inputs are never echoed into an error, so an answer can be logged
 //! without escaping attacker text.
 //!
-//! `called_accounts`, `receivers_hash`, `parse_proposal` and `same_proposal` are ports of the
+//! `called_accounts`, `parse_proposal` and `same_proposal` are ports of the
 //! sealed job's `reads.rs` (kaap-sealed cannot be a dependency here: its wasm32 build pulls in
 //! OutLayer's WASI bindings). The worker never trusts its port alone: a verdict is acted on only
 //! when the hash computed here equals the hash the sealed job signed.
@@ -27,7 +27,6 @@ use serde::de::{self, Deserialize, Deserializer, MapAccess, Visitor};
 use serde::Serialize;
 use serde_json::value::RawValue;
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 
 /// JavaScript numbers are exact only up to 2^53 - 1, so any larger id, height or time is refused
 /// rather than rounded on the Node side.
@@ -292,13 +291,11 @@ fn called_accounts_of(bytes: &[u8]) -> Result<Value, &'static str> {
     called_accounts(&input.dao, input.kind.as_bytes()).map(|a| json!(a))
 }
 
-/// sha256 of the borsh of the (account, code hash) pairs, sorted: the `receivers_hash` a verdict
-/// carries. Input `[["<account>","<code hash>"],...]` in any order.
+/// kaap-core's `receipt::receivers_hash`: the `receivers_hash` a verdict carries. Input
+/// `[["<account>","<code hash>"],...]` in any order.
 fn receivers_hash_of(bytes: &[u8]) -> Result<Value, &'static str> {
-    let mut pairs: Vec<(String, String)> = serde_json::from_slice(bytes).map_err(|_| "not a list of pairs")?;
-    pairs.sort();
-    let encoded = borsh::to_vec(&pairs).map_err(|_| "the pairs could not be encoded")?;
-    Ok(json!(hex(&Sha256::digest(&encoded))))
+    let pairs: Vec<(String, String)> = serde_json::from_slice(bytes).map_err(|_| "not a list of pairs")?;
+    Ok(json!(hex(&kaap_core::receipt::receivers_hash(&pairs))))
 }
 
 fn called_accounts(dao: &str, kind_json: &[u8]) -> Result<Vec<String>, &'static str> {

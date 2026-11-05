@@ -54,6 +54,12 @@ const schema = z
     KAAP_ALERT_BATCH_MS: count(5_000, 3_600_000).default(60_000),
     KAAP_ALERT_CAP_PER_HOUR: count(1, 1_000).default(30),
     KAAP_LAG_ALERT_MS: count(3_000, 600_000).default(15_000),
+    // The OutLayer secret row holding the sealed job's NEAR_AI_API_KEY: the account that owns it
+    // and its profile. With no account the worker names no row, so the sealed judge answers
+    // without its AI, which is logged once at boot.
+    KAAP_AI_SECRETS_ACCOUNT: accountId.optional(),
+    // OutLayer's own rule allows letters, digits, "-" and "_", 1 to 64 bytes; this is its ASCII part.
+    KAAP_AI_SECRETS_PROFILE: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, 'not an OutLayer secrets profile (1 to 64 letters, digits, - or _)').default('near-ai'),
   })
   .refine((c) => new URL(c.KAAP_RPC_PRIMARY).host !== new URL(c.KAAP_RPC_SECONDARY).host, {
     message: 'the two RPC providers must be different hosts (C22)',

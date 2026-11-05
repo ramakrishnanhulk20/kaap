@@ -235,7 +235,6 @@ dependencies = [
  "near-account-id",
  "serde",
  "serde_json",
- "sha2",
 ]
 
 [[package]]

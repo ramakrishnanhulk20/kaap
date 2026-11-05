@@ -24,7 +24,8 @@ export type Signal =
   | 'accepted_key_changed'
   | 'worker_balance_low'
   | 'guard_balance_low'
-  | 'alerts_failing';
+  | 'alerts_failing'
+  | 'ai_key_missing';
 
 export type Notice = 'counter_gap' | 'veto_lost';
 
@@ -57,6 +58,7 @@ export const SAYS: Record<Signal, string> = {
   worker_balance_low: "Kaap's worker account holds less NEAR than it needs to judge, record and veto 20 more attacks.",
   guard_balance_low: 'The guard contract holds less NEAR than the storage for 20 more vetoes.',
   alerts_failing: 'Kaap cannot deliver Telegram alerts right now.',
+  ai_key_missing: "The sealed judge ran without its NEAR AI key, so new verdicts carry no AI second opinion until the key reaches it again. Kaap's plain-code checks and vetoes still work.",
 };
 
 export interface Raised {

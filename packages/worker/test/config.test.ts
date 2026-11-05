@@ -97,3 +97,16 @@ test('NEAR amounts are read as exact decimals, never through a float', () => {
     assert.ok(problems({ ...complete, KAAP_CAP_NEAR_PER_DAY: bad }).some((p) => p.startsWith('KAAP_CAP_NEAR_PER_DAY:')), bad);
   }
 });
+
+test('the NEAR AI secret row is optional: no account by default, profile near-ai, both checked', () => {
+  const c = loadConfig(complete);
+  assert.equal(c.KAAP_AI_SECRETS_ACCOUNT, undefined, 'no default account');
+  assert.equal(c.KAAP_AI_SECRETS_PROFILE, 'near-ai');
+  const set = loadConfig({ ...complete, KAAP_AI_SECRETS_ACCOUNT: 'ramn-ai.testnet', KAAP_AI_SECRETS_PROFILE: 'kaap_ai-2' });
+  assert.deepEqual([set.KAAP_AI_SECRETS_ACCOUNT, set.KAAP_AI_SECRETS_PROFILE], ['ramn-ai.testnet', 'kaap_ai-2']);
+  assert.equal(loadConfig({ ...complete, KAAP_AI_SECRETS_ACCOUNT: '' }).KAAP_AI_SECRETS_ACCOUNT, undefined, 'empty counts as unset');
+  const got = problems({ ...complete, KAAP_AI_SECRETS_ACCOUNT: 'Ram N', KAAP_AI_SECRETS_PROFILE: 'near ai/x' });
+  assert.ok(got.some((p) => p.startsWith('KAAP_AI_SECRETS_ACCOUNT:')));
+  assert.ok(got.some((p) => p.startsWith('KAAP_AI_SECRETS_PROFILE:')));
+  assert.ok(!got.join('\n').includes('near ai/x'), 'values are never echoed');
+});

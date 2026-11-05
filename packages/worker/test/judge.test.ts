@@ -1,21 +1,23 @@
 // The sealed run: recorded testnet outcomes parsed (a signed verdict, a hold, OutLayer never
 // answering), the no-answer run treated as a failed run and retried exactly once, and retries that
 // re-send the same signed bytes instead of paying twice (6e). Not covered: OutLayer's own
-// behaviour beyond the three recorded outcomes, and the live send path, which DONE MEANS 2 runs.
+// behaviour beyond the three recorded outcomes, the live send path, which DONE MEANS 2 runs, and
+// whether OutLayer really hands the job the key a run names (the first keyed testnet run shows it).
 
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 
 import { CapGuard } from '../src/caps.ts';
-import { Health } from '../src/health.ts';
-import { Judge, RUN_ATTEMPTS, outlayerCharge } from '../src/judge.ts';
+import { ALL, Health, levelOf } from '../src/health.ts';
+import { AI_KEY_MISSING, Judge, RUN_ATTEMPTS, aiSecrets, outlayerCharge, type SecretsRef } from '../src/judge.ts';
 import type { TxOutcome } from '../src/outcome.ts';
 import { Submitter } from '../src/submit.ts';
 import { DAO, FakeChain, GUARD, NETWORK, T0, bridge, events, fixture, memoryLog, memoryStore, noSleep, runOutcome, sealedOutput, testKey, verdictFields } from './helpers.ts';
 
 const SEALED_KEY = 'ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN';
 
-function setup(opts: { acceptedKey?: string; now?: number; guard?: string } = {}) {
+function setup(opts: { acceptedKey?: string; now?: number; guard?: string; secretsRef?: SecretsRef } = {}) {
   const chain = new FakeChain();
   const store = memoryStore(() => opts.now ?? T0);
   const { log, lines } = memoryLog();
@@ -25,7 +27,7 @@ function setup(opts: { acceptedKey?: string; now?: number; guard?: string } = {}
   const key = testKey();
   const judge = new Judge(
     { store, submitter, caps, bridge, health, log, acceptedKey: () => opts.acceptedKey ?? key.getPublicKey().toString(), now: () => opts.now ?? T0 },
-    { network: NETWORK, guard: opts.guard ?? GUARD, outlayer: 'outlayer.testnet', project: 'kaap-worker-1029053612.testnet/kaap-sealed', verdictTtlMs: 600_000, windowBlocks: 220 },
+    { network: NETWORK, guard: opts.guard ?? GUARD, outlayer: 'outlayer.testnet', project: 'kaap-worker-1029053612.testnet/kaap-sealed', verdictTtlMs: 600_000, windowBlocks: 220, secretsRef: opts.secretsRef ?? null },
   );
   return { chain, store, health, judge, key, lines: () => lines };
 }
@@ -147,4 +149,62 @@ test('the worker logs every money movement with its explorer link', async () => 
   assert.equal(final?.link, 'https://testnet.nearblocks.io/txns/tx1');
   assert.equal(final?.kept_near, '0.001138');
   assert.equal(events(s.lines(), 'tx_signed')[0]?.reserved_near, '0.050000');
+});
+
+const SECRET_ROW: SecretsRef = { profile: 'near-ai', account_id: 'ramn-ai.testnet' };
+
+test('every run names the NEAR AI secret row when one is set, the retry included, and none when unset', async () => {
+  const s = setup({ secretsRef: SECRET_ROW });
+  const silent = fixture<TxOutcome>('run-no-answer');
+  let runs = 0;
+  s.chain.respond = () => (++runs === 1 ? silent : runOutcome(sealedOutput(verdictFields(4), s.key)));
+  await s.judge.judge(DAO, 4, 1);
+  const calls = s.chain.calls('request_execution');
+  assert.equal(calls.length, 2);
+  for (const call of calls) assert.deepEqual((call.args as { secrets_ref?: unknown }).secrets_ref, SECRET_ROW);
+
+  const none = setup();
+  none.chain.respond = () => runOutcome(sealedOutput(verdictFields(4), none.key));
+  await none.judge.judge(DAO, 4, 1);
+  assert.ok(!('secrets_ref' in (none.chain.calls('request_execution')[0]!.args as object)), 'no row is named rather than an empty one');
+});
+
+test('with no secrets account the worker says once at boot that runs carry no AI key', () => {
+  const { log, lines } = memoryLog();
+  assert.equal(aiSecrets({ KAAP_AI_SECRETS_PROFILE: 'near-ai' }, log), null);
+  assert.equal(events(lines, 'ai_off').length, 1);
+  const set = memoryLog();
+  assert.deepEqual(aiSecrets({ KAAP_AI_SECRETS_ACCOUNT: SECRET_ROW.account_id, KAAP_AI_SECRETS_PROFILE: SECRET_ROW.profile }, set.log), SECRET_ROW);
+  assert.equal(events(set.lines, 'ai_off').length, 0);
+});
+
+/** A signed sealed output whose explanation is `explanation` and whose verdict commits to it. */
+function explained(id: number, explanation: string, key: ReturnType<typeof testKey>, over: Parameters<typeof verdictFields>[1] = {}) {
+  const hash = createHash('sha256').update(explanation, 'utf8').digest('hex');
+  return { ...sealedOutput(verdictFields(id, { explanation_hash: hash, ...over }), key), explanation };
+}
+
+test('a verdict the sealed job signed without its AI key raises ai_key_missing; the next with a key clears it', async () => {
+  const s = setup();
+  s.chain.respond = () => runOutcome(explained(4, `${AI_KEY_MISSING}: no NEAR AI key reached this run.`, s.key));
+  assert.equal((await s.judge.judge(DAO, 4, 1)).kind, 'verdict', 'the verdict itself still counts');
+  assert.equal(s.health.has('ai_key_missing', ALL), true);
+  assert.equal(levelOf('ai_key_missing'), 'degraded');
+  assert.equal(events(s.lines(), 'guard_degraded')[0]?.signal, 'ai_key_missing');
+
+  s.chain.respond = () => runOutcome(explained(5, 'AI unverified (the run had no trusted clock). Pays a lookalike.', s.key, { ai_status: 'unverified', model_id: 'z-ai/glm-5.3-flash' }));
+  await s.judge.judge(DAO, 5, 1);
+  assert.equal(s.health.has('ai_key_missing', ALL), false);
+  assert.equal(events(s.lines(), 'guard_recovered').at(-1)?.signal, 'ai_key_missing');
+});
+
+test('only the explanation the signed verdict commits to can raise ai_key_missing', async () => {
+  const s = setup();
+  const loose = { ...sealedOutput(verdictFields(4), s.key), explanation: `${AI_KEY_MISSING}: no NEAR AI key reached this run.` };
+  s.chain.respond = () => runOutcome(loose);
+  await s.judge.judge(DAO, 4, 1);
+  assert.equal(s.health.has('ai_key_missing', ALL), false, 'the verdict hashes another explanation');
+  s.chain.respond = () => runOutcome(explained(5, `${AI_KEY_MISSING}: no NEAR AI key reached this run.`, s.key, { ai_status: 'verified', model_id: 'z-ai/glm-5.3-flash' }));
+  await s.judge.judge(DAO, 5, 1);
+  assert.equal(s.health.has('ai_key_missing', ALL), false, 'a verdict whose AI ran is not one without a key');
 });

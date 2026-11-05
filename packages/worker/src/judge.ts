@@ -9,6 +9,8 @@
 // and restart re-sends an attempt's signed bytes rather than paying for a second run. An attempt
 // a busy shard never took gives its reservation back under the daily cap when it is finished.
 
+import { createHash } from 'node:crypto';
+
 import { PublicKey } from 'near-api-js';
 import { z } from 'zod';
 
@@ -37,11 +39,34 @@ const output = z.discriminatedUnion('status', [
   z.strictObject({ v: z.literal(1), status: z.enum(['held', 'refused', 'failed']), reason: z.string().max(200) }),
 ]);
 
+/** The start of the explanation the sealed job signs when no NEAR AI key reached the run
+ *  (packages/sealed/src/ai.rs, `Refusal::AiKeyMissing`). OutLayer runs a project whose secret row
+ *  is missing, or locked to another build, without any error, so this is the only sign of it. */
+export const AI_KEY_MISSING = 'AI unavailable (ai_key_missing)';
+
+/** The OutLayer secret row a run names: OutLayer's `SecretsReference`. */
+export interface SecretsRef {
+  profile: string;
+  account_id: string;
+}
+
+/** The secret row runs name, from the settings, or null when none is set. Says so once, at boot,
+ *  when there is none, because every verdict then comes back without the AI. */
+export function aiSecrets(settings: { KAAP_AI_SECRETS_ACCOUNT?: string | undefined; KAAP_AI_SECRETS_PROFILE: string }, log: Logger): SecretsRef | null {
+  if (!settings.KAAP_AI_SECRETS_ACCOUNT) {
+    log.warn('ai_off', { reason: 'KAAP_AI_SECRETS_ACCOUNT is not set, so sealed runs carry no NEAR AI key and verdicts have no AI second opinion' });
+    return null;
+  }
+  return { profile: settings.KAAP_AI_SECRETS_PROFILE, account_id: settings.KAAP_AI_SECRETS_ACCOUNT };
+}
+
 export interface JudgeSettings {
   network: string;
   guard: string;
   outlayer: string;
   project: string;
+  /** Named in every run when set, so OutLayer hands the sealed job its NEAR AI key. */
+  secretsRef?: SecretsRef | null;
   verdictTtlMs: number;
   windowBlocks: number;
 }
@@ -51,7 +76,9 @@ export type Judgement =
   | { kind: 'no_verdict'; attempts: number; last: RunState; detail: string }
   | { kind: 'capped'; detail: string };
 
-type Attempt = { state: 'answered'; verdict: DecodedVerdict; verdictB64: string; signatureB64: string; tx: string } | { state: Exclude<RunState, 'answered' | 'pending'>; detail: string; tx: string | null };
+type Attempt =
+  | { state: 'answered'; verdict: DecodedVerdict; verdictB64: string; signatureB64: string; tx: string; aiKeyMissing: boolean }
+  | { state: Exclude<RunState, 'answered' | 'pending'>; detail: string; tx: string | null };
 
 /** OutLayer's charge for a run: its `execution_completed` event, or for an unanswered run the
  *  base fee it logs before refunding the rest. */
@@ -118,7 +145,13 @@ export class Judge {
         proposalId: id,
         receiver: this.#s.outlayer,
         method: 'request_execution',
-        args: { source: { Project: { project_id: this.#s.project, version_key: null } }, input_data: this.input(dao, id), response_format: 'Json', resource_limits: RESOURCE_LIMITS },
+        args: {
+          source: { Project: { project_id: this.#s.project, version_key: null } },
+          input_data: this.input(dao, id),
+          response_format: 'Json',
+          resource_limits: RESOURCE_LIMITS,
+          ...(this.#s.secretsRef ? { secrets_ref: this.#s.secretsRef } : {}),
+        },
         gas: RUN_GAS,
         deposit: RUN_DEPOSIT,
         reserved: worstCase(RUN_GAS, RUN_DEPOSIT),
@@ -136,6 +169,10 @@ export class Judge {
         this.#health.clear('run_without_verdict', dao);
         this.#health.clear('verdict_rejected', dao);
         this.#health.clear('accepted_key_changed', ALL);
+        // The key is one setting for every DAO: missing in one run means missing for all, and a
+        // run it reached means it is back.
+        if (result.aiKeyMissing) this.#health.raise('ai_key_missing', ALL, { dao, proposal_id: id });
+        else this.#health.clear('ai_key_missing', ALL);
         return { kind: 'verdict', verdict: result.verdict, verdictB64: result.verdictB64, signatureB64: result.signatureB64, runTx: result.tx };
       }
       this.#store.finishRun(key, result.state, result.detail);
@@ -192,6 +229,9 @@ export class Judge {
     if (signature.length !== 64 || !PublicKey.fromString(accepted).verify(Buffer.from(verdict.signed_b64, 'base64'), signature)) return reject('the signature does not verify under the accepted key');
     if (verdict.guard !== this.#s.guard || verdict.network !== this.#s.network || verdict.dao !== dao || verdict.proposal_id !== id) return reject('the verdict names another guard, network, DAO or proposal');
     if (verdict.expires_at_ms <= this.#now()) return reject('the verdict is already expired');
-    return { state: 'answered', verdict, verdictB64: parsed.verdict, signatureB64: parsed.signature, tx };
+    // The explanation counts only when it is the text the signed verdict's hash covers.
+    const explained = createHash('sha256').update(parsed.explanation, 'utf8').digest('hex') === verdict.explanation_hash;
+    const aiKeyMissing = explained && verdict.ai_status === 'unavailable' && parsed.explanation.startsWith(AI_KEY_MISSING);
+    return { state: 'answered', verdict, verdictB64: parsed.verdict, signatureB64: parsed.signature, tx, aiKeyMissing };
   }
 }
