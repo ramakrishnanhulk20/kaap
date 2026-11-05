@@ -92,8 +92,10 @@ impl<H: Http> RpcProvider<H> {
         let request = Request {
             method: Method::Post,
             endpoint: self.endpoint,
+            tail: "",
             headers: &[("content-type", "application/json"), ("accept", "application/json")],
             body: Some(body.as_bytes()),
+            keep_headers: &[],
             limits: RPC_LIMITS.within(self.deadline),
         };
         let response = self.http.send(&request).map_err(ReadFail::Transport)?;

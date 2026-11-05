@@ -1,6 +1,6 @@
 //! Parsing NEAR AI's catalog entry and answer as untrusted input (C10, C12). Not covered here:
-//! the HTTP call itself (`ai_call.rs` runs it against recorded answers), a live answer (there is
-//! no NEAR AI key yet), and NEAR AI's signature and attestation checks, which are WO-05.
+//! the HTTP call itself (`ai_call.rs` runs it against recorded answers), a live answer (the first
+//! keyed testnet run gives one), and the "AI verified" checks (`attest_*.rs`).
 
 use kaap_sealed::ai::*;
 
@@ -106,17 +106,28 @@ fn chat(model: &str, finish: &str, content: serde_json::Value, choices: usize) -
 }
 
 #[test]
-fn the_chat_response_must_be_one_finished_answer_from_the_model_asked() {
+fn the_chat_response_must_be_one_finished_answer() {
     let good = serde_json::Value::String(answer("medium", "Pays an account never paid before."));
-    assert_eq!(parse_chat_response(&chat(MODEL_ID, "stop", good.clone(), 1), MODEL_ID).unwrap().risk, AiRisk::Medium);
-    assert_eq!(parse_chat_response(&chat("zai-org/GLM-5.1-FP8", "stop", good.clone(), 1), MODEL_ID), Err(Refusal::OtherModelAnswered));
-    assert_eq!(parse_chat_response(&chat(MODEL_ID, "length", good.clone(), 1), MODEL_ID), Err(Refusal::NotOneFinishedChoice));
-    assert_eq!(parse_chat_response(&chat(MODEL_ID, "stop", good.clone(), 2), MODEL_ID), Err(Refusal::NotOneFinishedChoice));
-    assert_eq!(parse_chat_response(&chat(MODEL_ID, "stop", good, 0), MODEL_ID), Err(Refusal::NotOneFinishedChoice));
+    assert_eq!(parse_chat_response(&chat(MODEL_ID, "stop", good.clone(), 1)).unwrap().risk, AiRisk::Medium);
+    assert!(parse_chat_response(&chat("zai-org/GLM-5.1-FP8", "stop", good.clone(), 1)).is_ok(), "which model answered is a C11 check");
+    assert_eq!(parse_chat_response(&chat(MODEL_ID, "length", good.clone(), 1)), Err(Refusal::NotOneFinishedChoice));
+    assert_eq!(parse_chat_response(&chat(MODEL_ID, "stop", good.clone(), 2)), Err(Refusal::NotOneFinishedChoice));
+    assert_eq!(parse_chat_response(&chat(MODEL_ID, "stop", good, 0)), Err(Refusal::NotOneFinishedChoice));
     let parts = serde_json::json!([{ "type": "text", "text": answer("low", "Fine.") }]);
-    assert_eq!(parse_chat_response(&chat(MODEL_ID, "stop", parts, 1), MODEL_ID), Err(Refusal::AnswerNotTheSchema));
-    assert_eq!(parse_chat_response(&chat(MODEL_ID, "stop", serde_json::Value::Null, 1), MODEL_ID), Err(Refusal::AnswerNotTheSchema));
-    assert_eq!(parse_chat_response(br#"{"error":{"message":"no"}}"#, MODEL_ID), Err(Refusal::ResponseUnreadable));
+    assert_eq!(parse_chat_response(&chat(MODEL_ID, "stop", parts, 1)), Err(Refusal::AnswerNotTheSchema));
+    assert_eq!(parse_chat_response(&chat(MODEL_ID, "stop", serde_json::Value::Null, 1)), Err(Refusal::AnswerNotTheSchema));
+    assert_eq!(parse_chat_response(br#"{"error":{"message":"no"}}"#), Err(Refusal::ResponseUnreadable));
+}
+
+#[test]
+fn a_cut_off_completion_is_still_read_for_its_token_counts() {
+    let mut body: serde_json::Value = serde_json::from_slice(&chat(MODEL_ID, "length", serde_json::json!("{\"risk\""), 1)).unwrap();
+    body["usage"]["completion_tokens_details"] = serde_json::json!({ "reasoning_tokens": 256 });
+    let c = read_completion(body.to_string().as_bytes()).unwrap();
+    assert_eq!((c.id.as_str(), c.object.as_str(), c.finish_reason.as_deref()), ("chatcmpl-1", "chat.completion", Some("length")));
+    assert_eq!((c.usage.prompt_tokens, c.usage.completion_tokens, c.usage.reasoning_tokens), (Some(10), Some(20), Some(256)));
+    assert_eq!(c.content.as_deref(), Some("{\"risk\""));
+    assert_eq!(answer_of(&c), Err(Refusal::NotOneFinishedChoice));
 }
 
 #[test]
@@ -127,7 +138,10 @@ fn the_request_is_non_streamed_canonical_and_holds_only_the_fixed_prompt_and_the
     assert_eq!(body["messages"].as_array().unwrap().len(), 2);
     assert_eq!(body["messages"][0]["content"], kaap_sealed::prompt::SYSTEM_PROMPT);
     assert_eq!(body["messages"][1]["content"], "FACTS");
-    assert_eq!(body["max_tokens"], MAX_ANSWER_TOKENS);
+    assert_eq!(body["thinking_token_budget"], THINKING_TOKEN_BUDGET);
+    assert_eq!(body["max_tokens"], THINKING_TOKEN_BUDGET + MAX_ANSWER_TOKENS);
+    assert!(body.get("chat_template_kwargs").is_none(), "enable_thinking false moves GLM 5.3 Flash's reasoning into content");
+    assert_eq!(MODEL_ID_QUERY, MODEL_ID.replace('/', "%2F"));
 }
 
 const LIVE_LIST: &str = include_str!("fixtures/model-list-2026-10-29.json");
@@ -157,4 +171,8 @@ fn only_the_pinned_sealed_model_passes_the_catalog_check() {
     let twice = LIVE_LIST.replace("\"models\": [", &format!("\"models\": [{{\"modelId\":\"{MODEL_ID}\",\"metadata\":null}},"));
     assert_eq!(check_model(twice.as_bytes(), MODEL_ID), Err(Refusal::ModelNotListed), "two entries for one id is not an answer");
     assert_eq!(check_model(b"<html>", MODEL_ID), Err(Refusal::CatalogUnreadable));
+    let aliases = aliases_of(LIVE_LIST.as_bytes(), MODEL_ID);
+    assert_eq!(aliases.len(), 14);
+    assert!(aliases.iter().any(|a| a == "zai-org/GLM-5.1-FP8") && !aliases.iter().any(|a| a == MODEL_ID));
+    assert!(aliases_of(b"<html>", MODEL_ID).is_empty());
 }

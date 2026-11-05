@@ -3,7 +3,11 @@
 
 #![allow(dead_code)]
 
+pub mod world;
+
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use kaap_sealed::fixture::FixtureHttp;
 use kaap_sealed::net::{Deadline, DRPC_TESTNET, HOST_STAND_IN_TESTNET};
@@ -100,7 +104,7 @@ pub struct Scripted(pub Vec<kaap_sealed::net::Response>, pub Vec<String>);
 
 impl kaap_sealed::net::Http for Scripted {
     fn send(&mut self, r: &kaap_sealed::net::Request<'_>) -> Result<kaap_sealed::net::Response, kaap_sealed::net::HttpFail> {
-        self.1.push(format!("{}{}", r.endpoint.authority, r.endpoint.path));
+        self.1.push(format!("{}{}{}", r.endpoint.authority, r.endpoint.path, r.tail));
         if self.0.is_empty() {
             Err(kaap_sealed::net::HttpFail::NoAnswerRecorded)
         } else {
@@ -129,4 +133,25 @@ pub fn open(out: &str) -> (kaap_core::Verdict, Value) {
     assert_eq!(verdict.explanation_hash, kaap_sealed::verdict::sha256(explanation.as_bytes()));
     assert!(out.len() <= kaap_sealed::output::MAX_OUTPUT_BYTES, "{} bytes", out.len());
     (verdict, v)
+}
+
+/// What a `Store` was given: (key, record) in order.
+pub type Records = Rc<RefCell<Vec<(String, Vec<u8>)>>>;
+
+/// A stand-in for OutLayer's public storage that keeps what was published, or refuses every
+/// write when `refuse` is set.
+#[derive(Clone, Default)]
+pub struct Store {
+    pub records: Records,
+    pub refuse: bool,
+}
+
+impl kaap_sealed::attest::EvidenceSink for Store {
+    fn publish(&mut self, key: &str, record: &[u8]) -> bool {
+        if self.refuse {
+            return false;
+        }
+        self.records.borrow_mut().push((key.to_string(), record.to_vec()));
+        true
+    }
 }

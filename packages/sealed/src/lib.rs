@@ -3,6 +3,7 @@
 //! opinion, and signs a verdict with a key only this project and its caller hold.
 
 pub mod ai;
+pub mod attest;
 pub mod input;
 pub mod job;
 pub mod net;

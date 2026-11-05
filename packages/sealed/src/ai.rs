@@ -1,18 +1,22 @@
-//! NEAR AI's opinion, parsed as an untrusted input (C10, C12).
+//! NEAR AI's opinion, parsed as an untrusted input (C10, C12) and checked for "AI verified" (C11).
 //!
 //! The model is asked only when the catalog says it runs in NEAR AI's own sealed hardware with
 //! attestation support, under its canonical id and with aliasing off. Its answer must be exactly
 //! `{"risk":...,"explanation":...}` with a known risk word and a short plain-text explanation;
-//! anything else makes the AI unavailable and the plain-code verdict stands.
+//! anything else makes the AI unavailable and the plain-code verdict stands. An answer that passes
+//! is Verified only when every check in `attest` passes, and Unverified otherwise.
 
 use serde::Deserialize;
 
+use crate::attest::{self, Evidence, Trust, Unverified, PREFLIGHT_BUDGET_MS};
 use crate::net::{Deadline, Http, HttpFail, Limits, Method, Request, NEAR_AI_CHAT, NEAR_AI_MODEL_LIST};
 
 /// The model Kaap asks: GLM 5.3 Flash, listed by NEAR AI as a Private TEE model (NEAR AI's own
 /// hardware) on near.ai/pricing and as `providerType` vllm, `ownedBy` nearai, attestation
 /// supported, in `GET /v1/model/list`, both read on 29 Oct 2026.
 pub const MODEL_ID: &str = "z-ai/glm-5.3-flash";
+/// `MODEL_ID` as a URL query value (`/` is `%2F`), written out so no encoder runs on it.
+pub const MODEL_ID_QUERY: &str = "z-ai%2Fglm-5.3-flash";
 
 /// What the catalog must say about `MODEL_ID` on the day of the run. `vllm` with owner `nearai`
 /// is how the list marks NEAR AI's own sealed hardware; partner enclaves are `chutes` or
@@ -42,7 +46,10 @@ pub struct AiAnswer {
 /// as every other reason in this crate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Refusal {
-    NoKey,
+    /// `NEAR_AI_API_KEY` was absent or empty. OutLayer starts a run whose secret row is missing
+    /// without any error, so this note carries its code (`ai_key_missing`) in the signed
+    /// explanation, where the worker reads it and raises a health signal instead of staying silent.
+    AiKeyMissing,
     KeyNotAHeaderValue,
     FactsTooLarge,
     CatalogUnreadable,
@@ -50,7 +57,6 @@ pub enum Refusal {
     ModelNotSealed,
     CallFailed,
     ResponseUnreadable,
-    OtherModelAnswered,
     NotOneFinishedChoice,
     AnswerTooLong,
     AnswerNotTheSchema,
@@ -66,7 +72,7 @@ impl Refusal {
     pub fn note(self) -> &'static str {
         use Refusal::*;
         match self {
-            NoKey => "AI unavailable: no NEAR AI key is set for this project yet.",
+            AiKeyMissing => "AI unavailable (ai_key_missing): no NEAR AI key reached this run.",
             KeyNotAHeaderValue => "AI unavailable: the NEAR AI key is not usable.",
             FactsTooLarge => "AI unavailable: the facts are too large to send.",
             CatalogUnreadable => "AI unavailable: the NEAR AI model list could not be read.",
@@ -74,7 +80,6 @@ impl Refusal {
             ModelNotSealed => "AI unavailable: the model list no longer marks the pinned model as sealed with attestation.",
             CallFailed => "AI unavailable: the request to NEAR AI failed.",
             ResponseUnreadable => "AI unavailable: the NEAR AI response could not be read.",
-            OtherModelAnswered => "AI unavailable: another model answered.",
             NotOneFinishedChoice => "AI unavailable: the answer was cut off or not a single choice.",
             AnswerTooLong => "AI unavailable: the answer was too long.",
             AnswerNotTheSchema => "AI unavailable: the answer was not the required JSON.",
@@ -83,6 +88,29 @@ impl Refusal {
             ExplanationTooLong => "AI unavailable: the explanation was over 280 bytes.",
             ExplanationNotPlainText => "AI unavailable: the explanation was not plain text.",
             Deadline => "AI unavailable: NEAR AI did not answer in time.",
+        }
+    }
+
+    /// The reason as the evidence record stores it.
+    pub fn code(self) -> &'static str {
+        use Refusal::*;
+        match self {
+            AiKeyMissing => "ai_key_missing",
+            KeyNotAHeaderValue => "key_not_a_header_value",
+            FactsTooLarge => "facts_too_large",
+            CatalogUnreadable => "catalog_unreadable",
+            ModelNotListed => "model_not_listed",
+            ModelNotSealed => "model_not_sealed",
+            CallFailed => "call_failed",
+            ResponseUnreadable => "response_unreadable",
+            NotOneFinishedChoice => "not_one_finished_choice",
+            AnswerTooLong => "answer_too_long",
+            AnswerNotTheSchema => "answer_not_the_schema",
+            UnknownRiskWord => "unknown_risk_word",
+            ExplanationEmpty => "explanation_empty",
+            ExplanationTooLong => "explanation_too_long",
+            ExplanationNotPlainText => "explanation_not_plain_text",
+            Deadline => "deadline",
         }
     }
 }
@@ -164,6 +192,22 @@ struct CatalogMetadata {
     attestation_supported: Option<bool>,
     verifiable: Option<bool>,
     is_ready: Option<bool>,
+    aliases: Option<Vec<String>>,
+}
+
+/// The other names the catalog lists for `model_id` (its own entry's `aliases`), so an answer
+/// that comes back under one of them can be told apart from another model's. An unreadable list
+/// gives none.
+pub fn aliases_of(list_body: &[u8], model_id: &str) -> Vec<String> {
+    let Ok(list) = serde_json::from_slice::<ModelList>(list_body) else {
+        return Vec::new();
+    };
+    list.models
+        .into_iter()
+        .filter(|m| m.model_id == model_id)
+        .filter_map(|m| m.metadata.and_then(|d| d.aliases))
+        .flatten()
+        .collect()
 }
 
 /// Checks `GET /v1/model/list` for the pinned model before any prompt leaves the job (C12).
@@ -191,11 +235,17 @@ pub fn check_model(list_body: &[u8], model_id: &str) -> Result<(), Refusal> {
     }
 }
 
-/// The largest answer the model may write, in tokens. A valid answer is about 100.
+/// GLM 5.3 Flash reasons before it answers. NEAR AI's docs (27 Oct 2026) say turning reasoning off
+/// through `chat_template_kwargs` only moves it into `content`, which would break the exact-JSON
+/// answer, so the reasoning is kept short with a budget instead.
+pub const THINKING_TOKEN_BUDGET: u32 = 256;
+/// The answer itself, about 100 tokens. Provisional: the first live run stores the real token
+/// counts in its evidence (`completion`), and this is sized from them.
 pub const MAX_ANSWER_TOKENS: u32 = 400;
 
 /// The one chat request: non-streamed (a streamed answer is signed by the gateway, not the
-/// model), temperature 0, reasoning off so the whole token budget goes to the answer, JSON mode.
+/// model), temperature 0, reasoning capped at `THINKING_TOKEN_BUDGET`, room for the reasoning
+/// plus `MAX_ANSWER_TOKENS`, JSON mode. These are the exact bytes sent and hashed.
 pub fn chat_request_body(model_id: &str, user_message: &str) -> Vec<u8> {
     serde_json::json!({
         "model": model_id,
@@ -205,9 +255,9 @@ pub fn chat_request_body(model_id: &str, user_message: &str) -> Vec<u8> {
         ],
         "stream": false,
         "temperature": 0,
-        "max_tokens": MAX_ANSWER_TOKENS,
+        "max_tokens": THINKING_TOKEN_BUDGET + MAX_ANSWER_TOKENS,
+        "thinking_token_budget": THINKING_TOKEN_BUDGET,
         "response_format": { "type": "json_object" },
-        "chat_template_kwargs": { "enable_thinking": false },
     })
     .to_string()
     .into_bytes()
@@ -215,8 +265,11 @@ pub fn chat_request_body(model_id: &str, user_message: &str) -> Vec<u8> {
 
 #[derive(Deserialize)]
 struct ChatResponse {
+    id: String,
+    object: String,
     model: String,
     choices: Vec<ChatChoice>,
+    usage: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -231,27 +284,69 @@ struct ChatMessage {
     content: Option<serde_json::Value>,
 }
 
-/// Parses a non-streamed chat completion into the model's answer.
-///
-/// Refuses a body that is not the documented response shape, a `model` other than the one asked
-/// for (an alias or a fallback answered), anything but exactly one choice that finished with
-/// `stop` from the `assistant` role, content that is not a single string, and any answer
-/// `parse_answer` refuses.
-pub fn parse_chat_response(body: &[u8], model_id: &str) -> Result<AiAnswer, Refusal> {
+/// Token counts as the completion reported them.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Usage {
+    pub prompt_tokens: Option<u64>,
+    pub completion_tokens: Option<u64>,
+    pub reasoning_tokens: Option<u64>,
+}
+
+/// A non-streamed completion, read but not yet judged.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Completion {
+    pub id: String,
+    pub object: String,
+    pub model: String,
+    pub finish_reason: Option<String>,
+    /// The message text, when it was a single string.
+    pub content: Option<String>,
+    pub usage: Usage,
+}
+
+/// Reads a chat completion. Refuses a body that is not the documented response shape
+/// (`ResponseUnreadable`) and anything but exactly one choice from the `assistant` role
+/// (`NotOneFinishedChoice`). Which model answered and whether it streamed are judged by
+/// `attest::bind_answer`, not here.
+pub fn read_completion(body: &[u8]) -> Result<Completion, Refusal> {
     let response: ChatResponse = serde_json::from_slice(body).map_err(|_| Refusal::ResponseUnreadable)?;
-    if response.model != model_id {
-        return Err(Refusal::OtherModelAnswered);
-    }
     let [choice] = response.choices.as_slice() else {
         return Err(Refusal::NotOneFinishedChoice);
     };
-    if choice.finish_reason.as_deref() != Some("stop") || choice.message.role != "assistant" {
+    if choice.message.role != "assistant" {
         return Err(Refusal::NotOneFinishedChoice);
     }
-    match &choice.message.content {
-        Some(serde_json::Value::String(content)) => parse_answer(content),
-        _ => Err(Refusal::AnswerNotTheSchema),
+    let usage = response.usage.unwrap_or_default();
+    let count = |path: &[&str]| path.iter().try_fold(&usage, |v, k| v.get(k)).and_then(serde_json::Value::as_u64);
+    Ok(Completion {
+        id: response.id,
+        object: response.object,
+        model: response.model,
+        finish_reason: choice.finish_reason.clone(),
+        content: match &choice.message.content {
+            Some(serde_json::Value::String(text)) => Some(text.clone()),
+            _ => None,
+        },
+        usage: Usage {
+            prompt_tokens: count(&["prompt_tokens"]),
+            completion_tokens: count(&["completion_tokens"]),
+            reasoning_tokens: count(&["completion_tokens_details", "reasoning_tokens"]).or(count(&["reasoning_tokens"])),
+        },
+    })
+}
+
+/// The answer in a completion: it finished with `stop` (`NotOneFinishedChoice` when cut off),
+/// its content is a single string (`AnswerNotTheSchema`), and `parse_answer` accepts it.
+pub fn answer_of(completion: &Completion) -> Result<AiAnswer, Refusal> {
+    if completion.finish_reason.as_deref() != Some("stop") {
+        return Err(Refusal::NotOneFinishedChoice);
     }
+    parse_answer(completion.content.as_deref().ok_or(Refusal::AnswerNotTheSchema)?)
+}
+
+/// `read_completion` and `answer_of` together.
+pub fn parse_chat_response(body: &[u8]) -> Result<AiAnswer, Refusal> {
+    answer_of(&read_completion(body)?)
 }
 
 /// The public catalog is about 76 KB today.
@@ -272,30 +367,68 @@ pub const CHAT_LIMITS: Limits = Limits {
     max_body_bytes: 64 * 1024,
 };
 
+/// Whether an answer that passed C10 is also "AI verified" (C11).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Check {
+    /// Every check passed. `tcb_status` is the Intel TCB level the model's quote reported.
+    Verified { tcb_status: String },
+    Unverified(Unverified),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AiOutcome {
-    /// The model answered and the answer passed every check. Not yet "verified": the signature
-    /// and attestation checks are WO-05.
-    Answered { answer: AiAnswer, model_id: &'static str },
+    /// The model answered and the answer passed C10; `check` says whether it is verified.
+    Answered { answer: AiAnswer, model_id: &'static str, check: Check },
     Unavailable(Refusal),
 }
 
-/// Asks the pinned model once, or says why not.
-///
-/// `key` is the NEAR AI key from the OutLayer secret; it goes only into the `authorization`
-/// header of the chat request, never to the catalog request and never into any output. No key,
-/// a key that is not a plain header value, facts that did not fit (`None`), a catalog that does
-/// not mark the model as sealed, a failed or late call, and any refused answer each give
-/// `Unavailable` with the reason. Each request runs under its own limits, cut to `deadline`.
-pub fn consult(http: &mut dyn Http, key: Option<&str>, facts: Option<&str>, deadline: Deadline) -> AiOutcome {
-    match ask(http, key, facts, deadline) {
-        Ok(answer) => AiOutcome::Answered { answer, model_id: MODEL_ID },
-        Err(why) => AiOutcome::Unavailable(why),
+impl AiOutcome {
+    /// The same outcome, no longer verified for `why`. Anything not Verified stays as it is.
+    pub fn unverified(self, why: Unverified) -> AiOutcome {
+        match self {
+            AiOutcome::Answered { answer, model_id, check: Check::Verified { .. } } => {
+                AiOutcome::Answered { answer, model_id, check: Check::Unverified(why) }
+            }
+            other => other,
+        }
     }
 }
 
-fn ask(http: &mut dyn Http, key: Option<&str>, facts: Option<&str>, deadline: Deadline) -> Result<AiAnswer, Refusal> {
-    let key = key.filter(|k| !k.is_empty()).ok_or(Refusal::NoKey)?;
+/// Asks the pinned model once and checks the answer, or says why not; also returns what the
+/// checks saw, for publication beside the verdict.
+///
+/// `key` is the NEAR AI key from the OutLayer secret; it goes only into the `authorization`
+/// header of the keyed NEAR AI calls (the attestation report, the chat, the signature), never to
+/// the catalog, Intel, NVIDIA or the public token, and never into any output. No key, a key that
+/// is not a plain header value, facts that did not fit (`None`), a catalog that does not mark the
+/// model as sealed, a failed or late call, and any refused answer each give `Unavailable` with the
+/// reason. Before the question, `attest::preflight` checks the model's attestation; its failure
+/// does not stop the question, it only means the answer cannot be Verified. Each request runs
+/// under its own limits, cut to `deadline`; the preflight gets at most `PREFLIGHT_BUDGET_MS`.
+pub fn consult(
+    http: &mut dyn Http,
+    key: Option<&str>,
+    facts: Option<&str>,
+    deadline: Deadline,
+    trust: &Trust,
+) -> (AiOutcome, Evidence) {
+    let mut evidence = Evidence::new();
+    let outcome = match ask(http, key, facts, deadline, trust, &mut evidence) {
+        Ok((answer, check)) => AiOutcome::Answered { answer, model_id: MODEL_ID, check },
+        Err(why) => AiOutcome::Unavailable(why),
+    };
+    (outcome, evidence)
+}
+
+fn ask(
+    http: &mut dyn Http,
+    key: Option<&str>,
+    facts: Option<&str>,
+    deadline: Deadline,
+    trust: &Trust,
+    evidence: &mut Evidence,
+) -> Result<(AiAnswer, Check), Refusal> {
+    let key = key.filter(|k| !k.is_empty()).ok_or(Refusal::AiKeyMissing)?;
     if !key.bytes().all(|b| b.is_ascii_graphic()) {
         return Err(Refusal::KeyNotAHeaderValue);
     }
@@ -309,8 +442,10 @@ fn ask(http: &mut dyn Http, key: Option<&str>, facts: Option<&str>, deadline: De
         .send(&Request {
             method: Method::Get,
             endpoint: NEAR_AI_MODEL_LIST,
+            tail: "",
             headers: &[("accept", "application/json")],
             body: None,
+            keep_headers: &[],
             limits: MODEL_LIST_LIMITS.within(deadline),
         })
         .map_err(late)?;
@@ -318,6 +453,11 @@ fn ask(http: &mut dyn Http, key: Option<&str>, facts: Option<&str>, deadline: De
         return Err(Refusal::CatalogUnreadable);
     }
     check_model(&list.body, MODEL_ID)?;
+    let aliases = aliases_of(&list.body, MODEL_ID);
+
+    evidence.model_id = Some(MODEL_ID);
+    evidence.nonce = trust.nonce.map(hex::encode);
+    let verified = attest::preflight(http, key, trust, deadline.earlier(PREFLIGHT_BUDGET_MS), evidence);
 
     if deadline.passed() {
         return Err(Refusal::Deadline);
@@ -328,18 +468,31 @@ fn ask(http: &mut dyn Http, key: Option<&str>, facts: Option<&str>, deadline: De
         .send(&Request {
             method: Method::Post,
             endpoint: NEAR_AI_CHAT,
+            tail: "",
             headers: &[
                 ("authorization", authorization.as_str()),
                 ("content-type", "application/json"),
                 ("accept", "application/json"),
+                ("accept-encoding", "identity"),
                 ("x-no-aliasing", "true"),
             ],
             body: Some(&body),
+            keep_headers: &["content-type"],
             limits: CHAT_LIMITS.within(deadline),
         })
         .map_err(late)?;
     if chat.status != 200 {
         return Err(Refusal::CallFailed);
     }
-    parse_chat_response(&chat.body, MODEL_ID)
+    let completion = read_completion(&chat.body)?;
+    evidence.completion = Some(attest::evidence::CompletionRecord::new(&completion));
+    let answer = answer_of(&completion)?;
+
+    let pre = verified.as_ref().ok().map(Vec::as_slice);
+    let bound = attest::bind_answer(http, key, pre, MODEL_ID, &aliases, &body, &chat, &completion, deadline, evidence);
+    let check = match (verified, bound) {
+        (Err(why), _) | (Ok(_), Err(why)) => Check::Unverified(why),
+        (Ok(_), Ok(model)) => Check::Verified { tcb_status: model.tcb_status },
+    };
+    Ok((answer, check))
 }

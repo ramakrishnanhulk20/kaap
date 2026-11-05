@@ -93,13 +93,65 @@ here: 0.034956 NEAR in all. The 14 runs (3, 1 and 10 above) account for 0.026979
 receipts; the remaining 0.007977 is `create_project`, mostly its storage deposit, which the
 contract holds and refunds if the project is deleted.
 
+## The first run that asked the model
+
+Run once on 5 Nov 2026 at 14:23 UTC, from WSL, after the NEAR AI key became an OutLayer secret of
+this project. The numbers above are from 29 Oct and an earlier build; this section is on its own.
+
+| Thing | Value |
+| --- | --- |
+| Transaction | [5VFpn1vQ...](https://testnet.nearblocks.io/txns/5VFpn1vQKnDJ5fYBvSivMRJqghBPLjD6u7DrRyZGLK8G), signed by `kaap-worker-1029053612.testnet` |
+| Proposal judged | `kaap-dao-1029064008.testnet` #9, guard `kaap-guard-1029061211.testnet` |
+| Version (wasm sha256) | `73409203d24cbda98e98511bb97d1a2065b72702140138f85a198bff347cae87` |
+| Verdict | risk critical, floor critical, findings `[DESC_CONTRADICTS, UNKNOWN_VALUE]`, `ai_status` verified |
+| Model | `z-ai/glm-5.3-flash`, chat `8c0a5fbf538542b99aaf2406585ae48d` |
+| Worker time | 15,683 ms against the 60 s limit |
+| Instructions | 418,502,717 of the 10,000,000,000 allowed |
+| Request to result | 38 blocks, 23,026 ms on chain, 27,171 ms wall clock |
+| Paid | 0.00335 testnet NEAR: OutLayer's charge 0.00257, transaction gas 0.00078 |
+
+The critical floor and both findings are Kaap's own rules, worked out before the model was asked.
+The model can only raise a risk, never lower it, so this verdict would have been critical with no
+model at all. The AI added the explanation and the second opinion.
+
+To see what Kaap checked before it wrote `verified`, with node and curl, no account and no key:
+
+```
+bash scripts/WO-05a-evidence.sh 5VFpn1vQKnDJ5fYBvSivMRJqghBPLjD6u7DrRyZGLK8G
+```
+
+It reads the transaction's output from an archival RPC, hashes `kaap-verdict-v1\n` followed by the
+verdict's borsh bytes (the output leaves that prefix off), and fetches the record stored under
+`ai-evidence:<hash>`. It refuses, exit 1, when no record is stored there or the record names a
+different verdict. It shows what the run recorded and does not repeat the checks itself.
+
+| What the record says | Value |
+| --- | --- |
+| Model's Intel quote | TCB UpToDate, no advisories, TCB evaluation data number 20, 5,006 bytes |
+| PCK flags | `smt_enabled`, `cached_keys` and `dynamic_platform` all true: accepted, not judged |
+| GPUs | 8, passed by NVIDIA's NRAS |
+| Gateway's Intel token | TCB UpToDate, no advisories. About NEAR AI's gateway only, not the model |
+| Signature | ed25519 by `5a0210f2...caff`, the key the model's quote named, over the request and response hashes |
+| Completion | finish reason `stop`, 452 prompt tokens, 323 completion tokens, of which 257 reasoning |
+
+The record holds hashes and never the answer text. OutLayer's own verifier
+(`outlayer-verify tx 5VFpn1vQKnDJ5fYBvSivMRJqghBPLjD6u7DrRyZGLK8G --network testnet`) said PROVEN:
+this input produced this output inside genuine Intel TDX hardware, running code approved on chain.
+That is about OutLayer's worker. The model's machine is covered by the record above.
+
 ## What these runs do not cover
 
 - One proposal, one location, one 8-minute window, runs one after another. No load, nothing
   concurrent, nothing on mainnet.
-- The NEAR AI call inside OutLayer: no key yet, so no run asked the model. The model-list check
-  and a refused chat call were exercised only in the local wasmtime build.
+- The NEAR AI call inside OutLayer: one keyed run only, on one proposal, signed through the test
+  script and not yet through the worker's own path. Every other run here had no key and never
+  asked the model. A refused chat call was exercised only in the local wasmtime build.
+- Three checks WO-05d owes: replaying RTMR3 from its event log, comparing MRCONFIGID against
+  `app_compose`, and an allowlist of approved model builds. Until then "verified" means a genuine,
+  non-debug Intel TDX machine whose GPUs NVIDIA passed holds the key that signed this exact answer,
+  not that it runs a build Kaap has reviewed.
 - The host's lag: the host read at the HTTPS provider's final block every time, so the one-retry
   path for a host that is a block behind never ran.
-- The full attestation check (Intel DCAP over the quote, the worker's measurements): only the named
-  fields and the two hashes were checked.
+- OutLayer's own quote: this script checks the named fields and the two hashes only. Intel's
+  signature and the worker's measurements are checked by OutLayer's `outlayer-verify`, which said
+  PROVEN on the keyed run above.

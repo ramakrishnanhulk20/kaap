@@ -3,6 +3,7 @@
 
 use outlayer::raw::rpc as host_rpc;
 
+use crate::attest::EvidenceSink;
 use crate::rpc::{
     block_answer, host_view_answer, view_account_answer, AccountView, At, BlockView, Provider, ReadFail, ViewResult,
     MAX_VIEW_BYTES,
@@ -61,5 +62,22 @@ impl VerdictSigner for HostSigner {
     fn sign(&mut self, message: &[u8]) -> Result<[u8; 64], SignFail> {
         let signature = outlayer::signing_keys::sign(SIGNING_KEY_PATH, None, message).map_err(|_| SignFail::Signature)?;
         <[u8; 64]>::try_from(signature.as_slice()).map_err(|_| SignFail::Signature)
+    }
+}
+
+/// This run's attestation nonce from WASI random, which gave fresh bytes on every testnet run of
+/// the 26 Oct spike. `None` if the host ever returned another length.
+pub fn fresh_nonce() -> Option<[u8; 32]> {
+    wasi::random::random::get_random_bytes(32).try_into().ok()
+}
+
+/// The project's public worker storage: only this project's code can write it, anyone can read it
+/// over OutLayer's `/public/storage/get`. Unencrypted on purpose, and so it holds only what
+/// `attest::evidence` allows.
+pub struct PublicEvidence;
+
+impl EvidenceSink for PublicEvidence {
+    fn publish(&mut self, key: &str, record: &[u8]) -> bool {
+        outlayer::storage::set_worker_with_options(key, record, Some(false)).is_ok()
     }
 }

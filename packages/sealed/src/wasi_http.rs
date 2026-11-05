@@ -13,7 +13,7 @@ use wasi::http::types::{Fields, Method as WasiMethod, OutgoingBody, OutgoingRequ
 use wasi::io::poll::{poll, Pollable};
 use wasi::io::streams::{InputStream, StreamError};
 
-use crate::net::{Http, HttpFail, Method, Request, Response};
+use crate::net::{is_safe_tail, Http, HttpFail, Method, Request, Response, MAX_HEADER_BYTES};
 
 const NS_PER_MS: u64 = 1_000_000;
 const READ_CHUNK: u64 = 64 * 1024;
@@ -25,6 +25,9 @@ impl Http for WasiHttp {
         let limits = r.limits;
         if limits.overall_ms == 0 {
             return Err(HttpFail::Timeout);
+        }
+        if !is_safe_tail(r.tail) {
+            return Err(HttpFail::Setup);
         }
         let ns = |ms: u64| ms.saturating_mul(NS_PER_MS);
         let timer = monotonic_clock::subscribe_duration(ns(limits.overall_ms));
@@ -40,7 +43,8 @@ impl Http for WasiHttp {
         request.set_method(&method).map_err(|_| HttpFail::Setup)?;
         request.set_scheme(Some(&Scheme::Https)).map_err(|_| HttpFail::Setup)?;
         request.set_authority(Some(r.endpoint.authority)).map_err(|_| HttpFail::Setup)?;
-        request.set_path_with_query(Some(r.endpoint.path)).map_err(|_| HttpFail::Setup)?;
+        let path = format!("{}{}", r.endpoint.path, r.tail);
+        request.set_path_with_query(Some(&path)).map_err(|_| HttpFail::Setup)?;
         let body = request.body().map_err(|_| HttpFail::Setup)?;
 
         let options = RequestOptions::new();
@@ -63,13 +67,34 @@ impl Http for WasiHttp {
         };
         let response = answered.map_err(|_| HttpFail::Send)?.map_err(|_| HttpFail::Send)?;
         let status = response.status();
+        let headers = kept_headers(&response.headers(), r.keep_headers)?;
         let incoming = response.consume().map_err(|_| HttpFail::Read)?;
         let bytes = {
             let stream = incoming.stream().map_err(|_| HttpFail::Read)?;
             read_all(&stream, limits.max_body_bytes, &timer)?
         };
-        Ok(Response { status, body: bytes })
+        Ok(Response { status, body: bytes, headers })
     }
+
+    fn pause(&mut self, ms: u64) {
+        monotonic_clock::subscribe_duration(ms.saturating_mul(NS_PER_MS)).block();
+    }
+}
+
+/// The first value of each header the request asked for, as text. A value over
+/// `MAX_HEADER_BYTES` or not UTF-8 fails the request rather than being cut or guessed at.
+fn kept_headers(fields: &Fields, names: &[&str]) -> Result<Vec<(String, String)>, HttpFail> {
+    let mut out = Vec::new();
+    for name in names {
+        if let Some(value) = fields.get(&name.to_string()).into_iter().next() {
+            if value.len() > MAX_HEADER_BYTES {
+                return Err(HttpFail::TooLarge);
+            }
+            let text = String::from_utf8(value).map_err(|_| HttpFail::Read)?;
+            out.push((name.to_string(), text));
+        }
+    }
+    Ok(out)
 }
 
 /// Waits until `ready` fires; a timeout when the job's timer fires first.

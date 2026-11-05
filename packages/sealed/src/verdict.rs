@@ -8,7 +8,7 @@ use kaap_core::{verdict_bytes, AiStatus, Analysis, Severity, Verdict};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use crate::ai::{AiOutcome, AiRisk};
+use crate::ai::{AiOutcome, AiRisk, Check};
 use crate::input::JobInput;
 use crate::output::MAX_OUTPUT_BYTES;
 use crate::reads::ChainRead;
@@ -72,17 +72,28 @@ pub fn combine_risk(floor: Severity, ai: Option<(AiRisk, AiStatus)>) -> Severity
     }
 }
 
+/// The words in front of the model's explanation. A verified answer states the Intel TCB level the
+/// model's hardware reported (Ram, 23 Oct 2026: every verdict says which); an unverified one says
+/// which check failed. Both come before the model's text because `fit` cuts from the end.
+pub fn ai_note(check: &Check) -> String {
+    match check {
+        Check::Verified { tcb_status } => format!("AI verified (Intel TCB: {tcb_status}). "),
+        Check::Unverified(why) => format!("AI unverified ({}). ", why.note()),
+    }
+}
+
 /// Builds the unsigned verdict and the explanation it will carry.
 ///
-/// `ai_status` is Unverified when the model answered (its signature and attestation are checked
-/// only from WO-05) and Unavailable otherwise; `model_id` is the model that answered, or empty
-/// when none did; the explanation is the model's, or the job's fixed note saying why there is
-/// none. `explanation_hash` is set later, once the explanation has been fitted to the output.
+/// `ai_status` is Verified or Unverified when the model answered, by its `Check`, and Unavailable
+/// otherwise; `model_id` is the model that answered, or empty when none did; the explanation is
+/// `ai_note` followed by the model's text, or the job's fixed note saying why there is none.
+/// `explanation_hash` is set later, once the explanation has been fitted to the output.
 /// `expires_at_ms` is the read block's timestamp plus `expires_in_ms`; an overflow is refused.
 pub fn assemble(input: &JobInput, read: &ChainRead, analysis: &Analysis, ai: &AiOutcome) -> Result<(Verdict, String), &'static str> {
     let (ai_status, ai_risk, model_id, explanation) = match ai {
-        AiOutcome::Answered { answer, model_id } => {
-            (AiStatus::Unverified, Some(answer.risk), model_id.to_string(), answer.explanation.clone())
+        AiOutcome::Answered { answer, model_id, check } => {
+            let status = if matches!(check, Check::Verified { .. }) { AiStatus::Verified } else { AiStatus::Unverified };
+            (status, Some(answer.risk), model_id.to_string(), format!("{}{}", ai_note(check), answer.explanation))
         }
         AiOutcome::Unavailable(why) => (AiStatus::Unavailable, None, String::new(), why.note().to_string()),
     };
@@ -131,20 +142,38 @@ struct Signed<'a> {
 /// The explanation is cut from the end, before hashing, so the hash always covers exactly the text
 /// printed. Fails, with no signature, when the key or the signature cannot be had, or when the
 /// output would exceed `MAX_OUTPUT_BYTES` even with an empty explanation.
-pub fn sign_and_render(mut verdict: Verdict, explanation: String, signer: &mut dyn VerdictSigner) -> Result<String, &'static str> {
-    let public_key = signer.public_key().map_err(|_| "the signing key is unavailable")?;
-    let public_key = format!("ed25519:{}", bs58::encode(public_key).into_string());
+pub fn sign_and_render(verdict: Verdict, explanation: String, signer: &mut dyn VerdictSigner) -> Result<String, &'static str> {
+    let public_key = public_key_text(signer)?;
+    let (verdict, explanation) = seal(verdict, &explanation, &public_key)?;
+    sign_sealed(&verdict, &explanation, &public_key, signer)
+}
+
+/// The signer's key as the output prints it, `ed25519:<base58>`.
+pub fn public_key_text(signer: &mut dyn VerdictSigner) -> Result<String, &'static str> {
+    let key = signer.public_key().map_err(|_| "the signing key is unavailable")?;
+    Ok(format!("ed25519:{}", bs58::encode(key).into_string()))
+}
+
+/// The verdict exactly as it will be signed: the explanation fitted into what is left of
+/// `MAX_OUTPUT_BYTES` next to `public_key`, and its hash set. From here on the verdict's bytes,
+/// and so its hash, are final.
+pub fn seal(mut verdict: Verdict, explanation: &str, public_key: &str) -> Result<(Verdict, String), &'static str> {
     let b64 = base64::engine::general_purpose::STANDARD;
-
     let unsigned_borsh = &verdict_bytes(&verdict)[VERDICT_DOMAIN.len()..];
-    let frame = render(&b64.encode(unsigned_borsh), &b64.encode([0u8; 64]), &public_key, "")?;
+    let frame = render(&b64.encode(unsigned_borsh), &b64.encode([0u8; 64]), public_key, "")?;
     let budget = MAX_OUTPUT_BYTES.checked_sub(frame.len()).ok_or("the verdict does not fit in 900 bytes")?;
-    let explanation = fit(&explanation, budget);
-
+    let explanation = fit(explanation, budget);
     verdict.explanation_hash = sha256(explanation.as_bytes());
-    let message = verdict_bytes(&verdict);
+    Ok((verdict, explanation))
+}
+
+/// Signs a sealed verdict and prints it. Fails, with no signature, when the signature cannot be
+/// made or the output would exceed `MAX_OUTPUT_BYTES`.
+pub fn sign_sealed(verdict: &Verdict, explanation: &str, public_key: &str, signer: &mut dyn VerdictSigner) -> Result<String, &'static str> {
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let message = verdict_bytes(verdict);
     let signature = signer.sign(&message).map_err(|_| "the signature could not be made")?;
-    let out = render(&b64.encode(&message[VERDICT_DOMAIN.len()..]), &b64.encode(signature), &public_key, &explanation)?;
+    let out = render(&b64.encode(&message[VERDICT_DOMAIN.len()..]), &b64.encode(signature), public_key, explanation)?;
     if out.len() > MAX_OUTPUT_BYTES {
         return Err("the verdict does not fit in 900 bytes");
     }

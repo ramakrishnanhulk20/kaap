@@ -1,1 +1,1 @@
-{"capabilities":{"network":["cloud-api.near.ai","near.drpc.org","near-testnet.drpc.org"]},"signing_keys":[{"path":"verdict","type":"ed25519"}],"encryption_keys":[{"path":"texts"}]}
+{"capabilities":{"network":["cloud-api.near.ai","near.drpc.org","near-testnet.drpc.org","api.trustedservices.intel.com","certificates.trustedservices.intel.com","portal.trustauthority.intel.com","nras.attestation.nvidia.com"]},"signing_keys":[{"path":"verdict","type":"ed25519"}],"encryption_keys":[{"path":"texts"}]}

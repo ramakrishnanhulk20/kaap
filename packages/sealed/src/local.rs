@@ -6,6 +6,7 @@
 use ed25519_dalek::{Signer, SigningKey};
 use kaap_core::Network;
 
+use crate::attest::EvidenceSink;
 use crate::fixture::FixtureHttp;
 use crate::job::Connections;
 use crate::net::{
@@ -54,18 +55,37 @@ impl<H: Http> Http for Traced<H> {
         };
         let sent = request.body.map_or(0, <[u8]>::len);
         eprintln!(
-            "local: {}{} sent {sent} bytes, {outcome}, {} ms",
+            "local: {}{}{} sent {sent} bytes, {outcome}, {} ms",
             request.endpoint.authority,
             request.endpoint.path,
+            request.tail,
             started.elapsed().as_millis()
         );
         result
+    }
+
+    fn pause(&mut self, ms: u64) {
+        self.0.pause(ms);
+    }
+}
+
+/// Plain wasmtime has no OutLayer storage, so the evidence a published build would store is
+/// printed to stderr instead.
+struct PrintedEvidence;
+
+impl EvidenceSink for PrintedEvidence {
+    fn publish(&mut self, key: &str, record: &[u8]) -> bool {
+        eprintln!("local: evidence {key} {}", String::from_utf8_lossy(record));
+        true
     }
 }
 
 pub fn connections(network: Network, deadline: Deadline) -> Connections {
     let (host, https) = endpoints(network);
     let signer = Box::new(TestKeySigner(SigningKey::from_bytes(&TEST_SECRET)));
+    let (nonce, block_timestamp) = (wasi::random::random::get_random_bytes(32).try_into().ok(), std::env::var("NEAR_BLOCK_TIMESTAMP").ok());
+    let (quote, evidence): (crate::attest::tdx::QuoteCheck, Box<dyn EvidenceSink>) =
+        (crate::attest::tdx::check_quote, Box::new(PrintedEvidence));
     match std::env::var("KAAP_FIXTURES") {
         Ok(path) => {
             let load = || {
@@ -82,6 +102,10 @@ pub fn connections(network: Network, deadline: Deadline) -> Connections {
                 https: Box::new(RpcProvider::new(load(), https, deadline)),
                 ai: Box::new(load()),
                 signer,
+                nonce,
+                block_timestamp,
+                quote,
+                evidence,
             }
         }
         Err(_) => Connections {
@@ -89,6 +113,10 @@ pub fn connections(network: Network, deadline: Deadline) -> Connections {
             https: Box::new(RpcProvider::new(Traced(WasiHttp), https, deadline)),
             ai: Box::new(Traced(WasiHttp)),
             signer,
+            nonce,
+            block_timestamp,
+            quote,
+            evidence,
         },
     }
 }

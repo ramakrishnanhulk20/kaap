@@ -67,6 +67,6 @@ impl Http for FixtureHttp {
         if exchange.body.len() > request.limits.max_body_bytes {
             return Err(HttpFail::TooLarge);
         }
-        Ok(Response { status: exchange.status, body: exchange.body.as_bytes().to_vec() })
+        Ok(Response::new(exchange.status, exchange.body.as_bytes().to_vec()))
     }
 }
