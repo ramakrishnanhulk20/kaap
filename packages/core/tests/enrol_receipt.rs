@@ -4,7 +4,7 @@
 // 275253925 (its transfer-ft.json fixture): the DAO and the token it calls, with their code hashes.
 // The expected hash was printed by `kaap_sealed::reads::receivers_hash` on that sorted list, the
 // value packages/sealed/tests/job.rs checks the verdict carries. It does NOT cover reading the code
-// hashes from chain, or which accounts a kind calls (`kaap_sealed::reads::called_accounts`).
+// hashes from chain, or which accounts a kind calls (`receipt::called_accounts`, tested in receipt.rs).
 
 use kaap_core::hash::sign::to_hex;
 use kaap_core::receipt::{receivers_hash, DECODER_VERSION};

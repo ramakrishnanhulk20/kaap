@@ -23,7 +23,6 @@ serde = { version = "=1.0.229", features = ["derive"] }
 # raw_value hands over the exact bytes of a proposal's `kind`, as the sealed job reads them.
 serde_json = { version = "=1.0.154", features = ["raw_value"] }
 base64 = "=0.23.1"
-near-account-id = { version = "=3.0.0", default-features = false }
 
 [profile.release]
 codegen-units = 1

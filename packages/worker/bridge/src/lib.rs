@@ -8,10 +8,10 @@
 //! hands back to `kaap_free`. Inputs are never echoed into an error, so an answer can be logged
 //! without escaping attacker text.
 //!
-//! `called_accounts`, `parse_proposal` and `same_proposal` are ports of the
-//! sealed job's `reads.rs` (kaap-sealed cannot be a dependency here: its wasm32 build pulls in
-//! OutLayer's WASI bindings). The worker never trusts its port alone: a verdict is acted on only
-//! when the hash computed here equals the hash the sealed job signed.
+//! `parse_proposal` and `same_proposal` are ports of the sealed job's `reads.rs` (kaap-sealed
+//! cannot be a dependency here: its wasm32 build pulls in OutLayer's WASI bindings). The worker
+//! never trusts its port alone: a verdict is acted on only when the hash computed here equals the
+//! hash the sealed job signed.
 
 use std::alloc::{alloc, dealloc, Layout};
 use std::collections::BTreeSet;
@@ -22,7 +22,6 @@ use borsh::BorshDeserialize;
 use kaap_core::severity::min_severity;
 use kaap_core::verdict::VERDICT_VERSION;
 use kaap_core::{verdict_bytes, verdict_hash, AiStatus, FindingCode, Network, Severity, Verdict};
-use near_account_id::AccountIdRef;
 use serde::de::{self, Deserialize, Deserializer, MapAccess, Visitor};
 use serde::Serialize;
 use serde_json::value::RawValue;
@@ -284,11 +283,12 @@ struct CalledInput {
     kind: String,
 }
 
-/// The DAO and every contract whose code runs when the kind executes, in the sealed job's order.
-/// Input `{"dao":"<account>","kind":"<kind text>"}`.
+/// kaap-core's `receipt::called_accounts`: the DAO and every contract whose code runs when the
+/// kind executes. Input `{"dao":"<account>","kind":"<kind text>"}`.
 fn called_accounts_of(bytes: &[u8]) -> Result<Value, &'static str> {
     let input: CalledInput = serde_json::from_slice(bytes).map_err(|_| "not {dao,kind}")?;
-    called_accounts(&input.dao, input.kind.as_bytes()).map(|a| json!(a))
+    let accounts = kaap_core::receipt::called_accounts(&input.dao, input.kind.as_bytes());
+    accounts.map(|a| json!(a)).ok_or("the kind names an invalid account id")
 }
 
 /// kaap-core's `receipt::receivers_hash`: the `receivers_hash` a verdict carries. Input
@@ -296,31 +296,6 @@ fn called_accounts_of(bytes: &[u8]) -> Result<Value, &'static str> {
 fn receivers_hash_of(bytes: &[u8]) -> Result<Value, &'static str> {
     let pairs: Vec<(String, String)> = serde_json::from_slice(bytes).map_err(|_| "not a list of pairs")?;
     Ok(json!(hex(&kaap_core::receipt::receivers_hash(&pairs))))
-}
-
-fn called_accounts(dao: &str, kind_json: &[u8]) -> Result<Vec<String>, &'static str> {
-    let mut accounts = vec![dao.to_string()];
-    if let Some((variant, body)) = kaap_core::decode::value::read_kind(kind_json) {
-        let field = |name: &str| body.get(name).and_then(Value::as_str);
-        match variant.as_str() {
-            "FunctionCall" | "UpgradeRemote" => accounts.extend(field("receiver_id").map(str::to_string)),
-            "Transfer" => {
-                if let Some(token) = field("token_id").filter(|t| !t.is_empty()) {
-                    accounts.push(token.to_string());
-                    if body.get("msg").is_some_and(Value::is_string) {
-                        accounts.extend(field("receiver_id").map(str::to_string));
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-    let mut seen = BTreeSet::new();
-    accounts.retain(|a| seen.insert(a.clone()));
-    if accounts.iter().any(|a| AccountIdRef::new(a).is_err()) {
-        return Err("the kind names an invalid account id");
-    }
-    Ok(accounts)
 }
 
 struct Proposal {

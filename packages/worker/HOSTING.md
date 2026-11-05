@@ -21,6 +21,10 @@ the last section.
   plus 80 for the certificate) to a proxy in front of the public `/status` page; the worker's own
   port stays on loopback.
 - Memory: about 100 to 150 MB for the process. 512 MB of RAM is enough, 1 GB is comfortable.
+- Two settings for the AI secret, beside the others in `.env`: `KAAP_AI_SECRETS_ACCOUNT`, the NEAR
+  account that owns the OutLayer secret row holding the NEAR AI key (no default; left empty, runs
+  carry no key and verdicts have no AI), and `KAAP_AI_SECRETS_PROFILE`, the row's profile name
+  (default `near-ai`).
 
 ## Requests a day, times the price
 

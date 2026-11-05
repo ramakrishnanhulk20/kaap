@@ -270,7 +270,7 @@ test('the two live providers disagreeing on a receiver\'s code now fails receive
 });
 
 test('the receivers hash covers the accounts the sealed job reads, and gives its bytes', async () => {
-  // The cases of packages/sealed/tests/reads.rs `called_accounts`, and the pair list WO-03d pinned
+  // The cases of packages/core/src/receipt.rs `called_accounts`, and the pair list WO-03d pinned
   // against `kaap_sealed::reads::receivers_hash`, handed over unsorted.
   const core = await Core.load();
   const dao = 'd.sputnikv2.testnet';

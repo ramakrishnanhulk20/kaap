@@ -347,13 +347,13 @@ async function policyCheck(archival: Provider, deps: Deps, request: VerifyReques
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-/** The DAO, then every contract whose code runs when the kind executes, exactly as the sealed job
- *  picks them (packages/sealed/src/reads.rs `called_accounts`): the receiver of a FunctionCall or
- *  an UpgradeRemote, the token of a non-NEAR Transfer, and that Transfer's receiver when it
- *  carries a `msg`. kaap-core does not export this pick, so it is copied here. A copy that picks
- *  differently can only fail the receivers check, never pass it, because the hash covers every
- *  account by name. A kind kaap-core cannot read adds nothing, as in the sealed job. Null when an
- *  account is not a valid id, a kind the sealed job refuses to judge. */
+/** The DAO, then every contract whose code runs when the kind executes, exactly as kaap-core picks
+ *  them for the sealed job (packages/core/src/receipt.rs `called_accounts`): the receiver of a
+ *  FunctionCall or an UpgradeRemote, the token of a non-NEAR Transfer, and that Transfer's receiver
+ *  when it carries a `msg`. kaap-core-wasm does not export this pick, so it is copied here. A copy
+ *  that picks differently can only fail the receivers check, never pass it, because the hash covers
+ *  every account by name. A kind kaap-core cannot read adds nothing, as in the sealed job. Null when
+ *  an account is not a valid id, a kind the sealed job refuses to judge. */
 export function calledAccounts(core: Core, dao: string, kindJson: string): string[] | null {
   const accounts = [dao];
   let kind: unknown = null;
