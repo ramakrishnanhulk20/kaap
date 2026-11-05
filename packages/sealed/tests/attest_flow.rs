@@ -10,13 +10,13 @@ mod common;
 use common::world::{nonce, trust, World, Signing, KEY, NOW, QUOTE_HEX};
 use common::*;
 use kaap_core::{AiStatus, Severity};
-use kaap_sealed::ai::{consult, AiOutcome, Check, MODEL_ID};
+use kaap_sealed::ai::{consult, AiOutcome, Audience, Check, MODEL_ID};
 use kaap_sealed::attest::{tdx, Trust, Unverified};
 use kaap_sealed::net::Deadline;
 use serde_json::{json, Value};
 
 fn run(world: &mut World, trust: &Trust) -> (AiOutcome, kaap_sealed::attest::Evidence) {
-    consult(world, Some(KEY), Some("FACTS"), Deadline::after_ms(60_000), trust)
+    consult(world, Some(KEY), Some("FACTS"), Audience::Public, Deadline::after_ms(60_000), trust)
 }
 
 fn check_of(world: &mut World, trust: &Trust) -> Check {
@@ -88,7 +88,7 @@ fn the_public_evidence_never_holds_answer_or_prompt_text() {
         edit(&mut world);
         let content = world.chat["choices"][0]["message"]["content"].as_str().unwrap().to_string();
         let reasoning = world.chat["choices"][0]["message"]["reasoning_content"].as_str().unwrap().to_string();
-        let (outcome, evidence) = consult(&mut world, Some(KEY), Some("FACTS: alice.testnet asks for 10 NEAR"), Deadline::after_ms(60_000), &trust());
+        let (outcome, evidence) = consult(&mut world, Some(KEY), Some("FACTS: alice.testnet asks for 10 NEAR"), Audience::Public, Deadline::after_ms(60_000), &trust());
         let AiOutcome::Answered { answer, .. } = outcome else { panic!() };
         let text = String::from_utf8(evidence.to_bytes()).unwrap();
         for secret in [content.as_str(), reasoning.as_str(), answer.explanation.as_str(), "a1ice.testnet", "alice.testnet", "10 NEAR", "FACTS", KEY] {
@@ -222,14 +222,14 @@ fn sealed_parts(fx: &Value) -> (kaap_sealed::input::JobInput, kaap_sealed::reads
 fn a_verified_answer_whose_evidence_cannot_be_published_is_signed_unverified() {
     let fx = fixture("function-call.json");
     let (input, read) = sealed_parts(&fx);
-    let (_, analysis) = kaap_sealed::proposal::judge(input.network, &input.dao, input.proposal_id, &read);
+    let (_, analysis) = kaap_sealed::proposal::judge(&input, None, &read);
     assert_eq!(analysis.risk_floor, Severity::High);
     let public_key = kaap_sealed::verdict::public_key_text(&mut TestSigner::new()).unwrap();
     let parts = kaap_sealed::job::Unsigned { input: &input, read: &read, analysis: &analysis, public_key: &public_key };
 
     let store = Store::default();
     let (outcome, evidence) = run(&mut World::new(), &trust());
-    let (verdict, explanation) = kaap_sealed::job::seal_and_publish(&parts, outcome, evidence, &mut store.clone()).unwrap();
+    let (verdict, explanation) = kaap_sealed::job::seal_and_publish(&parts, outcome, evidence, &mut store.clone(), &mut TestTexts::new()).unwrap();
     assert_eq!((verdict.ai_status, verdict.risk), (AiStatus::Verified, Severity::Critical), "only a verified answer may make it critical");
     assert!(explanation.starts_with("AI verified (Intel TCB: OutOfDate). The transfer pays a1ice.testnet"), "{explanation}");
     let records = store.records.borrow();
@@ -239,7 +239,7 @@ fn a_verified_answer_whose_evidence_cannot_be_published_is_signed_unverified() {
 
     let refusing = Store { refuse: true, ..Store::default() };
     let (outcome, evidence) = run(&mut World::new(), &trust());
-    let (verdict, explanation) = kaap_sealed::job::seal_and_publish(&parts, outcome, evidence, &mut refusing.clone()).unwrap();
+    let (verdict, explanation) = kaap_sealed::job::seal_and_publish(&parts, outcome, evidence, &mut refusing.clone(), &mut TestTexts::new()).unwrap();
     assert_eq!((verdict.ai_status, verdict.risk), (AiStatus::Unverified, Severity::High));
     assert!(explanation.starts_with("AI unverified (the evidence could not be published). "), "{explanation}");
 }

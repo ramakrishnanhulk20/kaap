@@ -2,6 +2,7 @@
 //! (the `&'static str` type makes any other text impossible) and never a signature.
 
 use serde::Serialize;
+use serde_json::Value;
 
 /// The documented limit on what `request_execution` returns on chain. Testnet returned 2,000
 /// bytes whole on 26 Oct; mainnet is unmeasured, so 900 stays the cap.
@@ -31,6 +32,16 @@ pub fn failed(reason: &'static str) -> String {
 }
 
 fn plain(status: &'static str, reason: &'static str) -> String {
-    serde_json::to_string(&Plain { v: 1, status, reason })
-        .unwrap_or_else(|_| String::from(r#"{"v":1,"status":"refused","reason":"output could not be written"}"#))
+    sorted_json(&Plain { v: 1, status, reason })
+        .unwrap_or_else(|_| String::from(r#"{"reason":"output could not be written","status":"refused","v":1}"#))
+}
+
+/// `value` as one line of JSON with every object's keys in order. Everything this job prints or
+/// stores goes through here: dcap-qvl turns on serde_json's `preserve_order` for every crate built
+/// with this one, so without the sort the job and the CLI would show one object in two orders
+/// (DECISIONS, 2 Nov 2026).
+pub fn sorted_json(value: &impl Serialize) -> Result<String, serde_json::Error> {
+    let mut value: Value = serde_json::to_value(value)?;
+    value.sort_all_objects();
+    Ok(value.to_string())
 }

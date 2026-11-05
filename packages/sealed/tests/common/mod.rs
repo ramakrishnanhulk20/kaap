@@ -5,7 +5,7 @@
 
 pub mod world;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -97,6 +97,74 @@ impl kaap_sealed::verdict::VerdictSigner for TestSigner {
         use ed25519_dalek::Signer;
         Ok(self.0.sign(message).to_bytes())
     }
+}
+
+/// Stands in for OutLayer's keystore and for fresh randomness. `mac` is keyed by `seed`, so another
+/// seed is another project or caller; every `random` differs from the last. Shared by clones, so a
+/// test can read `asked` after a run has taken one.
+#[derive(Clone)]
+pub struct TestTexts {
+    pub seed: u8,
+    pub key_down: bool,
+    pub no_random: bool,
+    pub asked: Records,
+    drawn: Rc<Cell<u8>>,
+}
+
+impl TestTexts {
+    pub fn new() -> Self {
+        TestTexts::keyed(1)
+    }
+
+    pub fn keyed(seed: u8) -> Self {
+        TestTexts { seed, key_down: false, no_random: false, asked: Rc::default(), drawn: Rc::default() }
+    }
+}
+
+impl kaap_sealed::texts::TextKeys for TestTexts {
+    fn mac(&mut self, path: &str, data: &[u8]) -> Result<[u8; 32], kaap_sealed::texts::TextFail> {
+        self.asked.borrow_mut().push((path.to_string(), data.to_vec()));
+        if self.key_down {
+            return Err(kaap_sealed::texts::TextFail::KeyUnavailable);
+        }
+        Ok(kaap_sealed::verdict::sha256(&[&[self.seed], data].concat()))
+    }
+
+    fn random(&mut self) -> Option<[u8; 32]> {
+        self.drawn.set(self.drawn.get() + 1);
+        (!self.no_random).then(|| kaap_sealed::verdict::sha256(&[self.seed, self.drawn.get()]))
+    }
+}
+
+/// A verdict with every variable field at `guard`, `dao` and `model_id`, every finding and the
+/// largest numbers. Borsh writes numbers at a fixed width, so only the three names change its size.
+pub fn verdict(guard: &str, dao: &str, model_id: &str) -> kaap_core::Verdict {
+    kaap_core::Verdict {
+        version: 1,
+        guard: guard.into(),
+        network: kaap_core::Network::Testnet,
+        dao: dao.into(),
+        proposal_id: u64::MAX,
+        kind_hash: [1; 32],
+        policy_hash: [2; 32],
+        receivers_hash: [3; 32],
+        block_height: u64::MAX,
+        risk: kaap_core::Severity::High,
+        floor: kaap_core::Severity::High,
+        findings: kaap_core::FindingCode::ALL.to_vec(),
+        decoder_version: "0.1.0".into(),
+        model_id: model_id.into(),
+        ai_status: kaap_core::AiStatus::Unverified,
+        explanation_hash: [0; 32],
+        expires_at_ms: u64::MAX,
+    }
+}
+
+/// The longest verdict a run could ever sign: two 64-byte accounts, every finding, the pinned model.
+pub fn longest_verdict() -> kaap_core::Verdict {
+    let guard = format!("{}.testnet", "g".repeat(56));
+    let dao = guard.replace('g', "d");
+    verdict(&guard, &dao, kaap_sealed::ai::MODEL_ID)
 }
 
 /// An `Http` that answers from a list, in order, and refuses once the list is used up.

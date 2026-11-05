@@ -1,21 +1,22 @@
-//! One run of the job, in order: check the input, read both providers at one block, decode,
-//! ask the model, assemble, sign, print. Every way out that is not a signed verdict prints a
-//! fixed reason and no signature.
+//! One run of the job, in order: check the input, open a sealed text if there is one, read both
+//! providers at one block, decode, ask the model, assemble, sign, print. Every way out that is not
+//! a signed verdict prints a fixed reason and no signature.
 
 use kaap_core::{verdict_hash, AiStatus, Analysis, Network, Verdict};
 
-use crate::ai::{consult, AiOutcome, Check};
+use crate::ai::{consult, AiOutcome, Audience, Check};
 use crate::attest::evidence::key_for;
 use crate::attest::tdx::QuoteCheck;
 use crate::attest::{trusted_now, Evidence, EvidenceSink, Trust, Unverified};
-use crate::input::{parse_input, JobInput};
+use crate::input::{parse_request, JobInput, Request};
 use crate::net::{Deadline, Http};
 use crate::output::{failed, held, refused};
 use crate::proposal::judge;
 use crate::prompt::user_message;
 use crate::reads::{read_chain, ChainRead, HOST_CATCH_UP_MS};
 use crate::rpc::{At, AccountView, BlockView, Provider, ReadFail, ViewResult};
-use crate::verdict::{assemble, public_key_text, seal, sign_sealed, VerdictSigner};
+use crate::texts::{open_text, render_text_key, seal_explanation, TextFail, TextKeys};
+use crate::verdict::{assemble, public_key_text, seal, seal_encrypted, sign_sealed, VerdictSigner};
 
 /// OutLayer stops a run at `max_execution_seconds`, which the run script sets to 60. The reads
 /// must be done by 25 s and the model by 50 s, leaving time to sign and print.
@@ -31,6 +32,9 @@ pub struct Connections {
     /// Every outside call of the AI step: NEAR AI, Intel and NVIDIA.
     pub ai: Box<dyn Http>,
     pub signer: Box<dyn VerdictSigner>,
+    /// The keystore's `texts` key and fresh randomness. Used only by a run that carries a sealed
+    /// text or asks for the text key, so a public run never touches it.
+    pub texts: Box<dyn TextKeys>,
     /// 32 fresh random bytes for this run, or `None` when none could be drawn.
     pub nonce: Option<[u8; 32]>,
     /// OutLayer's `NEAR_BLOCK_TIMESTAMP`, the requesting block's time, as set for the run.
@@ -51,30 +55,56 @@ pub fn run(
     ai_key: Option<&str>,
     connect: impl FnOnce(Network, Deadline) -> Connections,
 ) -> String {
-    let input = match parse_input(raw, run_network) {
-        Ok(input) => input,
+    let request = match parse_request(raw, run_network) {
+        Ok(request) => request,
         Err(why) => return refused(why.reason()),
     };
+    match request {
+        Request::TextKey(network) => text_key(network, connect),
+        Request::Judge(input) => judge_run(input, ai_key, connect),
+    }
+}
+
+fn text_key(network: Network, connect: impl FnOnce(Network, Deadline) -> Connections) -> String {
+    let Connections { mut texts, mut signer, .. } = connect(network, Deadline::after_ms(READ_BUDGET_MS));
+    render_text_key(texts.as_mut(), signer.as_mut()).unwrap_or_else(failed)
+}
+
+fn text_failure(why: TextFail) -> String {
+    if why.is_the_input() {
+        refused(why.reason())
+    } else {
+        failed(why.reason())
+    }
+}
+
+fn judge_run(input: JobInput, ai_key: Option<&str>, connect: impl FnOnce(Network, Deadline) -> Connections) -> String {
     let read_deadline = Deadline::after_ms(READ_BUDGET_MS);
     let job_deadline = Deadline::after_ms(JOB_BUDGET_MS);
-    let Connections { mut host, https, mut ai, mut signer, nonce, block_timestamp, quote, mut evidence } =
+    let Connections { mut host, https, mut ai, mut signer, mut texts, nonce, block_timestamp, quote, mut evidence } =
         connect(input.network, read_deadline);
+    // Before any read, so a text that does not open costs no outside call.
+    let text = match input.text.as_ref().map(|sealed| open_text(texts.as_mut(), &input, sealed)).transpose() {
+        Ok(text) => text,
+        Err(why) => return text_failure(why),
+    };
     let mut https: Box<dyn Provider> = if input.test_corrupt_https { Box::new(Corrupting(https)) } else { https };
 
     let read = match read_chain(host.as_mut(), https.as_mut(), &input.dao, input.proposal_id, read_deadline, HOST_CATCH_UP_MS) {
         Ok(read) => read,
         Err(why) => return held(why.reason()),
     };
-    let (proposal, analysis) = judge(input.network, &input.dao, input.proposal_id, &read);
+    let audience = if text.is_some() { Audience::Members } else { Audience::Public };
+    let (proposal, analysis) = judge(&input, text, &read);
     let facts = user_message(&proposal, &analysis);
     let trust = Trust { nonce, now: trusted_now(block_timestamp.as_deref(), read.block.timestamp_ns), quote };
-    let (outcome, record) = consult(ai.as_mut(), ai_key, facts.as_deref(), job_deadline, &trust);
+    let (outcome, record) = consult(ai.as_mut(), ai_key, facts.as_deref(), audience, job_deadline, &trust);
     let public_key = match public_key_text(signer.as_mut()) {
         Ok(key) => key,
         Err(why) => return failed(why),
     };
     let verdict = Unsigned { input: &input, read: &read, analysis: &analysis, public_key: &public_key };
-    let (verdict, explanation) = match seal_and_publish(&verdict, outcome, record, evidence.as_mut()) {
+    let (verdict, explanation) = match seal_and_publish(&verdict, outcome, record, evidence.as_mut(), texts.as_mut()) {
         Ok(parts) => parts,
         Err(why) => return failed(why),
     };
@@ -93,27 +123,39 @@ pub struct Unsigned<'a> {
 /// Seals the verdict and publishes its evidence under the verdict's hash. A Verified verdict whose
 /// evidence could not be published is sealed again as Unverified (`EvidenceNotPublished`), so
 /// every Verified verdict has evidence a stranger can read; for any other verdict a failed
-/// publication changes nothing.
+/// publication changes nothing. On a run with a sealed text the explanation is encrypted to the
+/// member's reply key each time it is sealed, with fresh randomness from `texts`.
 pub fn seal_and_publish(
     parts: &Unsigned<'_>,
     outcome: AiOutcome,
     mut record: Evidence,
     sink: &mut dyn EvidenceSink,
+    texts: &mut dyn TextKeys,
 ) -> Result<(Verdict, String), &'static str> {
-    let (verdict, explanation) = seal_with(parts, &outcome, &mut record)?;
+    let (verdict, explanation) = seal_with(parts, &outcome, &mut record, texts)?;
     let published = sink.publish(&key_for(&verdict_hash(&verdict)), &record.to_bytes());
     if published || verdict.ai_status != AiStatus::Verified {
         return Ok((verdict, explanation));
     }
     let outcome = outcome.unverified(Unverified::EvidenceNotPublished);
-    let (verdict, explanation) = seal_with(parts, &outcome, &mut record)?;
+    let (verdict, explanation) = seal_with(parts, &outcome, &mut record, texts)?;
     sink.publish(&key_for(&verdict_hash(&verdict)), &record.to_bytes());
     Ok((verdict, explanation))
 }
 
-fn seal_with(parts: &Unsigned<'_>, outcome: &AiOutcome, record: &mut Evidence) -> Result<(Verdict, String), &'static str> {
+fn seal_with(
+    parts: &Unsigned<'_>,
+    outcome: &AiOutcome,
+    record: &mut Evidence,
+    texts: &mut dyn TextKeys,
+) -> Result<(Verdict, String), &'static str> {
     let (verdict, explanation) = assemble(parts.input, parts.read, parts.analysis, outcome)?;
-    let (verdict, explanation) = seal(verdict, &explanation, parts.public_key)?;
+    let (verdict, explanation) = match &parts.input.text {
+        None => seal(verdict, &explanation, parts.public_key)?,
+        Some(sealed) => seal_encrypted(verdict, &explanation, parts.public_key, |plain| {
+            seal_explanation(texts, parts.input, &sealed.reply_key, plain).map_err(TextFail::reason)
+        })?,
+    };
     record.verdict_hash = Some(hex::encode(verdict_hash(&verdict)));
     (record.ai_status, record.reason) = match outcome {
         AiOutcome::Answered { check: Check::Verified { .. }, .. } => ("verified", None),

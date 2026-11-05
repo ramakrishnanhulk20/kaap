@@ -10,7 +10,7 @@ static OUTLAYER_MANIFEST: [u8; include_bytes!("../manifest.json").len()] = *incl
 
 #[cfg(all(target_arch = "wasm32", not(feature = "local")))]
 fn connect(network: kaap_core::Network, deadline: kaap_sealed::net::Deadline) -> kaap_sealed::job::Connections {
-    use kaap_sealed::host::{fresh_nonce, HostProvider, HostSigner, PublicEvidence};
+    use kaap_sealed::host::{fresh_nonce, HostProvider, HostSigner, HostTextKeys, PublicEvidence};
     use kaap_sealed::net::{DRPC_MAINNET, DRPC_TESTNET};
     use kaap_sealed::rpc::RpcProvider;
     use kaap_sealed::wasi_http::WasiHttp;
@@ -25,6 +25,7 @@ fn connect(network: kaap_core::Network, deadline: kaap_sealed::net::Deadline) ->
         https: Box::new(RpcProvider::new(WasiHttp, https, deadline)),
         ai: Box::new(WasiHttp),
         signer: Box::new(HostSigner),
+        texts: Box::new(HostTextKeys),
         nonce: fresh_nonce(),
         block_timestamp: std::env::var("NEAR_BLOCK_TIMESTAMP").ok(),
         quote: kaap_sealed::attest::tdx::check_quote,

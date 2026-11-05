@@ -28,7 +28,9 @@ this one account is the worker for every testnet run, and why the guard accepts 
 Input on stdin, nothing else accepted: `{"v":1,"network":"testnet"|"mainnet","guard":<account>,
 "dao":<account>,"proposal_id":<u64>,"expires_in_ms":1 to 3600000}`. The network must be the one
 OutLayer says the run is on. On testnet only, `"test_corrupt_https":true` corrupts one read on
-purpose, to show the job holds.
+purpose, to show the job holds. A member adds `text_ciphertext` and `reply_key` together to hand in
+the text behind a hash (see "The sealed text channel"). The other input is `{"v":1,"op":"pubkey"}`,
+which prints the job's text key.
 
 At one final block, from two providers that must agree (OutLayer's own RPC through the host
 `view`, and dRPC over HTTPS):
@@ -44,13 +46,14 @@ for its sets and maps is not fixed; every other proposal field is compared byte 
 failed read or difference gives `{"v":1,"status":"held","reason":...}` and no signature.
 
 The proposal is then decoded by kaap-core, with the policy just read as the policy before (only
-while the proposal is InProgress). There is no price list yet, so every token is unpriced
+while the proposal is InProgress) and the input's `guard` as the guard account, so Kaap's own
+enrol call reads as `guard_enrol` here as it does in the CLI. There is no price list yet, so every token is unpriced
 (UNKNOWN_VALUE, high) and no payment history (not available).
 
 Then, if the run carries a NEAR AI key as the OutLayer secret `NEAR_AI_API_KEY`, one
 non-streamed request to `z-ai/glm-5.3-flash`, after `GET /v1/model/list` says that exact id is
 NEAR AI's own sealed hardware (`providerType` vllm, `ownedBy` nearai, attestation supported,
-verifiable, ready), sent with `x-no-aliasing: true`. Its reasoning is capped at 256 tokens with
+verifiable, ready), sent with `x-no-aliasing: true`. Its reasoning is capped at 512 tokens with
 `thinking_token_budget` (NEAR AI's docs of 27 Oct 2026: turning it off moves it into the answer).
 The model sees a fixed system prompt and the facts as one quoted JSON object with every field
 capped (the description at 2,000 bytes). Its answer must be exactly
@@ -138,6 +141,53 @@ from the prompt or the answer is ever stored, only their hashes: the evidence is
 prompt may one day carry a text only a DAO's members may read. A verified verdict whose evidence
 could not be stored is signed as unverified instead.
 
+## The sealed text channel
+
+NEAR Business and Trezu keep the text behind each payment hash on their own server. Until they
+share it, a member who has it can hand it to Kaap so that only this program can ever read it. The
+worker and its database only ever hold ciphertext.
+
+1. `{"v":1,"op":"pubkey"}` prints `{"public_key":"ed25519:...","signature":"<base64>","status":"ok",
+   "text_key":"<hex>","v":1}`. `text_key` is the job's X25519 public key. Its secret is
+   `outlayer::encryption_keys::mac("texts", None, b"kaap-x25519-v1")`, the route SDK 0.2.1 offers:
+   the same key in every run with this project and this caller, and another key for anyone else.
+   `signature` is the verdict key's over `kaap-text-key-v1\n` followed by the 32 key bytes. Check it
+   against the key the guard accepts, so no relay can swap in a key of its own.
+2. The member encrypts this object to `text_key`, the same object the CLI takes: `{"message":...,
+   "nonce":<base64 of 32 bytes>,"recipient":...,"standard":"nep413"|"nep461","quotes":[...]}`
+   (`quotes` is optional). The construction is the one OutLayer's own secrets use: a fresh X25519
+   key, HKDF-SHA256 with no salt and the info `kaap-texts-v1`, ChaCha20-Poly1305, written as
+   `0x01 | ephemeral public key (32) | nonce (12) | ciphertext | tag (16)`. The associated data is
+   `kaap-text-v1\n<network>\n<dao>\n<proposal id>\n<reply key hex>`.
+3. The judge input adds `text_ciphertext` (base64) and `reply_key` (hex of the member's own X25519
+   public key). The whole input is at most 32 KiB, which leaves about 24 KiB for the text.
+4. The job opens the text inside the enclave and hands it to kaap-core. A ciphertext that does not
+   open, for any reason, gives `{"reason":"text_ciphertext could not be opened","status":"refused",
+   "v":1}` before any outside call. Because the reply key is bound in, nobody who holds a member's
+   ciphertext, the worker included, can resubmit it with their own key to read the answer.
+5. The verdict's `explanation` field is `sealed:<base64>`: the explanation encrypted to `reply_key`
+   in the same layout, under `kaap-explanation-v1\n<network>\n<dao>\n<proposal id>\n<reply key
+   hex>`. `explanation_hash` is the hash of that printed field, as for any verdict, so no hash of
+   the plain explanation reaches the chain. The 900-byte output leaves it less room than a public
+   explanation: about 180 bytes of plain text on the demo DAO's verdicts, about 85 on the longest
+   verdict the tests build. So the model is told a limit of 120 characters
+   (`MAX_MEMBER_EXPLANATION_BYTES`), the note in front is a short code, such as `AI unverified
+   (no_clock).`, where a public verdict has a sentence, and nothing is cut at that limit: an answer,
+   up to the usual 280, is cut only when it does not fit this run's room, at its last word boundary.
+   A public prompt and a public explanation are not changed by any of this.
+
+A prompt built from a sealed text leaves the job only after every check before the question has
+passed, unlike a public one, where a failed check only means the answer cannot be Verified (C12).
+On a failed check nothing about the text is sent, the AI status is Unavailable with the code
+`sealed_hardware_not_proven`, and the plain-code verdict stands. A run over HTTPS has no trusted
+clock, so it never asks the model about a text.
+
+The finding codes, the risk and the verdict's other fields stay public, as on any verdict, because
+the guard reads them. So does the evidence record, which holds hashes and sizes, never text.
+
+`node scripts/WO-05b-text-roundtrip.mjs` runs the whole trip and three attacks on testnet, and
+`--local <wasm>` runs it against the local build.
+
 ## Outside calls
 
 The job calls no host outside its manifest: `cloud-api.near.ai`, `near.drpc.org`,
@@ -157,7 +207,7 @@ own rule, held by a test that checks the list both ways, not something OutLayer 
 | NVIDIA key set | 5 s | 10 s | 5 s | 15 s | 2 MiB (530 KB today) |
 | NEAR AI public Intel token | 5 s | 10 s | 5 s | 15 s | 512 KiB |
 | Intel key set | 5 s | 8 s | 5 s | 10 s | 256 KiB |
-| NEAR AI chat | 5 s | 25 s | 10 s | 30 s | 64 KiB, 656 tokens |
+| NEAR AI chat | 5 s | 25 s | 10 s | 30 s | 64 KiB, 912 tokens |
 | NEAR AI signature, up to 4 tries 750 ms apart | 5 s | 8 s | 5 s | 8 s | 64 KiB |
 
 All reads must finish within 25 s, the checks before the question within 25 s of their start, and
@@ -177,10 +227,11 @@ not verified counts as high at most, so the AI can raise a verdict but never low
 verified answer can make it critical.
 
 The signature is ed25519 over `kaap-verdict-v1\n` followed by the verdict's borsh bytes
-(kaap-core `verdict_bytes`). The output, at most 900 bytes:
+(kaap-core `verdict_bytes`). The output, at most 900 bytes, with its keys sorted like everything
+else the job prints or stores, so it and the CLI show one object the same way:
 
 ```
-{"v":1,"status":"ok","verdict":"<base64 borsh, no prefix>","signature":"<base64, 64 bytes>","public_key":"ed25519:...","explanation":"..."}
+{"explanation":"...","public_key":"ed25519:...","signature":"<base64, 64 bytes>","status":"ok","v":1,"verdict":"<base64 borsh, no prefix>"}
 ```
 
 ## How a stranger checks the key belongs to this project and caller

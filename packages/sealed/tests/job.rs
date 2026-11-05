@@ -28,6 +28,7 @@ fn connections(fx: &Value, ai: impl Http + 'static, store: &Store) -> impl FnOnc
             https: Box::new(RpcProvider::new(FixtureHttp::from_json(&text).unwrap(), DRPC_TESTNET, deadline)),
             ai: Box::new(ai),
             signer: Box::new(TestSigner::new()),
+            texts: Box::new(TestTexts::new()),
             nonce: Some([0; 32]),
             block_timestamp: None,
             quote: kaap_sealed::attest::tdx::check_quote,
@@ -72,7 +73,7 @@ fn a_real_proposal_gives_a_signed_verdict_pinned_to_its_block() {
         let body: Value = serde_json::from_str(exchange(&mut f, HTTPS, account)["body"].as_str().unwrap()).unwrap();
         pairs.push((account.to_string(), body["result"]["code_hash"].as_str().unwrap().to_string()));
     }
-    assert_eq!(v.receivers_hash, kaap_sealed::reads::receivers_hash(&pairs));
+    assert_eq!(v.receivers_hash, kaap_core::receipt::receivers_hash(&pairs));
 
     let mut f = fx.clone();
     let block: Value = serde_json::from_str(exchange(&mut f, HTTPS, "block")["body"].as_str().unwrap()).unwrap();
@@ -85,7 +86,39 @@ fn a_real_proposal_gives_a_signed_verdict_pinned_to_its_block() {
     assert_eq!(v.floor, Severity::High, "an unpriced token is UNKNOWN_VALUE");
     assert_eq!(v.risk, v.floor);
     assert!(v.findings.contains(&kaap_core::FindingCode::UnknownValue));
+    assert_eq!(v.decoder_version, kaap_core::receipt::DECODER_VERSION);
     assert_eq!(v.decoder_version, "0.1.0");
+}
+
+#[test]
+fn everything_the_job_prints_or_stores_has_its_keys_in_order() {
+    // Whole bytes, not parsed values: a parser hides the order this checks.
+    let in_order = |text: &str| {
+        let value: Value = serde_json::from_str(text).unwrap();
+        let mut sorted = value.clone();
+        sorted.sort_all_objects();
+        assert_eq!(text, sorted.to_string(), "keys out of order");
+    };
+    let store = Store::default();
+    let out = run(input("corm1gu.sputnikv2.testnet", 1, "").as_bytes(), Some("testnet"), None, connections(&fixture("transfer-ft.json"), no_ai(), &store));
+    in_order(&out);
+    assert!(out.starts_with(r#"{"explanation":"#), "{out}");
+    in_order(std::str::from_utf8(&store.records.borrow()[0].1).unwrap());
+    in_order(&run(br#"{"v":1}"#, Some("testnet"), None, |_, _| panic!("connected")));
+    in_order(&kaap_sealed::output::held("a reason"));
+    in_order(&kaap_sealed::output::failed("a reason"));
+}
+
+#[test]
+fn a_public_run_never_touches_the_text_key() {
+    let texts = TestTexts::new();
+    let asked = texts.asked.clone();
+    let fx = fixture("transfer-ft.json");
+    let plain = connections(&fx, no_ai(), &Store::default());
+    open(&run(input("corm1gu.sputnikv2.testnet", 1, "").as_bytes(), Some("testnet"), None, move |network, deadline| {
+        Connections { texts: Box::new(texts), ..plain(network, deadline) }
+    }));
+    assert!(asked.borrow().is_empty());
 }
 
 #[test]

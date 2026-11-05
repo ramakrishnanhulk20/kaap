@@ -16,11 +16,10 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use kaap_core::receipt::{called_accounts, receivers_hash};
 use kaap_core::{canonical_kind, canonical_policy, kind_hash, policy_hash};
-use near_account_id::AccountIdRef;
 use serde::de::{self, Deserialize, Deserializer, MapAccess, Visitor};
 use serde_json::value::RawValue;
-use sha2::{Digest, Sha256};
 
 use crate::net::Deadline;
 use crate::rpc::{AccountView, At, BlockView, Provider, ViewResult};
@@ -145,7 +144,7 @@ pub fn read_chain(
     let policy_canonical = canonical_policy(&policy_https.bytes).map_err(|_| Held::PolicyUnhashable)?;
     let policy_hash = policy_hash(&policy_https.bytes).map_err(|_| Held::PolicyUnhashable)?;
 
-    let accounts = called_accounts(dao, &proposal.kind_json)?;
+    let accounts = called_accounts(dao, &proposal.kind_json).ok_or(Held::BadReceiver)?;
     let mut code_hashes = Vec::with_capacity(accounts.len());
     for account in &accounts {
         on_time()?;
@@ -207,46 +206,6 @@ fn pinned(view: &ViewResult, head: &BlockView) -> Result<(), Held> {
     } else {
         Err(Held::WrongBlock)
     }
-}
-
-/// sha256 of the borsh encoding of the sorted (account, code hash) pairs. Borsh writes each
-/// string with its length, so no two lists share an encoding.
-pub fn receivers_hash(sorted_pairs: &[(String, String)]) -> [u8; 32] {
-    let bytes = borsh::to_vec(sorted_pairs).expect("a pair list is far below borsh's length limit");
-    let mut out = [0u8; 32];
-    out.copy_from_slice(&Sha256::digest(&bytes));
-    out
-}
-
-/// The DAO itself, then every contract whose code runs when the kind executes, as Sputnik runs
-/// it: the receiver of a FunctionCall or an UpgradeRemote, the token of a non-NEAR Transfer, and
-/// the receiver of a Transfer with a `msg` (ft_transfer_call calls its ft_on_transfer). A native
-/// NEAR Transfer runs no receiver code, so its receiver is not read, which also means a payment
-/// to a new implicit account never holds the job. A kind kaap-core's strict reader refuses adds
-/// nothing here; `analyze` gives it a high finding.
-pub fn called_accounts(dao: &str, kind_json: &[u8]) -> Result<Vec<String>, Held> {
-    let mut accounts = vec![dao.to_string()];
-    if let Some((variant, body)) = kaap_core::decode::value::read_kind(kind_json) {
-        let field = |name: &str| body.get(name).and_then(serde_json::Value::as_str);
-        match variant.as_str() {
-            "FunctionCall" | "UpgradeRemote" => accounts.extend(field("receiver_id").map(str::to_string)),
-            "Transfer" => {
-                if let Some(token) = field("token_id").filter(|t| !t.is_empty()) {
-                    accounts.push(token.to_string());
-                    if body.get("msg").is_some_and(serde_json::Value::is_string) {
-                        accounts.extend(field("receiver_id").map(str::to_string));
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-    let mut seen = BTreeSet::new();
-    accounts.retain(|a| seen.insert(a.clone()));
-    if accounts.iter().any(|a| AccountIdRef::new(a).is_err()) {
-        return Err(Held::BadReceiver);
-    }
-    Ok(accounts)
 }
 
 /// Reads the four fields the job uses from a `get_proposal` answer. The answer must be one JSON

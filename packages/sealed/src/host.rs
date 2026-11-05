@@ -8,6 +8,7 @@ use crate::rpc::{
     block_answer, host_view_answer, view_account_answer, AccountView, At, BlockView, Provider, ReadFail, ViewResult,
     MAX_VIEW_BYTES,
 };
+use crate::texts::{TextFail, TextKeys};
 use crate::verdict::{SignFail, VerdictSigner, SIGNING_KEY_PATH};
 
 /// The worker's RPC proxy, a FastNEAR-powered node OutLayer runs. The guest cannot set a timeout
@@ -62,6 +63,21 @@ impl VerdictSigner for HostSigner {
     fn sign(&mut self, message: &[u8]) -> Result<[u8; 64], SignFail> {
         let signature = outlayer::signing_keys::sign(SIGNING_KEY_PATH, None, message).map_err(|_| SignFail::Signature)?;
         <[u8; 64]>::try_from(signature.as_slice()).map_err(|_| SignFail::Signature)
+    }
+}
+
+/// The `texts` key the keystore holds for this project and the transaction signer, which the host
+/// uses and never hands over, and WASI random. `None` as the vault: the key declares none.
+pub struct HostTextKeys;
+
+impl TextKeys for HostTextKeys {
+    fn mac(&mut self, path: &str, data: &[u8]) -> Result<[u8; 32], TextFail> {
+        let tag = outlayer::encryption_keys::mac(path, None, data).map_err(|_| TextFail::KeyUnavailable)?;
+        <[u8; 32]>::try_from(tag.as_slice()).map_err(|_| TextFail::KeyUnavailable)
+    }
+
+    fn random(&mut self) -> Option<[u8; 32]> {
+        fresh_nonce()
     }
 }
 

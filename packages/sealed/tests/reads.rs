@@ -6,7 +6,8 @@
 mod common;
 
 use common::*;
-use kaap_sealed::reads::{called_accounts, parse_proposal, read_chain, receivers_hash, same_proposal, Held, Item};
+use kaap_core::receipt::receivers_hash;
+use kaap_sealed::reads::{parse_proposal, read_chain, same_proposal, Held, Item};
 use kaap_sealed::net::Deadline;
 use kaap_sealed::rpc::{host_view_answer, view_account_answer, block_answer, call_function_answer, ReadFail};
 use serde_json::{json, Value};
@@ -199,22 +200,34 @@ fn the_deadline_holds_the_job() {
 }
 
 #[test]
-fn called_accounts_follow_what_sputnik_executes() {
-    let dao = "d.sputnikv2.testnet";
-    let cases: [(&str, &[&str]); 7] = [
-        (r#"{"Transfer":{"token_id":"","receiver_id":"new.testnet","amount":"1","msg":null}}"#, &[dao]),
-        (r#"{"Transfer":{"token_id":"usdc.testnet","receiver_id":"a.testnet","amount":"1","msg":null}}"#, &[dao, "usdc.testnet"]),
-        (r#"{"Transfer":{"token_id":"usdc.testnet","receiver_id":"a.testnet","amount":"1","msg":"x"}}"#, &[dao, "usdc.testnet", "a.testnet"]),
-        (r#"{"FunctionCall":{"receiver_id":"app.testnet","actions":[]}}"#, &[dao, "app.testnet"]),
-        (r#"{"UpgradeRemote":{"receiver_id":"app.testnet","method_name":"up","hash":"x"}}"#, &[dao, "app.testnet"]),
-        (r#"{"FunctionCall":{"receiver_id":"d.sputnikv2.testnet","actions":[]}}"#, &[dao]),
-        (r#""Vote""#, &[dao]),
-    ];
-    for (kind, want) in cases {
-        assert_eq!(called_accounts(dao, kind.as_bytes()).unwrap(), want, "{kind}");
+fn a_kind_naming_an_invalid_account_holds_the_job() {
+    let mut fx = fixture("function-call.json");
+    for authority in [HTTPS, HOST] {
+        edit_view_text(&mut fx, authority, "get_proposal", |text| text.replace("townhall.r7thmvr8maey-council2.testnet", "Not An Account"));
     }
-    let bad = r#"{"FunctionCall":{"receiver_id":"Not An Account","actions":[]}}"#;
-    assert_eq!(called_accounts(dao, bad.as_bytes()), Err(Held::BadReceiver));
+    assert_eq!(read(&fx), Err(Held::BadReceiver));
+}
+
+// The sealed job used near-account-id here before `called_accounts` moved into kaap-core, which has
+// no such dependency and its own rule. This is what says the move changed no answer.
+#[test]
+fn kaap_cores_account_rule_refuses_what_nearcores_refuses() {
+    use kaap_core::decode::account::is_account_id;
+    use near_account_id::AccountIdRef;
+    const ALPHABET: [char; 7] = ['a', '0', '-', '_', '.', 'A', ' '];
+    let mut strings = vec![String::new()];
+    let mut checked = 0;
+    for _ in 0..6 {
+        strings = strings.iter().flat_map(|s| ALPHABET.iter().map(move |c| format!("{s}{c}"))).collect();
+        for s in &strings {
+            assert_eq!(is_account_id(s), AccountIdRef::new(s).is_ok(), "{s:?}");
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 137_256);
+    for s in ["", "a", &"a".repeat(64), &"a".repeat(65), "éa", "aé.near"] {
+        assert_eq!(is_account_id(s), AccountIdRef::new(s).is_ok(), "{s:?}");
+    }
 }
 
 #[test]

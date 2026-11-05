@@ -1,8 +1,9 @@
 //! Turns the agreed chain read into kaap-core's `ProposalInput` and runs `analyze`. Every rule
 //! that decides what a proposal means lives in kaap-core; this file only fills its input.
 
-use kaap_core::{analyze, canonical_policy, Analysis, Network, Prices, ProposalInput};
+use kaap_core::{analyze, canonical_policy, Analysis, Prices, ProposalInput, SuppliedText};
 
+use crate::input::JobInput;
 use crate::reads::ChainRead;
 
 /// Sputnik's status word for a proposal still open to votes.
@@ -18,33 +19,37 @@ pub const IN_PROGRESS: &str = "InProgress";
 /// payment history and no price list in this job yet, so `history` is `None` (not available)
 /// and every token is unpriced (UNKNOWN_VALUE, never zero, C2). `block_timestamp_ns` is the
 /// time of the block every read was pinned to, so a supplied text's deadline is judged against
-/// the same moment as the proposal.
-pub fn proposal_input(network: Network, dao: &str, proposal_id: u64, read: &ChainRead) -> ProposalInput {
+/// the same moment as the proposal. `guard_account` is the input's `guard`, the account the
+/// signed verdict names and the guard contract requires to be itself, so Kaap's own enrol call
+/// reads as `guard_enrol` here as it does in the CLI (C14). As kaap-core says of this field, the
+/// caller vouches for it: only the worker's runs sign with the key the guard accepts. `text` is a
+/// sealed text the job has opened (`texts::open_text`).
+pub fn proposal_input(input: &JobInput, text: Option<SuppliedText>, read: &ChainRead) -> ProposalInput {
     let policy_before = if read.proposal.status == IN_PROGRESS {
         canonical_policy(&read.policy_json).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok())
     } else {
         None
     };
     ProposalInput {
-        network,
-        dao: dao.to_string(),
-        proposal_id,
+        network: input.network,
+        dao: input.dao.clone(),
+        proposal_id: input.proposal_id,
         description: read.proposal.description.clone(),
         kind_json: read.proposal.kind_json.clone(),
         policy_before,
         history: None,
         prices: Prices::default(),
         dao_version: None,
-        supplied_text: None,
-        guard_account: None,
+        supplied_text: text,
+        guard_account: Some(input.guard.clone()),
         config_before: None,
         block_timestamp_ns: Some(read.block.timestamp_ns),
     }
 }
 
 /// The input and kaap-core's analysis of it.
-pub fn judge(network: Network, dao: &str, proposal_id: u64, read: &ChainRead) -> (ProposalInput, Analysis) {
-    let input = proposal_input(network, dao, proposal_id, read);
-    let analysis = analyze(&input);
-    (input, analysis)
+pub fn judge(input: &JobInput, text: Option<SuppliedText>, read: &ChainRead) -> (ProposalInput, Analysis) {
+    let proposal = proposal_input(input, text, read);
+    let analysis = analyze(&proposal);
+    (proposal, analysis)
 }

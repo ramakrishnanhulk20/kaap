@@ -12,6 +12,7 @@ pub mod prompt;
 pub mod proposal;
 pub mod reads;
 pub mod rpc;
+pub mod texts;
 pub mod verdict;
 
 #[cfg(any(feature = "local", not(target_arch = "wasm32")))]

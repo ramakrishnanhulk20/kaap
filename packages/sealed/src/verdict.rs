@@ -3,6 +3,7 @@
 //! most `MAX_OUTPUT_BYTES`.
 
 use base64::Engine as _;
+use kaap_core::receipt::DECODER_VERSION;
 use kaap_core::verdict::{VERDICT_DOMAIN, VERDICT_VERSION};
 use kaap_core::{verdict_bytes, AiStatus, Analysis, Severity, Verdict};
 use serde::Serialize;
@@ -10,12 +11,10 @@ use sha2::{Digest, Sha256};
 
 use crate::ai::{AiOutcome, AiRisk, Check};
 use crate::input::JobInput;
-use crate::output::MAX_OUTPUT_BYTES;
+use crate::output::{sorted_json, MAX_OUTPUT_BYTES};
+use crate::prompt::cut_at_word;
 use crate::reads::ChainRead;
-
-/// kaap-core shares the workspace version with this crate, and kaap-core exports no version of
-/// its own, so this is the decoder's version too.
-pub const DECODER_VERSION: &str = env!("CARGO_PKG_VERSION");
+use crate::texts::sealed_room;
 
 /// The key path declared in the manifest. The keystore derives it for this project and the
 /// account that sent `request_execution`; the job never sees the secret.
@@ -82,11 +81,25 @@ pub fn ai_note(check: &Check) -> String {
     }
 }
 
+/// What a member reads. A public verdict's notes are sentences of up to 91 bytes, more than the
+/// longest output leaves once it is encrypted, so a reason is its short code here, the word the
+/// public evidence record stores for it. A verified answer keeps its `ai_note`, which is short and
+/// states the Intel TCB level every verdict must state.
+pub fn member_explanation(ai: &AiOutcome) -> String {
+    let text = match ai {
+        AiOutcome::Answered { answer, check: Check::Unverified(why), .. } => format!("AI unverified ({}). {}", why.code(), answer.explanation),
+        AiOutcome::Answered { answer, check, .. } => format!("{}{}", ai_note(check), answer.explanation),
+        AiOutcome::Unavailable(why) => format!("AI unavailable ({}).", why.code()),
+    };
+    text.trim_end().to_string()
+}
+
 /// Builds the unsigned verdict and the explanation it will carry.
 ///
 /// `ai_status` is Verified or Unverified when the model answered, by its `Check`, and Unavailable
 /// otherwise; `model_id` is the model that answered, or empty when none did; the explanation is
-/// `ai_note` followed by the model's text, or the job's fixed note saying why there is none.
+/// `ai_note` followed by the model's text, or the job's fixed note saying why there is none. On a
+/// run with a sealed text it is `member_explanation` instead.
 /// `explanation_hash` is set later, once the explanation has been fitted to the output.
 /// `expires_at_ms` is the read block's timestamp plus `expires_in_ms`; an overflow is refused.
 pub fn assemble(input: &JobInput, read: &ChainRead, analysis: &Analysis, ai: &AiOutcome) -> Result<(Verdict, String), &'static str> {
@@ -97,6 +110,7 @@ pub fn assemble(input: &JobInput, read: &ChainRead, analysis: &Analysis, ai: &Ai
         }
         AiOutcome::Unavailable(why) => (AiStatus::Unavailable, None, String::new(), why.note().to_string()),
     };
+    let explanation = if input.text.is_some() { member_explanation(ai) } else { explanation };
     let floor = analysis.risk_floor;
     let risk = combine_risk(floor, ai_risk.map(|r| (r, ai_status)));
     let expires_at_ms = (read.block.timestamp_ns / 1_000_000)
@@ -136,7 +150,7 @@ struct Signed<'a> {
 
 /// Fits the explanation into what is left of `MAX_OUTPUT_BYTES`, hashes it into the verdict,
 /// signs `verdict_bytes` and prints `{"v":1,"status":"ok","verdict","signature","public_key",
-/// "explanation"}`, where `verdict` is the base64 of the borsh encoding without the domain prefix
+/// "explanation"}` with its keys sorted, where `verdict` is the base64 of the borsh encoding without the domain prefix
 /// (what the guard's `veto` takes) and `signature` the base64 of the 64-byte ed25519 signature.
 ///
 /// The explanation is cut from the end, before hashing, so the hash always covers exactly the text
@@ -158,13 +172,32 @@ pub fn public_key_text(signer: &mut dyn VerdictSigner) -> Result<String, &'stati
 /// `MAX_OUTPUT_BYTES` next to `public_key`, and its hash set. From here on the verdict's bytes,
 /// and so its hash, are final.
 pub fn seal(mut verdict: Verdict, explanation: &str, public_key: &str) -> Result<(Verdict, String), &'static str> {
-    let b64 = base64::engine::general_purpose::STANDARD;
-    let unsigned_borsh = &verdict_bytes(&verdict)[VERDICT_DOMAIN.len()..];
-    let frame = render(&b64.encode(unsigned_borsh), &b64.encode([0u8; 64]), public_key, "")?;
-    let budget = MAX_OUTPUT_BYTES.checked_sub(frame.len()).ok_or("the verdict does not fit in 900 bytes")?;
-    let explanation = fit(explanation, budget);
+    let explanation = fit(explanation, explanation_budget(&verdict, public_key)?);
     verdict.explanation_hash = sha256(explanation.as_bytes());
     Ok((verdict, explanation))
+}
+
+/// `seal` for a verdict whose explanation only one member may read: `explanation` is cut only if it
+/// does not fit this run's room once encrypted, and then at its last word boundary. `encrypt` turns
+/// it into the text the output prints, and the hash covers that printed ciphertext. The hash stays what it always was, the hash of the printed field, and
+/// no hash of the plain explanation reaches the chain (C13).
+pub fn seal_encrypted(
+    mut verdict: Verdict,
+    explanation: &str,
+    public_key: &str,
+    encrypt: impl FnOnce(&str) -> Result<String, &'static str>,
+) -> Result<(Verdict, String), &'static str> {
+    let room = sealed_room(explanation_budget(&verdict, public_key)?);
+    let printed = encrypt(&cut_at_word(explanation, room))?;
+    verdict.explanation_hash = sha256(printed.as_bytes());
+    Ok((verdict, printed))
+}
+
+fn explanation_budget(verdict: &Verdict, public_key: &str) -> Result<usize, &'static str> {
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let unsigned_borsh = &verdict_bytes(verdict)[VERDICT_DOMAIN.len()..];
+    let frame = render(&b64.encode(unsigned_borsh), &b64.encode([0u8; 64]), public_key, "")?;
+    MAX_OUTPUT_BYTES.checked_sub(frame.len()).ok_or("the verdict does not fit in 900 bytes")
 }
 
 /// Signs a sealed verdict and prints it. Fails, with no signature, when the signature cannot be
@@ -181,7 +214,7 @@ pub fn sign_sealed(verdict: &Verdict, explanation: &str, public_key: &str, signe
 }
 
 fn render(verdict: &str, signature: &str, public_key: &str, explanation: &str) -> Result<String, &'static str> {
-    serde_json::to_string(&Signed {
+    sorted_json(&Signed {
         v: 1,
         status: "ok",
         verdict: verdict.to_string(),

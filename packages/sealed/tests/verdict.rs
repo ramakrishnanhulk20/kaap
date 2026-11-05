@@ -5,7 +5,7 @@
 mod common;
 
 use common::*;
-use kaap_core::{AiStatus, Severity, Verdict};
+use kaap_core::{AiStatus, Severity};
 use kaap_sealed::ai::AiRisk;
 use kaap_sealed::verdict::{combine_risk, fit, rank, sign_and_render, SignFail, VerdictSigner};
 
@@ -37,28 +37,6 @@ fn only_a_verified_answer_can_make_a_verdict_critical() {
     assert_eq!(combine_risk(Severity::Critical, Some((AiRisk::Low, AiStatus::Verified))), Severity::Critical);
     assert_eq!(combine_risk(Severity::Low, Some((AiRisk::Medium, AiStatus::Unverified))), Severity::Medium);
     assert_eq!(combine_risk(Severity::Medium, Some((AiRisk::High, AiStatus::Unavailable))), Severity::Medium);
-}
-
-fn verdict(guard: &str, dao: &str, model_id: &str) -> Verdict {
-    Verdict {
-        version: 1,
-        guard: guard.into(),
-        network: kaap_core::Network::Testnet,
-        dao: dao.into(),
-        proposal_id: u64::MAX,
-        kind_hash: [1; 32],
-        policy_hash: [2; 32],
-        receivers_hash: [3; 32],
-        block_height: u64::MAX,
-        risk: Severity::High,
-        floor: Severity::High,
-        findings: kaap_core::FindingCode::ALL.to_vec(),
-        decoder_version: "0.1.0".into(),
-        model_id: model_id.into(),
-        ai_status: AiStatus::Unverified,
-        explanation_hash: [0; 32],
-        expires_at_ms: u64::MAX,
-    }
 }
 
 #[test]

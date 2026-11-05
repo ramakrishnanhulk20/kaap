@@ -25,8 +25,22 @@ pub const PROVIDER_TYPE: &str = "vllm";
 pub const OWNER: &str = "nearai";
 
 pub const MAX_EXPLANATION_BYTES: usize = 280;
+/// The limit the model is told when only a member reads its explanation, one fixed number so the
+/// prompt stays one fixed text. Nothing is cut at it: the output's real room decides, run by run, in
+/// `verdict::seal_encrypted`, and that room depends on the names and findings in the verdict.
+pub const MAX_MEMBER_EXPLANATION_BYTES: usize = 120;
 /// The model's whole message. A valid answer is under 400 bytes.
 pub const MAX_ANSWER_BYTES: usize = 2_048;
+
+/// Who may read what a prompt carries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Audience {
+    /// Public chain facts: a failed attestation only means the answer cannot be Verified.
+    Public,
+    /// A sealed text, or facts drawn from one, for an explanation only a member reads (C12). The
+    /// prompt leaves the enclave only after the attestation checks passed.
+    Members,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AiRisk {
@@ -65,9 +79,31 @@ pub enum Refusal {
     ExplanationTooLong,
     ExplanationNotPlainText,
     Deadline,
+    /// A prompt only members may read, and the checks before it did not pass (C12).
+    SealedHardwareNotProven,
 }
 
 impl Refusal {
+    pub const ALL: [Refusal; 17] = [
+        Refusal::AiKeyMissing,
+        Refusal::KeyNotAHeaderValue,
+        Refusal::FactsTooLarge,
+        Refusal::CatalogUnreadable,
+        Refusal::ModelNotListed,
+        Refusal::ModelNotSealed,
+        Refusal::CallFailed,
+        Refusal::ResponseUnreadable,
+        Refusal::NotOneFinishedChoice,
+        Refusal::AnswerTooLong,
+        Refusal::AnswerNotTheSchema,
+        Refusal::UnknownRiskWord,
+        Refusal::ExplanationEmpty,
+        Refusal::ExplanationTooLong,
+        Refusal::ExplanationNotPlainText,
+        Refusal::Deadline,
+        Refusal::SealedHardwareNotProven,
+    ];
+
     /// The explanation a verdict carries when the AI was not used, so the output says why.
     pub fn note(self) -> &'static str {
         use Refusal::*;
@@ -88,6 +124,7 @@ impl Refusal {
             ExplanationTooLong => "AI unavailable: the explanation was over 280 bytes.",
             ExplanationNotPlainText => "AI unavailable: the explanation was not plain text.",
             Deadline => "AI unavailable: NEAR AI did not answer in time.",
+            SealedHardwareNotProven => "AI unavailable: the model's sealed hardware was not proven, so the text was not sent.",
         }
     }
 
@@ -111,6 +148,7 @@ impl Refusal {
             ExplanationTooLong => "explanation_too_long",
             ExplanationNotPlainText => "explanation_not_plain_text",
             Deadline => "deadline",
+            SealedHardwareNotProven => "sealed_hardware_not_proven",
         }
     }
 }
@@ -237,20 +275,27 @@ pub fn check_model(list_body: &[u8], model_id: &str) -> Result<(), Refusal> {
 
 /// GLM 5.3 Flash reasons before it answers. NEAR AI's docs (27 Oct 2026) say turning reasoning off
 /// through `chat_template_kwargs` only moves it into `content`, which would break the exact-JSON
-/// answer, so the reasoning is kept short with a budget instead.
-pub const THINKING_TOKEN_BUDGET: u32 = 256;
-/// The answer itself, about 100 tokens. Provisional: the first live run stores the real token
-/// counts in its evidence (`completion`), and this is sized from them.
+/// answer, so the reasoning is kept short with a budget instead. The first live run (5 Nov 2026,
+/// one proposal) reasoned for 257 tokens against a budget of 256 and finished with `stop` in 15.7 s
+/// of the run's 60 s, so 512 leaves harder proposals room. WO-05c's evaluation is the check.
+pub const THINKING_TOKEN_BUDGET: u32 = 512;
+/// The answer itself. The same run's answer took about 66 of these 400 tokens, and one run is thin,
+/// so WO-05c's evaluation is the check here too.
 pub const MAX_ANSWER_TOKENS: u32 = 400;
 
 /// The one chat request: non-streamed (a streamed answer is signed by the gateway, not the
 /// model), temperature 0, reasoning capped at `THINKING_TOKEN_BUDGET`, room for the reasoning
-/// plus `MAX_ANSWER_TOKENS`, JSON mode. These are the exact bytes sent and hashed.
-pub fn chat_request_body(model_id: &str, user_message: &str) -> Vec<u8> {
+/// plus `MAX_ANSWER_TOKENS`, JSON mode. A Members prompt alone adds `MAX_MEMBER_EXPLANATION_BYTES`
+/// to the system prompt. These are the exact bytes sent and hashed.
+pub fn chat_request_body(model_id: &str, user_message: &str, audience: Audience) -> Vec<u8> {
+    let system = match audience {
+        Audience::Public => crate::prompt::SYSTEM_PROMPT.to_string(),
+        Audience::Members => crate::prompt::member_system_prompt(),
+    };
     serde_json::json!({
         "model": model_id,
         "messages": [
-            { "role": "system", "content": crate::prompt::SYSTEM_PROMPT },
+            { "role": "system", "content": system },
             { "role": "user", "content": user_message },
         ],
         "stream": false,
@@ -402,18 +447,22 @@ impl AiOutcome {
 /// the catalog, Intel, NVIDIA or the public token, and never into any output. No key, a key that
 /// is not a plain header value, facts that did not fit (`None`), a catalog that does not mark the
 /// model as sealed, a failed or late call, and any refused answer each give `Unavailable` with the
-/// reason. Before the question, `attest::preflight` checks the model's attestation; its failure
-/// does not stop the question, it only means the answer cannot be Verified. Each request runs
-/// under its own limits, cut to `deadline`; the preflight gets at most `PREFLIGHT_BUDGET_MS`.
+/// reason. Before the question, `attest::preflight` checks the model's attestation. For a Public
+/// prompt its failure does not stop the question, it only means the answer cannot be Verified. For
+/// a Members prompt it stops the question: nothing carrying the text leaves the job, and the
+/// outcome is `Unavailable(SealedHardwareNotProven)`, so the plain-code verdict stands (C12). Each
+/// request runs under its own limits, cut to `deadline`; the preflight gets at most
+/// `PREFLIGHT_BUDGET_MS`.
 pub fn consult(
     http: &mut dyn Http,
     key: Option<&str>,
     facts: Option<&str>,
+    audience: Audience,
     deadline: Deadline,
     trust: &Trust,
 ) -> (AiOutcome, Evidence) {
     let mut evidence = Evidence::new();
-    let outcome = match ask(http, key, facts, deadline, trust, &mut evidence) {
+    let outcome = match ask(http, key, facts, audience, deadline, trust, &mut evidence) {
         Ok((answer, check)) => AiOutcome::Answered { answer, model_id: MODEL_ID, check },
         Err(why) => AiOutcome::Unavailable(why),
     };
@@ -424,6 +473,7 @@ fn ask(
     http: &mut dyn Http,
     key: Option<&str>,
     facts: Option<&str>,
+    audience: Audience,
     deadline: Deadline,
     trust: &Trust,
     evidence: &mut Evidence,
@@ -458,12 +508,15 @@ fn ask(
     evidence.model_id = Some(MODEL_ID);
     evidence.nonce = trust.nonce.map(hex::encode);
     let verified = attest::preflight(http, key, trust, deadline.earlier(PREFLIGHT_BUDGET_MS), evidence);
+    if audience == Audience::Members && verified.is_err() {
+        return Err(Refusal::SealedHardwareNotProven);
+    }
 
     if deadline.passed() {
         return Err(Refusal::Deadline);
     }
     let authorization = format!("Bearer {key}");
-    let body = chat_request_body(MODEL_ID, facts);
+    let body = chat_request_body(MODEL_ID, facts, audience);
     let chat = http
         .send(&Request {
             method: Method::Post,

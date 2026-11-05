@@ -71,7 +71,7 @@ impl Evidence {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        serde_json::to_vec(self).unwrap_or_default()
+        crate::output::sorted_json(self).map(String::into_bytes).unwrap_or_default()
     }
 }
 

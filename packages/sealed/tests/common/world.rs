@@ -97,6 +97,8 @@ pub struct World {
     pub overrides: Vec<Override>,
     /// Every request, in order.
     pub seen: Vec<Seen>,
+    /// Every request body, in order.
+    pub bodies: Vec<Vec<u8>>,
     sent_chat: Vec<u8>,
     served_chat: Vec<u8>,
 }
@@ -135,6 +137,7 @@ impl World {
             signing: Signing::Model,
             overrides: Vec::new(),
             seen: Vec::new(),
+            bodies: Vec::new(),
             sent_chat: Vec::new(),
             served_chat: Vec::new(),
         }
@@ -181,6 +184,7 @@ impl Http for World {
     fn send(&mut self, r: &Request<'_>) -> Result<Response, HttpFail> {
         let url = format!("{}{}{}", r.endpoint.authority, r.endpoint.path, r.tail);
         self.seen.push((url, r.headers.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(), r.limits.overall_ms));
+        self.bodies.extend(r.body.map(<[u8]>::to_vec));
         if let Some(at) = self.overrides.iter().position(|(path, _)| *path == r.endpoint.path) {
             return self.overrides.remove(at).1;
         }

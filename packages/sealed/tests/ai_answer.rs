@@ -132,7 +132,7 @@ fn a_cut_off_completion_is_still_read_for_its_token_counts() {
 
 #[test]
 fn the_request_is_non_streamed_canonical_and_holds_only_the_fixed_prompt_and_the_facts() {
-    let body: serde_json::Value = serde_json::from_slice(&chat_request_body(MODEL_ID, "FACTS")).unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&chat_request_body(MODEL_ID, "FACTS", Audience::Public)).unwrap();
     assert_eq!(body["model"], MODEL_ID);
     assert_eq!(body["stream"], false);
     assert_eq!(body["messages"].as_array().unwrap().len(), 2);
@@ -142,6 +142,19 @@ fn the_request_is_non_streamed_canonical_and_holds_only_the_fixed_prompt_and_the
     assert_eq!(body["max_tokens"], THINKING_TOKEN_BUDGET + MAX_ANSWER_TOKENS);
     assert!(body.get("chat_template_kwargs").is_none(), "enable_thinking false moves GLM 5.3 Flash's reasoning into content");
     assert_eq!(MODEL_ID_QUERY, MODEL_ID.replace('/', "%2F"));
+}
+
+#[test]
+fn only_a_members_prompt_names_the_members_limit() {
+    let system = |audience| {
+        let body: serde_json::Value = serde_json::from_slice(&chat_request_body(MODEL_ID, "FACTS", audience)).unwrap();
+        body["messages"][0]["content"].as_str().unwrap().to_string()
+    };
+    let limit = format!("at most {MAX_MEMBER_EXPLANATION_BYTES} characters");
+    assert_eq!(system(Audience::Public), kaap_sealed::prompt::SYSTEM_PROMPT, "a public prompt is the fixed text alone");
+    assert!(system(Audience::Members).starts_with(kaap_sealed::prompt::SYSTEM_PROMPT));
+    assert!(system(Audience::Members).contains(&limit));
+    assert!(!kaap_sealed::prompt::SYSTEM_PROMPT.contains(&limit));
 }
 
 const LIVE_LIST: &str = include_str!("fixtures/model-list-2026-10-29.json");

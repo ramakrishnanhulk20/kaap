@@ -7,7 +7,7 @@ mod common;
 
 use common::world::{trust, World, KEY, LIST};
 use kaap_sealed::ai::*;
-use kaap_sealed::attest::Unverified;
+use kaap_sealed::attest::{Trust, Unverified};
 use kaap_sealed::net::{Deadline, HttpFail, Response};
 
 fn soon() -> Deadline {
@@ -15,7 +15,19 @@ fn soon() -> Deadline {
 }
 
 fn ask(world: &mut World, key: Option<&str>, facts: Option<&str>, deadline: Deadline) -> AiOutcome {
-    consult(world, key, facts, deadline, &trust()).0
+    consult(world, key, facts, Audience::Public, deadline, &trust()).0
+}
+
+const SEALED_FACTS: &str = "FACTS drawn from a text only members may read";
+
+/// A Members prompt through `world` under `trust`.
+fn ask_for_members(world: &mut World, trust: &Trust) -> AiOutcome {
+    consult(world, Some(KEY), Some(SEALED_FACTS), Audience::Members, soon(), trust).0
+}
+
+fn never_sent(world: &World) {
+    assert!(!world.urls().contains(&"cloud-api.near.ai/v1/chat/completions"), "the question was asked");
+    assert!(!world.bodies.iter().any(|b| b.windows(SEALED_FACTS.len()).any(|w| w == SEALED_FACTS.as_bytes())), "the facts left the job");
 }
 
 #[test]
@@ -104,6 +116,72 @@ fn a_failed_preflight_still_asks_but_never_verifies() {
 }
 
 #[test]
+fn a_failed_preflight_never_sends_a_members_prompt() {
+    let not_proven = AiOutcome::Unavailable(Refusal::SealedHardwareNotProven);
+    let mut world = World::new();
+    world.overrides.push(("/v1/attestation/report", Ok(Response::new(503, vec![]))));
+    assert_eq!(ask_for_members(&mut world, &trust()), not_proven);
+    never_sent(&world);
+
+    // The model's checks all pass and only the gateway's token fails, the last check of the preflight.
+    let mut world = World::new();
+    world.ita = "{}".to_string();
+    assert_eq!(ask_for_members(&mut world, &trust()), not_proven);
+    never_sent(&world);
+    assert!(world.urls().iter().any(|u| u.contains("/v1/attestation/ita-token")), "the preflight ran to its end");
+
+    let mut world = World::new();
+    assert_eq!(ask_for_members(&mut world, &Trust { nonce: None, ..trust() }), not_proven);
+    never_sent(&world);
+    let mut world = World::new();
+    assert_eq!(ask_for_members(&mut world, &Trust { now: Err(Unverified::NoClock), ..trust() }), not_proven);
+    never_sent(&world);
+}
+
+#[test]
+fn a_passed_preflight_sends_a_members_prompt_to_the_chat_alone() {
+    let mut world = World::new();
+    let got = ask_for_members(&mut world, &trust());
+    assert!(matches!(got, AiOutcome::Answered { check: Check::Verified { .. }, .. }), "{got:?}");
+    let carrying: Vec<_> = world.bodies.iter().filter(|b| b.windows(SEALED_FACTS.len()).any(|w| w == SEALED_FACTS.as_bytes())).collect();
+    assert_eq!(carrying.len(), 1, "exactly one request carried the facts");
+    let last_preflight_call = world.urls().iter().rposition(|u| u.contains("/v1/attestation/ita-token")).unwrap();
+    let chat = world.urls().iter().position(|u| u.ends_with("/v1/chat/completions")).unwrap();
+    assert!(last_preflight_call < chat, "the facts go out only after the last preflight check");
+}
+
+#[test]
+fn nothing_is_cut_at_the_limit_the_model_is_told() {
+    let text: String = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima ".repeat(4)[..MAX_EXPLANATION_BYTES].to_string();
+    let world = || {
+        let mut w = World::new();
+        w.chat["choices"][0]["message"]["content"] = serde_json::json!(format!(r#"{{"risk":"high","explanation":"{text}"}}"#));
+        w
+    };
+    let AiOutcome::Answered { answer, .. } = ask_for_members(&mut world(), &trust()) else { panic!("refused") };
+    assert_eq!(answer.explanation, text, "a run's real room decides, when the verdict is sealed");
+
+    let AiOutcome::Answered { answer, .. } = ask(&mut world(), Some(KEY), Some("FACTS"), soon()) else { panic!("refused") };
+    assert_eq!(answer.explanation, text, "a public answer keeps its 280 bytes");
+
+    let mut over = World::new();
+    over.chat["choices"][0]["message"]["content"] = serde_json::json!(format!(r#"{{"risk":"high","explanation":"{text}x"}}"#));
+    assert_eq!(ask_for_members(&mut over, &trust()), AiOutcome::Unavailable(Refusal::ExplanationTooLong), "280 still holds");
+}
+
+#[test]
+fn cutting_at_a_word_never_leaves_part_of_one() {
+    use kaap_sealed::prompt::cut_at_word;
+    assert_eq!(cut_at_word("one two three", 13), "one two three");
+    assert_eq!(cut_at_word("one two three", 12), "one two");
+    assert_eq!(cut_at_word("one two three", 7), "one two", "the cut lands exactly on a space");
+    assert_eq!(cut_at_word("one two three", 8), "one two");
+    assert_eq!(cut_at_word("one  two", 4), "one", "no space is left at the end");
+    assert_eq!(cut_at_word("averylongfirstword two", 5), "", "half a word is never kept");
+    assert_eq!(cut_at_word("one t\u{e9}", 6), "one", "and no character is split");
+}
+
+#[test]
 fn a_passed_deadline_sends_nothing_and_a_short_one_cuts_every_limit() {
     let mut world = World::new();
     assert_eq!(ask(&mut world, Some(KEY), Some("FACTS"), Deadline::after_ms(0)), AiOutcome::Unavailable(Refusal::Deadline));
@@ -120,13 +198,7 @@ fn a_passed_deadline_sends_nothing_and_a_short_one_cuts_every_limit() {
 
 #[test]
 fn the_refusal_notes_never_carry_the_key_or_answer_text() {
-    let notes = [
-        Refusal::AiKeyMissing, Refusal::KeyNotAHeaderValue, Refusal::FactsTooLarge, Refusal::CatalogUnreadable,
-        Refusal::ModelNotListed, Refusal::ModelNotSealed, Refusal::CallFailed, Refusal::ResponseUnreadable,
-        Refusal::NotOneFinishedChoice, Refusal::AnswerTooLong, Refusal::AnswerNotTheSchema, Refusal::UnknownRiskWord,
-        Refusal::ExplanationEmpty, Refusal::ExplanationTooLong, Refusal::ExplanationNotPlainText, Refusal::Deadline,
-    ];
-    for r in notes {
+    for r in Refusal::ALL {
         let note = r.note();
         assert!(note.starts_with("AI unavailable"), "{note}");
         assert!(is_plain_text(note) && note.len() <= MAX_EXPLANATION_BYTES, "{note}");
