@@ -9,7 +9,7 @@ Kaap's guard contract votes only on verdicts signed by that key.
 | Thing | Value |
 | --- | --- |
 | OutLayer project | `kaap-worker-1029053612.testnet/kaap-sealed` on `outlayer.testnet`, uuid `p00000000000000a9` |
-| Worker account (the only caller) | `kaap-worker-1029053612.testnet` |
+| Worker account (the only free caller) | `kaap-worker-1029053612.testnet` |
 | Build (wasm sha256) | `0099d7b75f5f509ee0c84a7b819058c67ba2e9f9099e4dbf51e413a343d6ff49`, 380,792 bytes, wasm32-wasip2 |
 | Hosted at | secret gist `5ea40ed7c5610efcd50d69af2ae8abe2`, commit `0ecb03eb`: [raw URL pinned to the commit](https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/0ecb03ebcbd8714164965d2df18edbae7d95875e/kaap-sealed-0099d7b7.wasm) |
 | Registered by | [create_project](https://testnet.nearblocks.io/txns/FHy3utGUWWwPtPMGz8ALXh9NLR5G4Mo2h1QTsEDGtuMu) |
@@ -22,6 +22,55 @@ The key is bound to the project's uuid and to the account that sends `request_ex
 `bind: "project"`, `caller: "signer"`): every version of this project signs with it when
 `kaap-worker-1029053612.testnet` calls, and any other caller gets a different key. That is why
 this one account is the worker for every testnet run, and why the guard accepts only this key.
+
+## Who can run it, and what it costs
+
+Kaap's own worker runs the job free on chain. Anyone else pays one cent per check, which is 10,000
+in OutLayer's unit of millionths of a dollar (`PRICE_MICRO_USD` in `src/payment.rs`). OutLayer lets
+only the projects it curates set a price, so this program enforces it, from variables OutLayer sets
+and no input can fill. There are two ways to pay:
+
+- Over HTTPS, with an OutLayer payment key: `POST /call/<project id>` with the header
+  `X-Attached-Deposit: 10000`. The program reads it as `USD_PAYMENT`.
+- On chain, from a stablecoin balance held at `outlayer.testnet` (`ft_transfer_call` with the
+  message `{"action":"deposit_balance"}`): `request_execution` with `attached_usd` set to `"10000"`
+  in its `params`. The program reads it as `ATTACHED_USD`.
+
+A run is free only on chain, and only when `NEAR_USER_ACCOUNT_ID` is exactly the account named in
+`packages/sealed/testnet.json`, compiled in at build time. That variable is the transaction's
+signer and the account the run's keys are bound to. `NEAR_SENDER_ID` is not used, because an Agent
+Connect binding can rewrite it. An HTTPS call always pays, even with the worker's own payment key.
+Kaap has no mainnet worker yet, so every mainnet run pays until one is named.
+
+An amount that is missing, empty, not a plain decimal integer, or below the price gets a normal
+answer before anything is read or signed:
+
+```
+{"detail":"A check costs 10000 millionths of a dollar. This run carried 9999. An underpayment is not refunded.","reason":"payment_below_price","status":"refused","v":1}
+```
+
+OutLayer counts that as a successful run, so the amount is kept: an underpayment is not refunded,
+and neither is a payment on a run whose input is refused. More than the price is accepted, and no
+change is given. Asking for the text key with `{"v":1,"op":"pubkey"}` is free.
+
+A paid run is the same check with two differences a payer should know before buying:
+
+- Its verdict is signed by a key derived for the payer, not by Kaap's. The guard accepts only
+  Kaap's key, so a paid verdict is advice the payer can prove. It cannot veto anything.
+- It writes no public evidence. Every Verified verdict must have evidence a stranger can read, so a
+  paid run is never "AI verified".
+
+Kaap's NEAR AI key does not reach a paid run, because the secret's rule is judged against the
+payer's account. Without a key of the payer's own the verdict is the plain-code one, with
+`ai_key_missing`. A sealed text works as usual, encrypted to the text key this payer gets from
+`{"v":1,"op":"pubkey"}`.
+
+HTTPS payments collect in OutLayer's own database, and its earnings page still says "Withdraw
+(Coming Soon)", so Kaap cannot take them out until OutLayer ships that. Chain payments go to the
+project owner's balance on `outlayer.testnet`, which `withdraw_developer_earnings` pays out today.
+
+Builds published before this gate have no price check, and a caller can name one with `version_key`
+until it is removed.
 
 ## What the job reads
 
@@ -120,8 +169,8 @@ which instance answered.
 
 ## Where the evidence is
 
-Every signed verdict's evidence is published in OutLayer public storage under the key
-`ai-evidence:<hex sha256 of "kaap-verdict-v1\n" plus the verdict's borsh bytes>`. Only this
+The evidence of every verdict from Kaap's own worker is published in OutLayer public storage under
+the key `ai-evidence:<hex sha256 of "kaap-verdict-v1\n" plus the verdict's borsh bytes>`. Only this
 project's code can write there; anyone can read it:
 
 ```
@@ -273,7 +322,8 @@ directories gave `0099d7b7...ff49` on 29 Oct 2026.
 
 - Tests, natively, on recorded testnet answers: `cargo test -p kaap-sealed`.
 - The local build under plain wasmtime, with recorded answers and a public test key (never
-  published): `bash packages/sealed/run-local.sh`.
+  published): `bash packages/sealed/run-local.sh`. It runs as the worker unless
+  `NEAR_USER_ACCOUNT_ID` is set.
 - Publish a version: `bash scripts/WO-02b-publish-testnet.sh fastfs` or
   `bash scripts/WO-02b-publish-testnet.sh https://<host>/<file>.wasm`. It checks the served sha256
   before registering anything.

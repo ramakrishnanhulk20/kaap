@@ -4,6 +4,8 @@
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::payment::Refusal;
+
 /// The documented limit on what `request_execution` returns on chain. Testnet returned 2,000
 /// bytes whole on 26 Oct; mainnet is unmeasured, so 900 stays the cap.
 pub const MAX_OUTPUT_BYTES: usize = 900;
@@ -18,6 +20,22 @@ struct Plain {
 /// The input was not accepted. No outside call was made.
 pub fn refused(reason: &'static str) -> String {
     plain("refused", reason)
+}
+
+#[derive(Serialize)]
+struct BelowPrice {
+    v: u8,
+    status: &'static str,
+    reason: &'static str,
+    detail: String,
+}
+
+/// The run's payment was refused. Like a refused input it is a normal answer, never a trap: a
+/// trap's fate on OutLayer differs between its two doors, and this one reads the same on both. No
+/// outside call was made.
+pub fn below_price(why: Refusal) -> String {
+    sorted_json(&BelowPrice { v: 1, status: "refused", reason: why.reason(), detail: why.sentence() })
+        .unwrap_or_else(|_| refused(why.reason()))
 }
 
 /// A read failed or the two providers disagreed. No verdict, no signature (C22).

@@ -1,6 +1,6 @@
-//! One run of the job, in order: check the input, open a sealed text if there is one, read both
-//! providers at one block, decode, ask the model, assemble, sign, print. Every way out that is not
-//! a signed verdict prints a fixed reason and no signature.
+//! One run of the job, in order: check the input, settle the payment, open a sealed text if there
+//! is one, read both providers at one block, decode, ask the model, assemble, sign, print. Every
+//! way out that is not a signed verdict prints a fixed reason and no signature.
 
 use kaap_core::{verdict_hash, AiStatus, Analysis, Network, Verdict};
 
@@ -10,7 +10,8 @@ use crate::attest::tdx::QuoteCheck;
 use crate::attest::{trusted_now, Evidence, EvidenceSink, Trust, Unverified};
 use crate::input::{parse_request, JobInput, Request};
 use crate::net::{Deadline, Http};
-use crate::output::{failed, held, refused};
+use crate::output::{below_price, failed, held, refused};
+use crate::payment::{gate, worker_account, PayEnv, Payer};
 use crate::proposal::judge;
 use crate::prompt::user_message;
 use crate::reads::{read_chain, ChainRead, HOST_CATCH_UP_MS};
@@ -44,24 +45,51 @@ pub struct Connections {
     pub evidence: Box<dyn EvidenceSink>,
 }
 
+/// What OutLayer set for this run, read in `main()`. Nothing here comes from the input.
+pub struct RunEnv<'a> {
+    /// `NEAR_NETWORK_ID`.
+    pub network: Option<&'a str>,
+    pub pay: PayEnv,
+}
+
+/// Native builds only ever run tests, and a test that names no payer is Kaap's worker on chain. This
+/// is not in the wasm, so `main()` cannot reach a free run by leaving the payment facts out.
+#[cfg(not(target_arch = "wasm32"))]
+impl<'a> From<Option<&'a str>> for RunEnv<'a> {
+    fn from(network: Option<&'a str>) -> Self {
+        let pay = PayEnv {
+            execution_type: Some("NEAR".to_string()),
+            usd_payment: Some("0".to_string()),
+            attached_usd: Some("0".to_string()),
+            sender: Some(crate::payment::TESTNET_WORKER.to_string()),
+        };
+        RunEnv { network, pay }
+    }
+}
+
 /// Runs the job on the raw stdin bytes and returns what it prints.
 ///
-/// `run_network` is `NEAR_NETWORK_ID` and `ai_key` the `NEAR_AI_API_KEY` secret, both as OutLayer
-/// sets them. `connect` is called only for an input that passed every check, with the network and
-/// the read deadline, so a refused input makes no outside call at all.
-pub fn run(
+/// `env` is what OutLayer set for the run and `ai_key` the `NEAR_AI_API_KEY` secret. A judge run
+/// passes `gate` right after its input is parsed; asking for the text key is free. `connect` is
+/// called only for an input that passed every check and a payment that was accepted, with the
+/// network and the read deadline, so a refused run makes no outside call at all.
+pub fn run<'a>(
     raw: &[u8],
-    run_network: Option<&str>,
+    env: impl Into<RunEnv<'a>>,
     ai_key: Option<&str>,
     connect: impl FnOnce(Network, Deadline) -> Connections,
 ) -> String {
-    let request = match parse_request(raw, run_network) {
+    let RunEnv { network, pay } = env.into();
+    let request = match parse_request(raw, network) {
         Ok(request) => request,
         Err(why) => return refused(why.reason()),
     };
     match request {
         Request::TextKey(network) => text_key(network, connect),
-        Request::Judge(input) => judge_run(input, ai_key, connect),
+        Request::Judge(input) => match gate(&pay, worker_account(input.network).unwrap_or("")) {
+            Ok(payer) => judge_run(input, ai_key, payer, connect),
+            Err(why) => below_price(why),
+        },
     }
 }
 
@@ -78,11 +106,28 @@ fn text_failure(why: TextFail) -> String {
     }
 }
 
-fn judge_run(input: JobInput, ai_key: Option<&str>, connect: impl FnOnce(Network, Deadline) -> Connections) -> String {
+/// Where a paid run's evidence goes: nowhere. Public storage is Kaap's, so a paying stranger must
+/// not be able to grow it. It answers "not published", which keeps `seal_and_publish`'s rule that
+/// every Verified verdict has evidence a stranger can read.
+struct NoEvidence;
+
+impl EvidenceSink for NoEvidence {
+    fn publish(&mut self, _key: &str, _record: &[u8]) -> bool {
+        false
+    }
+}
+
+/// Judges an input for a payer `gate` has already settled. A `Payer::Paid` run is the same check
+/// and writes no public evidence.
+pub fn judge_run(input: JobInput, ai_key: Option<&str>, payer: Payer, connect: impl FnOnce(Network, Deadline) -> Connections) -> String {
     let read_deadline = Deadline::after_ms(READ_BUDGET_MS);
     let job_deadline = Deadline::after_ms(JOB_BUDGET_MS);
-    let Connections { mut host, https, mut ai, mut signer, mut texts, nonce, block_timestamp, quote, mut evidence } =
+    let Connections { mut host, https, mut ai, mut signer, mut texts, nonce, block_timestamp, quote, evidence } =
         connect(input.network, read_deadline);
+    let mut evidence: Box<dyn EvidenceSink> = match payer {
+        Payer::Kaap => evidence,
+        Payer::Paid => Box::new(NoEvidence),
+    };
     // Before any read, so a text that does not open costs no outside call.
     let text = match input.text.as_ref().map(|sealed| open_text(texts.as_mut(), &input, sealed)).transpose() {
         Ok(text) => text,

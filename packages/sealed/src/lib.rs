@@ -8,6 +8,7 @@ pub mod input;
 pub mod job;
 pub mod net;
 pub mod output;
+pub mod payment;
 pub mod prompt;
 pub mod proposal;
 pub mod reads;

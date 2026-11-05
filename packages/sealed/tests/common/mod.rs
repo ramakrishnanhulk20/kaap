@@ -181,6 +181,18 @@ impl kaap_sealed::net::Http for Scripted {
     }
 }
 
+/// An `Http` that keeps every request's address and body in a list the test holds, and answers
+/// from `.0`.
+pub struct Noted<H>(pub H, pub Records);
+
+impl<H: kaap_sealed::net::Http> kaap_sealed::net::Http for Noted<H> {
+    fn send(&mut self, r: &kaap_sealed::net::Request<'_>) -> Result<kaap_sealed::net::Response, kaap_sealed::net::HttpFail> {
+        let url = format!("{}{}{}", r.endpoint.authority, r.endpoint.path, r.tail);
+        self.1.borrow_mut().push((url, r.body.map(<[u8]>::to_vec).unwrap_or_default()));
+        self.0.send(r)
+    }
+}
+
 /// The parts of a signed output, checked: the signature verifies over kaap-core's
 /// `verdict_bytes` under the printed key, and the explanation hash matches the printed text.
 pub fn open(out: &str) -> (kaap_core::Verdict, Value) {

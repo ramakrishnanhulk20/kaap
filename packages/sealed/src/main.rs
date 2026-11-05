@@ -44,7 +44,19 @@ fn main() {
     let _ = std::io::stdin().take(cap).read_to_end(&mut raw);
     let network = std::env::var("NEAR_NETWORK_ID").ok();
     let key = std::env::var("NEAR_AI_API_KEY").ok();
-    let text = kaap_sealed::job::run(&raw, network.as_deref(), key.as_deref(), connect);
+    let sender = std::env::var("NEAR_USER_ACCOUNT_ID").ok();
+    // Plain wasmtime has no OutLayer to name a caller, so the local build stands in the worker, as
+    // it stands in the host's RPC and keys.
+    #[cfg(feature = "local")]
+    let sender = sender.or_else(|| Some(kaap_sealed::payment::TESTNET_WORKER.to_string()));
+    let pay = kaap_sealed::payment::PayEnv {
+        execution_type: std::env::var("OUTLAYER_EXECUTION_TYPE").ok(),
+        usd_payment: std::env::var("USD_PAYMENT").ok(),
+        attached_usd: std::env::var("ATTACHED_USD").ok(),
+        sender,
+    };
+    let env = kaap_sealed::job::RunEnv { network: network.as_deref(), pay };
+    let text = kaap_sealed::job::run(&raw, env, key.as_deref(), connect);
     let mut out = std::io::stdout();
     let _ = out.write_all(text.as_bytes());
     let _ = out.flush();

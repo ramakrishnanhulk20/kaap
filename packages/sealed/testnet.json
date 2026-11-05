@@ -10,7 +10,8 @@
       "url": "https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/0ecb03ebcbd8714164965d2df18edbae7d95875e/kaap-sealed-0099d7b7.wasm",
       "registered_by": "create_project",
       "tx": "FHy3utGUWWwPtPMGz8ALXh9NLR5G4Mo2h1QTsEDGtuMu",
-      "at": "2026-10-29T05:36:22Z"
+      "at": "2026-10-29T05:36:22Z",
+      "retired": false
     },
     {
       "sha256": "73409203d24cbda98e98511bb97d1a2065b72702140138f85a198bff347cae87",
@@ -18,7 +19,8 @@
       "url": "https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/efd72eb5307df22d2abb370ee6ac1fa4df175dcf/kaap-sealed-73409203.wasm",
       "registered_by": "add_version",
       "tx": "4eofkn7BjiAdsp55KRnSQqdAcS6nFDgWgxzTWAMqDvDJ",
-      "at": "2026-11-03T05:06:55Z"
+      "at": "2026-11-03T05:06:55Z",
+      "retired": false
     }
   ],
   "uuid": "p00000000000000a9",
