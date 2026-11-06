@@ -115,6 +115,6 @@ echo "project: $(echo "$PROJECT" | jq -c '{project_id, uuid, active_version}')"
 TMP=$(mktemp)
 jq --arg sha "$SHA" --arg url "$URL" --arg tx "$TX" --arg m "$METHOD" --arg uuid "$(echo "$PROJECT" | jq -r .uuid)" \
   --arg size "$(stat -c%s "$WASM")" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  '.uuid = $uuid | .active_version = $sha | .versions += [{sha256:$sha, bytes:($size|tonumber), url:$url, registered_by:$m, tx:$tx, at:$at}]' \
+  '.uuid = $uuid | .active_version = $sha | .versions += [{sha256:$sha, bytes:($size|tonumber), url:$url, registered_by:$m, tx:$tx, at:$at, retired:false}]' \
   "$STATE" > "$TMP" && mv "$TMP" "$STATE"
 echo "state: packages/sealed/testnet.json"

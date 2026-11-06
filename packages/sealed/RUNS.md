@@ -139,6 +139,69 @@ The record holds hashes and never the answer text. OutLayer's own verifier
 this input produced this output inside genuine Intel TDX hardware, running code approved on chain.
 That is about OutLayer's worker. The model's machine is covered by the record above.
 
+## The combined build
+
+Run on 6 Nov 2026 between 04:07 and 04:09 UTC, from WSL, on one machine. This section is on its
+own: the numbers above are from earlier builds.
+
+| Thing | Value |
+| --- | --- |
+| Version (wasm sha256) | `e1192b2806dd088541a87794808949fbe35ee5b3422405f07c224f4c02130527`, 1,582,424 bytes |
+| Registered by | [add_version A6SXB84X...](https://testnet.nearblocks.io/txns/A6SXB84XCupvTXWLecteauyHqQzBYZTNC4cG5H7kGR9K) at 04:06:51 UTC, set active |
+| Caller, all six runs | `kaap-worker-1029053612.testnet`, no `attached_usd` |
+| Attestations, all six runs | `wasm_hash` and `executed_wasm_sha256` both the hash above, `caller_account_id` the worker. Those fields were read; the Intel quotes were not checked here |
+
+No run named `secrets_ref`, so no NEAR AI key reached any of them and `ai_status` is unavailable
+on purpose. The key's lock still names build `73409203...`, so this build has not asked the model.
+
+### The worker runs free
+
+This build charges every caller but the worker, and the job knows the worker only through
+`NEAR_USER_ACCOUNT_ID`. This run carried no payment and got a signed verdict, not
+`payment_below_price`, which is the first live proof that OutLayer sets that variable as its source
+says.
+
+| Thing | Value |
+| --- | --- |
+| Transaction | [BnsQmjvx...](https://testnet.nearblocks.io/txns/BnsQmjvxxmkLWDcPvs7Vqd8YL73GjVVXZMSujPxpdxLs) |
+| Proposal judged | `kaap-dao-1029064008.testnet` #9, guard `kaap-guard-1029061211.testnet` |
+| Verdict | status ok, risk critical, floor critical, findings `[DESC_CONTRADICTS, UNKNOWN_VALUE]`, `ai_status` unavailable |
+| Verdict key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN` |
+| Worker time | 3,683 ms, the first run of this build ("Freshly compiled", 867 ms compile) |
+| Instructions | 16,803,451 of the 10,000,000,000 allowed |
+| Request to result | 22 blocks, 13,263 ms on chain, 18,291 ms wall clock |
+| Paid | 0.00223 testnet NEAR: OutLayer's charge 0.00146, transaction gas 0.00078 |
+
+### The sealed text channel
+
+`node scripts/WO-05b-text-roundtrip.mjs` under Node 24: exit 0, `RESULT: pass`. This is the first
+live use of `outlayer:encryption-keys`. The demo member filed proposal #10 on
+`kaap-dao-1029064008.testnet`
+([EgtdYXJZ...](https://testnet.nearblocks.io/txns/EgtdYXJZF44dVrJGGkrP5hiwa5cE291T16th1XFcKGxz)),
+a sign request whose hash points to a text made up for the run.
+
+| Step | Transaction | Output bytes | Blocks | On chain ms | Worker ms | Paid, NEAR |
+| --- | --- | --- | --- | --- | --- | --- |
+| Ask for the key | [JBtGvrRV...](https://testnet.nearblocks.io/txns/JBtGvrRVzFihc6Q4qfCzdHPynbhaV68s8ALxrb2mmM7H) | 270 | 17 | 9,867 | 2,617 | 0.0020210 |
+| Judge with the sealed text | [GNvcy195...](https://testnet.nearblocks.io/txns/GNvcy195fqyRg9RAa3pQjEMgVJANF13Ku8yHiypFV623) | 673 | 16 | 9,978 | 3,107 | 0.0021202 |
+| Attack: tampered ciphertext | [9BnN3oBy...](https://testnet.nearblocks.io/txns/9BnN3oByXqzZQ14xmDGaxpxzche2fT1mr6oVdpzrPKxz) | 73 | 15 | 9,008 | 2,621 | 0.0020669 |
+| Attack: a thief's reply key | [14RVcgb7...](https://testnet.nearblocks.io/txns/14RVcgb7xw6XqysB8vbmaBXdgU15TcDUf3te45gZ8m4G) | 73 | 15 | 8,526 | 2,673 | 0.0020724 |
+| Attack: a ciphertext for another key | [D33K6XX3...](https://testnet.nearblocks.io/txns/D33K6XX3ersrE53fsQU94FaApyvrCADGZvsWK2Yy5NJd) | 73 | 15 | 9,332 | 2,627 | 0.0020675 |
+
+Paid over the five runs: 0.0103481 testnet NEAR, of which OutLayer's charge is 0.0063645 and
+transaction gas 0.0039836. The filing is not counted.
+
+- The job printed text key `09bc21bb...2f6a`, signed by the key the guard's `accepted_key` names.
+- The request held ciphertext only: no part of the text in clear, plain or as base64.
+- A later run opened a text sealed to that key, so the key from OutLayer's keystore held from one
+  run to the next.
+- The verdict came back risk critical, floor critical, findings `[HASH_TEXT_DANGEROUS]`, `ai_status`
+  unavailable, with its signature and explanation hash checked by `check-output.mjs`.
+- The printed explanation was `sealed:...`. It opened with the member's key to
+  `AI unavailable (ai_key_missing).` and stayed shut for another key.
+- Each attack got `{"reason":"text_ciphertext could not be opened","status":"refused","v":1}`, with
+  no signature.
+
 ## What these runs do not cover
 
 - One proposal, one location, one 8-minute window, runs one after another. No load, nothing
@@ -155,3 +218,14 @@ That is about OutLayer's worker. The model's machine is covered by the record ab
 - OutLayer's own quote: this script checks the named fields and the two hashes only. Intel's
   signature and the worker's measurements are checked by OutLayer's `outlayer-verify`, which said
   PROVEN on the keyed run above.
+- Prices and payment history on a live mainnet read. The job refuses an input whose network differs
+  from the run's (`parse_input` in `src/input.rs`, kept on purpose) and this project runs on
+  testnet, so a mainnet read cannot be proven from here. Prices and history stay proven on recorded
+  real pages until a mainnet project exists.
+- The combined build asking the model. Its runs had no key, so the AI step, the checks around it
+  and a sealed text reaching the model have not run live on this build.
+- The combined build turning a caller away. Only the worker's free path ran live.
+  `payment_below_price`, a paid run through either door and a paying caller's own keys are proven
+  by the tests and the local build only.
+- The leak check on the live round trip reads the job's output. OutLayer's logs are not open to the
+  script, so the logged half of that check ran only on the local build.

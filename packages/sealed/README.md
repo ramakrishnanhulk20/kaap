@@ -10,9 +10,9 @@ Kaap's guard contract votes only on verdicts signed by that key.
 | --- | --- |
 | OutLayer project | `kaap-worker-1029053612.testnet/kaap-sealed` on `outlayer.testnet`, uuid `p00000000000000a9` |
 | Worker account (the only free caller) | `kaap-worker-1029053612.testnet` |
-| Build (wasm sha256) | `0099d7b75f5f509ee0c84a7b819058c67ba2e9f9099e4dbf51e413a343d6ff49`, 380,792 bytes, wasm32-wasip2 |
-| Hosted at | secret gist `5ea40ed7c5610efcd50d69af2ae8abe2`, commit `0ecb03eb`: [raw URL pinned to the commit](https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/0ecb03ebcbd8714164965d2df18edbae7d95875e/kaap-sealed-0099d7b7.wasm) |
-| Registered by | [create_project](https://testnet.nearblocks.io/txns/FHy3utGUWWwPtPMGz8ALXh9NLR5G4Mo2h1QTsEDGtuMu) |
+| Build (wasm sha256) | `e1192b2806dd088541a87794808949fbe35ee5b3422405f07c224f4c02130527`, 1,582,424 bytes, wasm32-wasip2 |
+| Hosted at | secret gist `5ea40ed7c5610efcd50d69af2ae8abe2`, commit `a1e3f057`: [raw URL pinned to the commit](https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/a1e3f057d44cde12a278b24e8068d0b11c36a4b9/kaap-sealed-e1192b28.wasm) |
+| Registered by | [add_version](https://testnet.nearblocks.io/txns/A6SXB84XCupvTXWLecteauyHqQzBYZTNC4cG5H7kGR9K), in the project from [create_project](https://testnet.nearblocks.io/txns/FHy3utGUWWwPtPMGz8ALXh9NLR5G4Mo2h1QTsEDGtuMu) |
 | Verdict public key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN` |
 
 Testnet FastFS (`test.fastfs.io`) answered HTTP 502 on the publishing day, so the build is served
@@ -320,7 +320,7 @@ No OutLayer call returns a project's signing key. The route is the attestation o
 printed it:
 
 1. Take a run transaction from `RUNS.md`, for example
-   `7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC`, and fetch
+   `BnsQmjvxxmkLWDcPvs7Vqd8YL73GjVVXZMSujPxpdxLs`, and fetch
    `https://testnet-api.outlayer.ai/attestations/by-tx/<tx>`.
 2. Check that it names `project_id` `kaap-worker-1029053612.testnet/kaap-sealed`,
    `caller_account_id` `kaap-worker-1029053612.testnet`, and `wasm_hash` equal to
@@ -347,7 +347,7 @@ bash packages/sealed/build.sh
 
 It remaps local paths out of the binary (`--remap-path-prefix`), strips symbols, refuses to finish
 if a home or checkout path is still inside, and prints the sha256. Two builds in separate target
-directories gave `0099d7b7...ff49` on 29 Oct 2026.
+directories gave `e1192b28...0527` on 6 Nov 2026.
 
 ## Run it
 
