@@ -37,13 +37,16 @@ pub const INTEL_ITA_KEYS: Endpoint = Endpoint { authority: "portal.trustauthorit
 pub const NVIDIA_NRAS: Endpoint = Endpoint { authority: "nras.attestation.nvidia.com", path: "/v3/attest/gpu" };
 pub const NVIDIA_KEYS: Endpoint = Endpoint { authority: "nras.attestation.nvidia.com", path: "/.well-known/jwks.json" };
 
+/// 1Click's public token list, `prices::PRICE_LIST_URL`.
+pub const ONECLICK_TOKENS: Endpoint = Endpoint { authority: "1click.chaindefuser.com", path: "/v0/tokens" };
+
 /// OutLayer's host RPC is FastNEAR-powered; tests and the local build stand FastNEAR's public RPC
 /// in for it. Not in `PUBLISHED_ENDPOINTS`: a published build never calls these.
 pub const HOST_STAND_IN_MAINNET: Endpoint = Endpoint { authority: "rpc.mainnet.fastnear.com", path: "/" };
 pub const HOST_STAND_IN_TESTNET: Endpoint = Endpoint { authority: "rpc.testnet.fastnear.com", path: "/" };
 
 /// Every endpoint a published build can call.
-pub const PUBLISHED_ENDPOINTS: [Endpoint; 14] = [
+pub const PUBLISHED_ENDPOINTS: [Endpoint; 15] = [
     DRPC_MAINNET,
     DRPC_TESTNET,
     NEAR_AI_MODEL_LIST,
@@ -58,6 +61,7 @@ pub const PUBLISHED_ENDPOINTS: [Endpoint; 14] = [
     INTEL_ITA_KEYS,
     NVIDIA_NRAS,
     NVIDIA_KEYS,
+    ONECLICK_TOKENS,
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

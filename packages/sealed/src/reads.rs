@@ -16,6 +16,7 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use kaap_core::history::submission_ns;
 use kaap_core::receipt::{called_accounts, receivers_hash};
 use kaap_core::{canonical_kind, canonical_policy, kind_hash, policy_hash};
 use serde::de::{self, Deserialize, Deserializer, MapAccess, Visitor};
@@ -46,6 +47,9 @@ pub struct Proposal {
     pub kind_json: Vec<u8>,
     /// Sputnik's status word, or empty when the proposal carries none.
     pub status: String,
+    /// When it was filed, in nanoseconds, or `None` when that does not read. Only the payment
+    /// history needs it, so a value that does not read fails that read and never holds the job.
+    pub submission_time_ns: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -200,7 +204,7 @@ pub fn read_chain(
     })
 }
 
-fn pinned(view: &ViewResult, head: &BlockView) -> Result<(), Held> {
+pub(crate) fn pinned(view: &ViewResult, head: &BlockView) -> Result<(), Held> {
     if view.block_height == Some(head.height) && view.block_hash.as_deref() == Some(head.hash.as_str()) {
         Ok(())
     } else {
@@ -208,9 +212,9 @@ fn pinned(view: &ViewResult, head: &BlockView) -> Result<(), Held> {
     }
 }
 
-/// Reads the four fields the job uses from a `get_proposal` answer. The answer must be one JSON
+/// Reads the five fields the job uses from a `get_proposal` answer. The answer must be one JSON
 /// object with no duplicate keys, an `id` that is a whole number, a string `description` and a
-/// `kind`; `status` is optional.
+/// `kind`; `status` and `submission_time` are optional.
 pub fn parse_proposal(bytes: &[u8]) -> Result<Proposal, Held> {
     let fields = top_level(bytes).ok_or(Held::NotAProposal)?;
     let raw = |key: &str| fields.0.iter().find(|(k, _)| k == key).map(|(_, v)| v.get());
@@ -219,8 +223,10 @@ pub fn parse_proposal(bytes: &[u8]) -> Result<Proposal, Held> {
         .and_then(|v| serde_json::from_str::<String>(v).ok())
         .ok_or(Held::NotAProposal)?;
     let kind_json = raw("kind").ok_or(Held::NotAProposal)?.as_bytes().to_vec();
-    let status = raw("status").and_then(|v| serde_json::from_str::<String>(v).ok()).unwrap_or_default();
-    Ok(Proposal { id, description, kind_json, status })
+    let text = |key: &str| raw(key).and_then(|v| serde_json::from_str::<String>(v).ok());
+    let status = text("status").unwrap_or_default();
+    let submission_time_ns = text("submission_time").and_then(|time| submission_ns(&time));
+    Ok(Proposal { id, description, kind_json, status, submission_time_ns })
 }
 
 /// True when two `get_proposal` answers hold the same fields: the kind equal in canonical form,

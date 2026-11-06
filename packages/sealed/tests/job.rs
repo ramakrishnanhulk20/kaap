@@ -26,7 +26,7 @@ fn connections(fx: &Value, ai: impl Http + 'static, store: &Store) -> impl FnOnc
         Connections {
             host: Box::new(RpcProvider::new(FixtureHttp::from_json(&text).unwrap(), HOST_STAND_IN_TESTNET, deadline)),
             https: Box::new(RpcProvider::new(FixtureHttp::from_json(&text).unwrap(), DRPC_TESTNET, deadline)),
-            ai: Box::new(ai),
+            http: Box::new(ai),
             signer: Box::new(TestSigner::new()),
             texts: Box::new(TestTexts::new()),
             nonce: Some([0; 32]),
@@ -55,7 +55,7 @@ fn published(store: &Store, out: &str) -> Value {
 fn a_real_proposal_gives_a_signed_verdict_pinned_to_its_block() {
     let fx = fixture("transfer-ft.json");
     let store = Store::default();
-    let out = run(input("corm1gu.sputnikv2.testnet", 1, "").as_bytes(), Some("testnet"), None, connections(&fx, no_ai(), &store));
+    let out = run(input("corm1gu.sputnikv2.testnet", 1, "").as_bytes(), worker_env(Some("testnet")), None, connections(&fx, no_ai(), &store));
     let (v, json) = open(&out);
     let record = published(&store, &out);
     assert_eq!((record["ai_status"].as_str(), record["reason"].as_str()), (Some("unavailable"), Some("ai_key_missing")));
@@ -100,11 +100,11 @@ fn everything_the_job_prints_or_stores_has_its_keys_in_order() {
         assert_eq!(text, sorted.to_string(), "keys out of order");
     };
     let store = Store::default();
-    let out = run(input("corm1gu.sputnikv2.testnet", 1, "").as_bytes(), Some("testnet"), None, connections(&fixture("transfer-ft.json"), no_ai(), &store));
+    let out = run(input("corm1gu.sputnikv2.testnet", 1, "").as_bytes(), worker_env(Some("testnet")), None, connections(&fixture("transfer-ft.json"), no_ai(), &store));
     in_order(&out);
     assert!(out.starts_with(r#"{"explanation":"#), "{out}");
     in_order(std::str::from_utf8(&store.records.borrow()[0].1).unwrap());
-    in_order(&run(br#"{"v":1}"#, Some("testnet"), None, |_, _| panic!("connected")));
+    in_order(&run(br#"{"v":1}"#, worker_env(Some("testnet")), None, |_, _| panic!("connected")));
     in_order(&kaap_sealed::output::held("a reason"));
     in_order(&kaap_sealed::output::failed("a reason"));
 }
@@ -115,7 +115,7 @@ fn a_public_run_never_touches_the_text_key() {
     let asked = texts.asked.clone();
     let fx = fixture("transfer-ft.json");
     let plain = connections(&fx, no_ai(), &Store::default());
-    open(&run(input("corm1gu.sputnikv2.testnet", 1, "").as_bytes(), Some("testnet"), None, move |network, deadline| {
+    open(&run(input("corm1gu.sputnikv2.testnet", 1, "").as_bytes(), worker_env(Some("testnet")), None, move |network, deadline| {
         Connections { texts: Box::new(texts), ..plain(network, deadline) }
     }));
     assert!(asked.borrow().is_empty());
@@ -127,7 +127,7 @@ fn every_fixture_runs_to_a_verdict_under_the_cap() {
         let fx = fixture(name);
         let dao = fx["dao"].as_str().unwrap().to_string();
         let id = fx["proposal_id"].as_u64().unwrap();
-        let out = run(input(&dao, id, "").as_bytes(), Some("testnet"), None, connections(&fx, no_ai(), &Store::default()));
+        let out = run(input(&dao, id, "").as_bytes(), worker_env(Some("testnet")), None, connections(&fx, no_ai(), &Store::default()));
         open(&out);
     }
 }
@@ -135,16 +135,16 @@ fn every_fixture_runs_to_a_verdict_under_the_cap() {
 #[test]
 fn the_test_flag_makes_the_providers_disagree_and_nothing_is_signed() {
     let fx = fixture("transfer-ft.json");
-    let out = run(input("corm1gu.sputnikv2.testnet", 1, r#","test_corrupt_https":true"#).as_bytes(), Some("testnet"), None, connections(&fx, no_ai(), &Store::default()));
+    let out = run(input("corm1gu.sputnikv2.testnet", 1, r#","test_corrupt_https":true"#).as_bytes(), worker_env(Some("testnet")), None, connections(&fx, no_ai(), &Store::default()));
     let v: Value = serde_json::from_str(&out).unwrap();
     assert_eq!(v, serde_json::json!({ "v": 1, "status": "held", "reason": "providers disagree: get_proposal" }));
 }
 
 #[test]
 fn a_refused_input_makes_no_outside_call() {
-    let out = run(br#"{"v":1}"#, Some("testnet"), None, |_, _| panic!("connected for a refused input"));
+    let out = run(br#"{"v":1}"#, worker_env(Some("testnet")), None, |_, _| panic!("connected for a refused input"));
     assert_eq!(serde_json::from_str::<Value>(&out).unwrap()["status"], "refused");
-    let out = run(input("corm1gu.sputnikv2.testnet", 1, "").as_bytes(), Some("mainnet"), None, |_, _| panic!("connected"));
+    let out = run(input("corm1gu.sputnikv2.testnet", 1, "").as_bytes(), worker_env(Some("mainnet")), None, |_, _| panic!("connected"));
     assert_eq!(serde_json::from_str::<Value>(&out).unwrap()["reason"], "network is not the network this run is on");
 }
 
@@ -159,7 +159,7 @@ fn a_run_without_its_ai_key_says_ai_key_missing_and_calls_no_ai_host() {
     let fx = fixture("function-call.json");
     for key in [None, Some("")] {
         let store = Store::default();
-        let out = run(input("r7thmvr8maey.sputnikv2.testnet", 10, "").as_bytes(), Some("testnet"), key, connections(&fx, NoCall, &store));
+        let out = run(input("r7thmvr8maey.sputnikv2.testnet", 10, "").as_bytes(), worker_env(Some("testnet")), key, connections(&fx, NoCall, &store));
         let (v, json) = open(&out);
         assert_eq!((v.ai_status, v.model_id.as_str(), v.risk), (AiStatus::Unavailable, "", Severity::High), "{key:?}");
         assert_eq!(json["explanation"], "AI unavailable (ai_key_missing): no NEAR AI key reached this run.");
@@ -188,7 +188,7 @@ fn an_unverified_ai_answer_raises_to_high_at_most_and_the_key_never_shows() {
     for (said, want) in [("critical", Severity::High), ("low", Severity::High), ("high", Severity::High)] {
         let ai = Scripted(vec![Response::new(200, list.clone()), Response::new(200, answer(said))], Vec::new());
         let store = Store::default();
-        let out = run(input("r7thmvr8maey.sputnikv2.testnet", 10, "").as_bytes(), Some("testnet"), Some(key), connections(&fx, ai, &store));
+        let out = run(input("r7thmvr8maey.sputnikv2.testnet", 10, "").as_bytes(), worker_env(Some("testnet")), Some(key), connections(&fx, ai, &store));
         assert!(!out.contains(key), "the NEAR AI key is never printed");
         let (v, json) = open(&out);
         assert_eq!(v.ai_status, AiStatus::Unverified);
@@ -204,7 +204,7 @@ fn an_unverified_ai_answer_raises_to_high_at_most_and_the_key_never_shows() {
         assert!(!String::from_utf8(store.records.borrow()[0].1.clone()).unwrap().contains(key), "nor stored");
     }
     let ai = Scripted(vec![Response::new(200, list), Response::new(200, b"{}".to_vec())], Vec::new());
-    let (v, json) = open(&run(input("r7thmvr8maey.sputnikv2.testnet", 10, "").as_bytes(), Some("testnet"), Some(key), connections(&fx, ai, &Store::default())));
+    let (v, json) = open(&run(input("r7thmvr8maey.sputnikv2.testnet", 10, "").as_bytes(), worker_env(Some("testnet")), Some(key), connections(&fx, ai, &Store::default())));
     assert_eq!((v.ai_status, v.model_id.as_str()), (AiStatus::Unavailable, ""));
     assert_eq!(json["explanation"], "AI unavailable: the NEAR AI response could not be read.");
 }

@@ -4,11 +4,13 @@
 
 pub mod ai;
 pub mod attest;
+pub mod history;
 pub mod input;
 pub mod job;
 pub mod net;
 pub mod output;
 pub mod payment;
+pub mod prices;
 pub mod prompt;
 pub mod proposal;
 pub mod reads;

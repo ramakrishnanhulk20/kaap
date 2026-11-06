@@ -1,18 +1,22 @@
 //! One run of the job, in order: check the input, settle the payment, open a sealed text if there
-//! is one, read both providers at one block, decode, ask the model, assemble, sign, print. Every
-//! way out that is not a signed verdict prints a fixed reason and no signature.
+//! is one, read both providers at one block, on mainnet read prices and payment history, decode, ask
+//! the model, assemble, sign, print. Every way out that is not a signed verdict prints a fixed reason
+//! and no signature.
 
+use kaap_core::history::history_before;
 use kaap_core::{verdict_hash, AiStatus, Analysis, Network, Verdict};
 
 use crate::ai::{consult, AiOutcome, Audience, Check};
 use crate::attest::evidence::key_for;
 use crate::attest::tdx::QuoteCheck;
 use crate::attest::{trusted_now, Evidence, EvidenceSink, Trust, Unverified};
+use crate::history::read_proposals;
 use crate::input::{parse_request, JobInput, Request};
 use crate::net::{Deadline, Http};
 use crate::output::{below_price, failed, held, refused};
 use crate::payment::{gate, worker_account, PayEnv, Payer};
-use crate::proposal::judge;
+use crate::prices::read_prices;
+use crate::proposal::{judge, Past};
 use crate::prompt::user_message;
 use crate::reads::{read_chain, ChainRead, HOST_CATCH_UP_MS};
 use crate::rpc::{At, AccountView, BlockView, Provider, ReadFail, ViewResult};
@@ -24,14 +28,20 @@ use crate::verdict::{assemble, public_key_text, seal, seal_encrypted, sign_seale
 pub const READ_BUDGET_MS: u64 = 25_000;
 pub const JOB_BUDGET_MS: u64 = 50_000;
 
-/// What a run talks to. The published build connects these to OutLayer's host, dRPC, NEAR AI,
-/// Intel, NVIDIA, the keystore and public storage; tests and the local build connect them to
+/// How long the price list and the payment history may take together, cut to the read deadline. It
+/// binds the price list's GET whole, and the history between its calls, as `read_chain`'s deadline
+/// does. The same number is the room the read deadline must still have before either starts.
+pub const PAST_BUDGET_MS: u64 = 8_000;
+
+/// What a run talks to. The published build connects these to OutLayer's host, dRPC, 1Click, NEAR
+/// AI, Intel, NVIDIA, the keystore and public storage; tests and the local build connect them to
 /// recorded answers, a test key and a stand-in store.
 pub struct Connections {
     pub host: Box<dyn Provider>,
     pub https: Box<dyn Provider>,
-    /// Every outside call of the AI step: NEAR AI, Intel and NVIDIA.
-    pub ai: Box<dyn Http>,
+    /// The job's plain HTTP client, for every outside call that is not a chain read: 1Click's price
+    /// list, and NEAR AI, Intel and NVIDIA in the AI step.
+    pub http: Box<dyn Http>,
     pub signer: Box<dyn VerdictSigner>,
     /// The keystore's `texts` key and fresh randomness. Used only by a run that carries a sealed
     /// text or asks for the text key, so a public run never touches it.
@@ -52,34 +62,14 @@ pub struct RunEnv<'a> {
     pub pay: PayEnv,
 }
 
-/// Native builds only ever run tests, and a test that names no payer is Kaap's worker on chain. This
-/// is not in the wasm, so `main()` cannot reach a free run by leaving the payment facts out.
-#[cfg(not(target_arch = "wasm32"))]
-impl<'a> From<Option<&'a str>> for RunEnv<'a> {
-    fn from(network: Option<&'a str>) -> Self {
-        let pay = PayEnv {
-            execution_type: Some("NEAR".to_string()),
-            usd_payment: Some("0".to_string()),
-            attached_usd: Some("0".to_string()),
-            sender: Some(crate::payment::TESTNET_WORKER.to_string()),
-        };
-        RunEnv { network, pay }
-    }
-}
-
 /// Runs the job on the raw stdin bytes and returns what it prints.
 ///
 /// `env` is what OutLayer set for the run and `ai_key` the `NEAR_AI_API_KEY` secret. A judge run
 /// passes `gate` right after its input is parsed; asking for the text key is free. `connect` is
 /// called only for an input that passed every check and a payment that was accepted, with the
 /// network and the read deadline, so a refused run makes no outside call at all.
-pub fn run<'a>(
-    raw: &[u8],
-    env: impl Into<RunEnv<'a>>,
-    ai_key: Option<&str>,
-    connect: impl FnOnce(Network, Deadline) -> Connections,
-) -> String {
-    let RunEnv { network, pay } = env.into();
+pub fn run(raw: &[u8], env: RunEnv<'_>, ai_key: Option<&str>, connect: impl FnOnce(Network, Deadline) -> Connections) -> String {
+    let RunEnv { network, pay } = env;
     let request = match parse_request(raw, network) {
         Ok(request) => request,
         Err(why) => return refused(why.reason()),
@@ -122,7 +112,7 @@ impl EvidenceSink for NoEvidence {
 pub fn judge_run(input: JobInput, ai_key: Option<&str>, payer: Payer, connect: impl FnOnce(Network, Deadline) -> Connections) -> String {
     let read_deadline = Deadline::after_ms(READ_BUDGET_MS);
     let job_deadline = Deadline::after_ms(JOB_BUDGET_MS);
-    let Connections { mut host, https, mut ai, mut signer, mut texts, nonce, block_timestamp, quote, evidence } =
+    let Connections { mut host, https, mut http, mut signer, mut texts, nonce, block_timestamp, quote, evidence } =
         connect(input.network, read_deadline);
     let mut evidence: Box<dyn EvidenceSink> = match payer {
         Payer::Kaap => evidence,
@@ -140,10 +130,11 @@ pub fn judge_run(input: JobInput, ai_key: Option<&str>, payer: Payer, connect: i
         Err(why) => return held(why.reason()),
     };
     let audience = if text.is_some() { Audience::Members } else { Audience::Public };
-    let (proposal, analysis) = judge(&input, text, &read);
+    let past = read_past(http.as_mut(), host.as_mut(), https.as_mut(), &input, &read, read_deadline);
+    let (proposal, analysis) = judge(&input, text, &read, past);
     let facts = user_message(&proposal, &analysis);
     let trust = Trust { nonce, now: trusted_now(block_timestamp.as_deref(), read.block.timestamp_ns), quote };
-    let (outcome, record) = consult(ai.as_mut(), ai_key, facts.as_deref(), audience, job_deadline, &trust);
+    let (outcome, record) = consult(http.as_mut(), ai_key, facts.as_deref(), audience, job_deadline, &trust);
     let public_key = match public_key_text(signer.as_mut()) {
         Ok(key) => key,
         Err(why) => return failed(why),
@@ -154,6 +145,38 @@ pub fn judge_run(input: JobInput, ai_key: Option<&str>, payer: Payer, connect: i
         Err(why) => return failed(why),
     };
     sign_sealed(&verdict, &explanation, &public_key, signer.as_mut()).unwrap_or_else(failed)
+}
+
+/// The prices and payment history this run judges with, both or neither. Testnet reads neither: its
+/// tokens have no market price. On mainnet `None`, the safe reading of UNKNOWN_VALUE at high, follows
+/// a failed read of either, a proposal whose submission time does not read, or under
+/// `PAST_BUDGET_MS` left of the read deadline before the price list or before the history, so that
+/// a slow chain read does not stack up. A DAO with no past payments has an empty history, which is
+/// still a complete one. Never holds the job.
+pub fn read_past(
+    http: &mut dyn Http,
+    host: &mut dyn Provider,
+    https: &mut dyn Provider,
+    input: &JobInput,
+    read: &ChainRead,
+    read_deadline: Deadline,
+) -> Option<Past> {
+    if input.network != Network::Mainnet {
+        return None;
+    }
+    let submitted = read.proposal.submission_time_ns?;
+    let has_room = || read_deadline.remaining_ms() >= PAST_BUDGET_MS;
+    if !has_room() {
+        return None;
+    }
+    let budget = read_deadline.earlier(PAST_BUDGET_MS);
+    let prices = read_prices(http, budget)?;
+    if !has_room() {
+        return None;
+    }
+    let proposals = read_proposals(host, https, &input.dao, &read.block, budget)?;
+    let history = history_before(&proposals, submitted, &prices);
+    Some(Past { prices, history })
 }
 
 /// Everything a verdict is built from except the AI outcome.

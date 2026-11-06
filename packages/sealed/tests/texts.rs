@@ -131,13 +131,13 @@ impl Setup {
 
     fn run(self, input: &str, key: Option<&str>) -> String {
         let Setup { fx, ai, store, texts, clock, nonce, quote } = self;
-        run(input.as_bytes(), Some("testnet"), key, move |network, deadline| {
+        run(input.as_bytes(), worker_env(Some("testnet")), key, move |network, deadline| {
             assert_eq!(network, Network::Testnet);
             let http = || FixtureHttp::from_json(&fx.to_string()).unwrap();
             Connections {
                 host: Box::new(RpcProvider::new(http(), HOST_STAND_IN_TESTNET, deadline)),
                 https: Box::new(RpcProvider::new(http(), DRPC_TESTNET, deadline)),
-                ai,
+                http: ai,
                 signer: Box::new(TestSigner::new()),
                 texts: Box::new(texts),
                 nonce: Some(nonce),

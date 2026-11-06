@@ -222,7 +222,7 @@ fn sealed_parts(fx: &Value) -> (kaap_sealed::input::JobInput, kaap_sealed::reads
 fn a_verified_answer_whose_evidence_cannot_be_published_is_signed_unverified() {
     let fx = fixture("function-call.json");
     let (input, read) = sealed_parts(&fx);
-    let (_, analysis) = kaap_sealed::proposal::judge(&input, None, &read);
+    let (_, analysis) = kaap_sealed::proposal::judge(&input, None, &read, None);
     assert_eq!(analysis.risk_floor, Severity::High);
     let public_key = kaap_sealed::verdict::public_key_text(&mut TestSigner::new()).unwrap();
     let parts = kaap_sealed::job::Unsigned { input: &input, read: &read, analysis: &analysis, public_key: &public_key };

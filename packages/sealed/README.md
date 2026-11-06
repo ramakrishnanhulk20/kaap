@@ -94,10 +94,32 @@ The kind and the policy are compared in kaap-core's canonical form, because Sput
 for its sets and maps is not fixed; every other proposal field is compared byte for byte. Any
 failed read or difference gives `{"v":1,"status":"held","reason":...}` and no signature.
 
+On mainnet the job then reads what `kaap check` and the evaluation judge with. Testnet tokens have
+no market price, so a testnet run reads neither of these:
+
+- 1Click's public price list, `GET https://1click.chaindefuser.com/v0/tokens`, keyed by exact
+  contract id;
+- `get_last_proposal_id` and up to 3 pages of `get_proposals`, 100 ids each, at the same block from
+  the same two providers, which must return the same bytes for every read.
+
+kaap-core builds the payment history from those pages by the rule the CLI uses: the DAO's approved
+payments submitted before this proposal, with USD at today's prices.
+
+This helps DAOs that pay through ordinary Transfer proposals or token calls: a usual payment to a
+known recipient stays quiet, a new recipient gets NEW_RECIPIENT, and more than ten times the median
+earlier payment gets LARGE_AMOUNT, both warnings at medium. It does not touch a payment made as a
+signed hash, which is how NEAR Business treasuries usually pay.
+
+- It is both reads or neither: if either fails, every token stays unpriced (UNKNOWN_VALUE, high),
+  there is no payment history (not available), and the verdict is still signed.
+- A DAO with more than 300 proposal ids keeps that unpriced reading.
+- A DAO with no past payments has an empty history, which is still a complete one, so it reads every
+  public payment as a new recipient, a warning.
+- A large payment with an honest description gets a warning, not a veto.
+
 The proposal is then decoded by kaap-core, with the policy just read as the policy before (only
 while the proposal is InProgress) and the input's `guard` as the guard account, so Kaap's own
-enrol call reads as `guard_enrol` here as it does in the CLI. There is no price list yet, so every token is unpriced
-(UNKNOWN_VALUE, high) and no payment history (not available).
+enrol call reads as `guard_enrol` here as it does in the CLI.
 
 Then, if the run carries a NEAR AI key as the OutLayer secret `NEAR_AI_API_KEY`, one
 non-streamed request to `z-ai/glm-5.3-flash`, after `GET /v1/model/list` says that exact id is
@@ -241,7 +263,8 @@ the guard reads them. So does the evidence record, which holds hashes and sizes,
 
 The job calls no host outside its manifest: `cloud-api.near.ai`, `near.drpc.org`,
 `near-testnet.drpc.org`, `api.trustedservices.intel.com`, `certificates.trustedservices.intel.com`,
-`portal.trustauthority.intel.com` and `nras.attestation.nvidia.com`. OutLayer enforces that list
+`portal.trustauthority.intel.com`, `nras.attestation.nvidia.com` and `1click.chaindefuser.com`.
+OutLayer enforces that list
 only for its curated connectors, not for an ordinary project like this one, so it is the code's
 own rule, held by a test that checks the list both ways, not something OutLayer guarantees.
 
@@ -249,6 +272,9 @@ own rule, held by a test that checks the list both ways, not something OutLayer 
 | --- | --- | --- | --- | --- | --- |
 | dRPC JSON-RPC | 5 s | 10 s | 5 s | 15 s | 2.1 MiB body, 512 KiB result |
 | OutLayer host RPC | set by the worker: 10 s | | | 30 s (worker) | 512 KiB result |
+| 1Click price list, mainnet only | 5 s | 8 s | 5 s | 8 s, cut to the time left below | 1 MiB |
+| One `get_proposals` page, mainnet only | as dRPC and the host above | | | as above, cut to the read deadline for dRPC | As above, tighter than the CLI's 4 MiB: a larger page is a failed read, never split |
+| Prices and history together, mainnet only | | | | 8 s, cut to the read deadline: whole for the 1Click call, checked between calls for the history. Skipped, with the safe reading, when under 8 s of the read deadline is left before either starts. Worst case, one hung history call: to 25 s on dRPC, to 55 s on the host | 3 pages, 300 ids |
 | NEAR AI model list | 5 s | 10 s | 5 s | 10 s | 512 KiB |
 | NEAR AI attestation report | 5 s | 15 s | 5 s | 20 s | 2 MiB |
 | Intel PCS, each of 4 | 5 s | 8 s | 5 s | 10 s | 256 KiB, 16 KiB per header |
@@ -261,6 +287,11 @@ own rule, held by a test that checks the list both ways, not something OutLayer 
 
 All reads must finish within 25 s, the checks before the question within 25 s of their start, and
 the whole job within 50 s of the start; a run is given 60 s.
+
+The 8 s cannot cut one history call short. The worst case is a call that hangs just before its
+limit: dRPC stops at the 25 s read deadline, and a host call, which the job cannot time, stops at
+55 s (25 s plus the worker's 30 s). The history then counts as failed, the AI step finds its 50 s
+gone, and the plain-code verdict is signed in the 5 s left.
 
 ## What it signs
 
@@ -320,7 +351,7 @@ directories gave `0099d7b7...ff49` on 29 Oct 2026.
 
 ## Run it
 
-- Tests, natively, on recorded testnet answers: `cargo test -p kaap-sealed`.
+- Tests, natively, on recorded answers: `cargo test -p kaap-sealed`.
 - The local build under plain wasmtime, with recorded answers and a public test key (never
   published): `bash packages/sealed/run-local.sh`. It runs as the worker unless
   `NEAR_USER_ACCOUNT_ID` is set.
@@ -331,9 +362,10 @@ directories gave `0099d7b7...ff49` on 29 Oct 2026.
 
 ## What this does not defend against
 
-Both RPC providers lying the same way; anything that changes after the block read (the verdict
-pins the block, the policy, the kind and every called contract's code, so a change is visible to
-whoever re-checks); a kind or policy over kaap-core's 256 KiB limit, which always holds rather than
+Both RPC providers lying the same way; a wrong price on 1Click's list, the only source the job has;
+anything that changes after the block read (the verdict pins the block, the policy, the kind and
+every called contract's code, so a change is visible to whoever re-checks, but no verdict pins the
+price list); a kind or policy over kaap-core's 256 KiB limit, which always holds rather than
 being judged; what an unknown receiver contract does; a NEAR AI model machine running a build
 nobody reviewed (no measurement allowlist, above); whether the model's judgement is right; and
 attacks on the TDX hardware, NVIDIA's GPUs or OutLayer's dstack stack, which this program trusts.

@@ -75,6 +75,17 @@ pub fn view_text(fx: &Value, authority: &str, method: &str) -> String {
     String::from_utf8(bytes).unwrap()
 }
 
+/// What OutLayer sets for a chain run by Kaap's worker, the payer of a test that names none.
+pub fn worker_env(network: Option<&str>) -> kaap_sealed::job::RunEnv<'_> {
+    let pay = kaap_sealed::payment::PayEnv {
+        execution_type: Some("NEAR".to_string()),
+        usd_payment: Some("0".to_string()),
+        attached_usd: Some("0".to_string()),
+        sender: Some(kaap_sealed::payment::TESTNET_WORKER.to_string()),
+    };
+    kaap_sealed::job::RunEnv { network, pay }
+}
+
 /// Signs with RFC 8032's first test key, in place of OutLayer's keystore.
 pub struct TestSigner(pub ed25519_dalek::SigningKey);
 

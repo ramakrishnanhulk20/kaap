@@ -236,6 +236,17 @@ fn proposal_fields_come_from_one_strict_reading() {
     let p = parse_proposal(text.as_bytes()).unwrap();
     assert_eq!((p.id, p.description.as_str(), p.status.as_str()), (3, "pay", "InProgress"));
     assert_eq!(p.kind_json, br#"{"Transfer":{"token_id":"","receiver_id":"a.testnet","amount":"1","msg":null}}"#);
+    assert_eq!(p.submission_time_ns, None, "no submission time still reads, and only the history read fails");
+    for (time, want) in [
+        (r#""1793800000000000000""#, Some(1_793_800_000_000_000_000)),
+        (r#""+1""#, None),
+        (r#""""#, None),
+        (r#""18446744073709551616""#, None),
+        ("1793800000000000000", None),
+    ] {
+        let timed = format!(r#"{{"id":3,"description":"pay","kind":"Vote","submission_time":{time}}}"#);
+        assert_eq!(parse_proposal(timed.as_bytes()).unwrap().submission_time_ns, want, "{time}");
+    }
     for bad in [
         r#"{"id":3,"id":3,"description":"pay","kind":"Vote"}"#,
         r#"{"id":-3,"description":"pay","kind":"Vote"}"#,

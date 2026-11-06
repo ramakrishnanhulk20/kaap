@@ -23,7 +23,7 @@ fn connect(network: kaap_core::Network, deadline: kaap_sealed::net::Deadline) ->
     kaap_sealed::job::Connections {
         host: Box::new(HostProvider),
         https: Box::new(RpcProvider::new(WasiHttp, https, deadline)),
-        ai: Box::new(WasiHttp),
+        http: Box::new(WasiHttp),
         signer: Box::new(HostSigner),
         texts: Box::new(HostTextKeys),
         nonce: fresh_nonce(),

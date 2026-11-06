@@ -120,7 +120,7 @@ pub fn connections(network: Network, deadline: Deadline) -> Connections {
             Connections {
                 host: Box::new(RpcProvider::new(load(), host, deadline)),
                 https: Box::new(RpcProvider::new(load(), https, deadline)),
-                ai: Box::new(load()),
+                http: Box::new(load()),
                 signer,
                 texts: Box::new(TestTextKeys),
                 nonce,
@@ -132,7 +132,7 @@ pub fn connections(network: Network, deadline: Deadline) -> Connections {
         Err(_) => Connections {
             host: Box::new(RpcProvider::new(Traced(WasiHttp), host, deadline)),
             https: Box::new(RpcProvider::new(Traced(WasiHttp), https, deadline)),
-            ai: Box::new(Traced(WasiHttp)),
+            http: Box::new(Traced(WasiHttp)),
             signer,
             texts: Box::new(TestTextKeys),
             nonce,

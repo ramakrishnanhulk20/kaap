@@ -76,7 +76,7 @@ impl Reach {
             Connections {
                 host: Box::new(RpcProvider::new(http(), HOST_STAND_IN_TESTNET, deadline)),
                 https: Box::new(RpcProvider::new(http(), DRPC_TESTNET, deadline)),
-                ai: Box::new(Noted(ai, reach.calls.clone())),
+                http: Box::new(Noted(ai, reach.calls.clone())),
                 signer: Box::new(TestSigner::new()),
                 texts: Box::new(TestTexts::new()),
                 nonce: Some([0; 32]),
