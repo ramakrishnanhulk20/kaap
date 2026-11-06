@@ -35,7 +35,7 @@ export CARGO_ENCODED_RUSTFLAGS="$FLAGS"
 export CARGO_PROFILE_RELEASE_STRIP=symbols
 
 cd "$REPO"
-cargo build -p kaap-sealed --release --target wasm32-wasip2 "${FEATURES[@]}"
+cargo build --locked -p kaap-sealed --release --target wasm32-wasip2 "${FEATURES[@]}"
 WASM="$CARGO_TARGET_DIR/wasm32-wasip2/release/kaap-sealed.wasm"
 cp "$WASM" "$OUT"
 
