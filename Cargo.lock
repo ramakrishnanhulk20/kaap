@@ -796,9 +796,9 @@ dependencies = [
 
 [[package]]
 name = "dcap-qvl"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b992c9511adf7135ae7c63c023c9303a3615c0f38d7b39514dcc262f91c6adda"
+checksum = "c5f6e38c49510fd608390d02882bb1872d309c31325a120de1eed6c7160ba7e2"
 dependencies = [
  "anyhow",
  "asn1_der",

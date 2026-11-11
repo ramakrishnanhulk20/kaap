@@ -23,7 +23,7 @@ near-account-id = { version = "=3.0.0", default-features = false }
 # every piece of evidence itself and these crates only check it. Versions from the 23 Oct spike
 # (scratchpad/m0d-nearai), each the latest stable on 2 Nov 2026 and each built for wasm32-wasip2.
 # dcap-qvl without `report`, which would pull in reqwest.
-dcap-qvl = { version = "=0.7.0", default-features = false, features = ["std", "rustcrypto", "default-x509"] }
+dcap-qvl = { version = "=0.7.1", default-features = false, features = ["std", "rustcrypto", "default-x509"] }
 p384 = { version = "=0.14.0", default-features = false, features = ["ecdsa", "alloc"] }
 rsa = { version = "=0.9.10", default-features = false, features = ["std", "u64_digit"] }
 # rsa 0.9 is built on digest 0.10, so Intel's PS384 needs sha2 0.10; everything else here hashes

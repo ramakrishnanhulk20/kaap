@@ -1,4 +1,4 @@
-//! The model's own Intel TDX quote, checked inside the job with Phala's dcap-qvl 0.7.0 against
+//! The model's own Intel TDX quote, checked inside the job with Phala's dcap-qvl 0.7.1 against
 //! collateral the job fetched from Intel's PCS with four keyless calls (scratchpad/m0d-nearai Q9).
 //!
 //! The collateral may come from anywhere: dcap-qvl checks Intel's signatures on it up to the Intel

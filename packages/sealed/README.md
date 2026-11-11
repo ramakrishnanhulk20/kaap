@@ -150,7 +150,7 @@ Before the question is sent:
 
 1. `GET /v1/attestation/report` (keyed) for `z-ai/glm-5.3-flash`, `signing_algo=ed25519`, this
    run's nonce, `provider=near`. Every model entry in it is checked:
-   - its Intel TDX quote, verified here with dcap-qvl 0.7.0 against collateral the job fetched from
+   - its Intel TDX quote, verified here with dcap-qvl 0.7.1 against collateral the job fetched from
      Intel's PCS with four keyless calls; dcap-qvl refuses a debug or revoked machine;
    - Intel's TCB level is UpToDate or OutOfDate, the two levels Ram accepted on 23 Oct 2026, and
      the collateral is in date with Intel's evaluation data number 20 or later;
