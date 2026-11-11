@@ -122,6 +122,36 @@ quotes.forEach((model, i) => {
   line('NRAS result', model.nras_passed === undefined ? undefined : model.nras_passed ? 'passed' : 'failed');
   line('NRAS issued at (unix)', model.nras_issued_at);
   line('Intel quote', `${quote.length} hex characters, starts ${quote.slice(0, 32)}`);
+
+  heading('Software record (recorded and proven consistent, not judged)');
+  if (model.compose_hash === undefined) {
+    console.log('  not in this record: the run predates the software checks');
+    return;
+  }
+  line('MRTD', model.mr_td);
+  line('MRCONFIGID', model.mr_config_id);
+  for (const r of ['rtmr0', 'rtmr1', 'rtmr2', 'rtmr3']) line(r.toUpperCase(), model[r]);
+  line('launcher compose hash', model.compose_hash);
+  line('system image hash', model.os_image_hash);
+  const known = model.os_image_known;
+  line('system image published', known === undefined ? undefined : known ? 'yes, by the OS vendor' : 'no (recorded, not judged)');
+  line('app id', model.app_id);
+  line('instance id', model.instance_id);
+  const log = model.deployment;
+  if (log === 'absent') {
+    line('deployment log', 'absent');
+  } else if (log && typeof log === 'object') {
+    const up = log.newest_compose_up ?? {};
+    line('deployment actions', log.actions);
+    line('actions sha256', log.actions_hash);
+    line('launcher quote sha256', log.quote_sha256);
+    line('newest compose_up tag', up.tag);
+    line('  commit', up.commit);
+    line('  file', up.file);
+    line('  file sha256', up.file_sha256);
+  } else {
+    line('deployment log', undefined);
+  }
 });
 
 const gateway = record.gateway;
@@ -150,5 +180,6 @@ heading('Check it yourself');
 line('verify link', record.verify_link);
 console.log('\nThis prints what the run recorded. It does not repeat the checks. The record never holds');
 console.log("the answer text, only hashes. The link shows NEAR AI's own check, which compares no build");
-console.log('with an approved list.');
+console.log('with an approved list. The software record names the launcher, system image and deployment');
+console.log("file the model's quote commits to; Kaap does not judge whether that software is safe.");
 JS

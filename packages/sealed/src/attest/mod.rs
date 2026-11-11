@@ -3,21 +3,23 @@
 //!
 //! The order follows NEAR AI's verification guides. Before the completion: the model's attestation
 //! report (its Intel TDX quote checked here with dcap-qvl, its report data bound to the signing key
-//! and the nonce, its GPUs judged by NVIDIA) and the gateway's public Intel token. After it: the
-//! signature over the exact request and response bytes, whose signer must be the one key a
-//! verified report named. A check that fails or cannot run gives `Unverified` with the first
-//! reason; nothing passes by default (standard 4).
+//! and the nonce, its software record held to that quote by `measure`, its GPUs judged by NVIDIA)
+//! and the gateway's public Intel token. After it: the signature over the exact request and
+//! response bytes, whose signer must be the one key a verified report named. A check that fails or
+//! cannot run gives `Unverified` with the first reason; nothing passes by default (standard 4).
 //!
-//! Not covered: the model's measurements (RTMR3 event log, MRCONFIGID against `app_compose`) are
-//! not replayed or compared with an allowlist, so "verified" means a genuine, non-debug Intel TDX
-//! machine with NVIDIA-passed GPUs holds the key that signed this exact answer, not that it runs a
-//! build Kaap has reviewed. Physical attacks on that hardware are a non-goal (threat model).
+//! Not covered: the software record is proven consistent with the quote and published, never
+//! compared with an allowlist, so "verified" means a genuine, non-debug Intel TDX machine with
+//! NVIDIA-passed GPUs, whose launcher configuration, system image and deployment log are the ones
+//! in the evidence, holds the key that signed this exact answer. It does not mean Kaap has
+//! reviewed that software. Physical attacks on that hardware are a non-goal (threat model).
 
 pub mod evidence;
 pub mod flow;
 pub mod gpu;
 pub mod ita;
 pub mod jwt;
+pub mod measure;
 pub mod report;
 pub mod signature;
 pub mod tdx;
@@ -40,6 +42,12 @@ pub enum Unverified {
     QuoteRejected,
     TcbNotAccepted,
     ReportDataLayout,
+    EventLogMissing,
+    RtmrReplayMismatch,
+    BootRecordMissing,
+    ConfigVersionUnknown,
+    ComposeMismatch,
+    DeployLogMismatch,
     GpuEvidenceMissing,
     GpuUnavailable,
     GpuTokenRejected,
@@ -61,7 +69,7 @@ pub enum Unverified {
 }
 
 impl Unverified {
-    pub const ALL: [Unverified; 29] = [
+    pub const ALL: [Unverified; 35] = [
         Unverified::NoNonce,
         Unverified::NoClock,
         Unverified::ReportUnavailable,
@@ -73,6 +81,12 @@ impl Unverified {
         Unverified::QuoteRejected,
         Unverified::TcbNotAccepted,
         Unverified::ReportDataLayout,
+        Unverified::EventLogMissing,
+        Unverified::RtmrReplayMismatch,
+        Unverified::BootRecordMissing,
+        Unverified::ConfigVersionUnknown,
+        Unverified::ComposeMismatch,
+        Unverified::DeployLogMismatch,
         Unverified::GpuEvidenceMissing,
         Unverified::GpuUnavailable,
         Unverified::GpuTokenRejected,
@@ -117,6 +131,12 @@ impl Unverified {
             QuoteRejected => ("quote_rejected", "the model's Intel TDX quote did not verify"),
             TcbNotAccepted => ("tcb_not_accepted", "the hardware's Intel TCB level is not one Kaap accepts"),
             ReportDataLayout => ("report_data_layout", "the model's quote did not bind its signing key"),
+            EventLogMissing => ("event_log_missing", "the attestation report held no readable event log for the model"),
+            RtmrReplayMismatch => ("rtmr_replay_mismatch", "the model's event log did not replay to its quote's RTMR3"),
+            BootRecordMissing => ("boot_record_missing", "the model's boot measurements were missing, repeated or not as reported"),
+            ConfigVersionUnknown => ("config_version_unknown", "the model's quote binds its launcher in a layout Kaap does not read"),
+            ComposeMismatch => ("compose_mismatch", "the model's launcher configuration is not the one its quote binds"),
+            DeployLogMismatch => ("deploy_log_mismatch", "the model's deployment log did not match its own quote"),
             GpuEvidenceMissing => ("gpu_evidence_missing", "the attestation report held no NVIDIA GPU evidence"),
             GpuUnavailable => ("gpu_unavailable", "NVIDIA's attestation service could not be used"),
             GpuTokenRejected => ("gpu_token_rejected", "NVIDIA's GPU token did not verify"),
@@ -182,6 +202,11 @@ pub fn hex_array<const N: usize>(text: &str) -> Option<[u8; N]> {
     let mut out = [0u8; N];
     hex::decode_to_slice(digits, &mut out).ok()?;
     Some(out)
+}
+
+/// `hex_array`'s rule for a value of any length, so both decoders read the same text alike.
+pub fn hex_bytes(text: &str) -> Option<Vec<u8>> {
+    hex::decode(text.strip_prefix("0x").unwrap_or(text)).ok()
 }
 
 /// A model key whose attestation passed every check before the completion was sent.

@@ -16,6 +16,7 @@ use sha2::{Digest, Sha256};
 
 use super::gpu::GpuFacts;
 use super::ita::GatewayFacts;
+use super::measure::{ComposeUp, Deployment, Software};
 use super::signature::SignedAnswer;
 use super::tdx::{PckFlags, QuoteFacts};
 use super::VerifiedModel;
@@ -91,10 +92,31 @@ pub struct ModelRecord {
     /// The model's Intel TDX quote as it was verified, in hex, so anyone can run their own DCAP
     /// verifier on it and read the report data that binds `signing_address` and the nonce.
     pub intel_quote: String,
+    /// The TD's registers from that verified quote: firmware, launcher configuration and runtime.
+    pub mr_td: String,
+    pub mr_config_id: String,
+    pub rtmr0: String,
+    pub rtmr1: String,
+    pub rtmr2: String,
+    pub rtmr3: String,
+    /// The software record `measure` proved consistent with the quote, recorded and not judged:
+    /// the launcher configuration's SHA-256 (the `app_compose` text itself is not kept) and the
+    /// system image hash from the boot window.
+    pub compose_hash: String,
+    pub os_image_hash: String,
+    /// Whether that image is one the OS vendor published for production. Never a gate.
+    pub os_image_known: bool,
+    /// The boot window's `app-id` and `instance-id`, when it has them, up to 64 bytes each.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instance_id: Option<String>,
+    pub deployment: DeploymentRecord,
 }
 
 impl ModelRecord {
-    pub fn new(model: &VerifiedModel, quote: &[u8], facts: &QuoteFacts, gpu: &GpuFacts) -> ModelRecord {
+    pub fn new(model: &VerifiedModel, quote: &[u8], facts: &QuoteFacts, gpu: &GpuFacts, software: &Software) -> ModelRecord {
+        let id = |bytes: &Option<Vec<u8>>| bytes.as_ref().filter(|b| b.len() <= 64).map(hex::encode);
         ModelRecord {
             signing_address: hex::encode(model.signing_address),
             tcb_status: model.tcb_status.clone(),
@@ -106,7 +128,68 @@ impl ModelRecord {
             nras_passed: gpu.passed,
             nras_issued_at: gpu.iat,
             intel_quote: hex::encode(quote),
+            mr_td: hex::encode(facts.mr_td),
+            mr_config_id: hex::encode(facts.mr_config_id),
+            rtmr0: hex::encode(facts.rt_mr0),
+            rtmr1: hex::encode(facts.rt_mr1),
+            rtmr2: hex::encode(facts.rt_mr2),
+            rtmr3: hex::encode(facts.rt_mr3),
+            compose_hash: hex::encode(software.compose_hash),
+            os_image_hash: hex::encode(software.os_image_hash),
+            os_image_known: software.os_image_known,
+            app_id: id(&software.app_id),
+            instance_id: id(&software.instance_id),
+            deployment: software.deployment.as_ref().map_or(DeploymentRecord::Absent("absent"), |d| DeploymentRecord::Logged(d.into())),
         }
+    }
+}
+
+/// `"absent"` when the report carried no deployment log, else what its quoted log shows. The log's
+/// own quote is named by its hash and not carried.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub enum DeploymentRecord {
+    Absent(&'static str),
+    Logged(DeploymentLogRecord),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct DeploymentLogRecord {
+    pub actions: usize,
+    pub actions_hash: String,
+    pub quote_sha256: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub newest_compose_up: Option<ComposeUpRecord>,
+}
+
+impl From<&Deployment> for DeploymentLogRecord {
+    fn from(d: &Deployment) -> DeploymentLogRecord {
+        DeploymentLogRecord {
+            actions: d.actions,
+            actions_hash: hex::encode(d.actions_hash),
+            quote_sha256: hex::encode(d.quote_sha256),
+            newest_compose_up: d.newest_compose_up.as_ref().map(ComposeUpRecord::from),
+        }
+    }
+}
+
+/// `tag`, `commit` and `file` passed `measure::plain_word`; `file_sha256` is hex this crate
+/// decoded.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ComposeUpRecord {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_sha256: Option<String>,
+}
+
+impl From<&ComposeUp> for ComposeUpRecord {
+    fn from(c: &ComposeUp) -> ComposeUpRecord {
+        ComposeUpRecord { tag: c.tag.clone(), commit: c.commit.clone(), file: c.file.clone(), file_sha256: c.file_sha256.map(hex::encode) }
     }
 }
 

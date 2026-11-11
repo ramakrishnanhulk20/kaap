@@ -43,6 +43,14 @@ pub struct QuoteFacts {
     pub eval_number: u32,
     /// The flags `policy` accepts without judging, as the PCK certificate states them.
     pub pck_flags: PckFlags,
+    /// The TD's own measurements, read from the verified report: the firmware (MRTD), the
+    /// launcher configuration hash dstack puts in MRCONFIGID, and the four runtime registers.
+    pub mr_td: [u8; 48],
+    pub mr_config_id: [u8; 48],
+    pub rt_mr0: [u8; 48],
+    pub rt_mr1: [u8; 48],
+    pub rt_mr2: [u8; 48],
+    pub rt_mr3: [u8; 48],
 }
 
 /// The PCK certificate's platform flags: `true`, `false`, or `absent` (a Processor CA
@@ -92,7 +100,8 @@ pub fn policy(now: u64) -> QuotePolicy {
 /// dcap-qvl verifies the quote, its PCK chain, both CRLs and Intel's signatures on the
 /// collateral, and refuses a debug or service TD (`QuoteRejected`); the merged TCB status is
 /// UpToDate or OutOfDate (`TcbNotAccepted`); `policy` holds (`CollateralStale`); and the report
-/// is a TDX one. Returns the status, Intel's advisory ids and the 64 bytes of report data.
+/// is a TDX one. Returns the status, Intel's advisory ids, the 64 bytes of report data and the
+/// TD's measurements.
 pub fn check_quote(quote: &[u8], collateral: &QuoteCollateralV3, now: u64) -> Result<QuoteFacts, Unverified> {
     collateral_fresh(collateral, now)?;
     let claims = QuoteVerifier::new_prod()
@@ -110,6 +119,12 @@ pub fn check_quote(quote: &[u8], collateral: &QuoteCollateralV3, now: u64) -> Re
         report_data: report.report_data,
         eval_number: claims.tcb.eval_data_number,
         pck_flags: PckFlags::from_claims(&claims.platform.pck),
+        mr_td: report.mr_td,
+        mr_config_id: report.mr_config_id,
+        rt_mr0: report.rt_mr0,
+        rt_mr1: report.rt_mr1,
+        rt_mr2: report.rt_mr2,
+        rt_mr3: report.rt_mr3,
     })
 }
 
@@ -265,5 +280,12 @@ impl CollateralCache {
             }
         };
         Ok(&self.entries[at].1)
+    }
+
+    /// The collateral this run already fetched for `quote`'s platform, and never a new fetch:
+    /// `None` when the platform is unreadable or not yet seen.
+    pub fn cached(&self, quote: &[u8]) -> Option<&QuoteCollateralV3> {
+        let platform = platform(quote).ok()?;
+        self.entries.iter().find(|(p, _)| *p == platform).map(|(_, c)| c)
     }
 }

@@ -156,6 +156,19 @@ Before the question is sent:
      the collateral is in date with Intel's evaluation data number 20 or later;
    - the quote's report data binds the entry's signing key and this run's nonce in NEAR's layout
      (bytes 0 to 31 the key, 32 to 63 the nonce); any other layout is refused;
+   - its software record is held to that quote, with no network call. The event log replays to
+     the quote's RTMR3, and every RTMR3 event must be a dstack runtime event. The system image and
+     launcher hashes are read only from boot events before `system-ready`, once each. MRCONFIGID
+     must be `01`, then the SHA-256 of `app_compose`'s exact text, then 15 zero bytes, and the boot
+     launcher hash must be that same SHA-256. Every value the report states beside these must be
+     the measured one. When the report carries the launcher's deployment log, the log's own quote
+     passes the same Intel check, carries this run's nonce and the SHA-256 of the logged actions,
+     has the model quote's MRCONFIGID, and its event log replays to its own RTMR3. That quote is
+     checked only with the Intel collateral the job already holds for the model's platform: the
+     launcher and the model must be one machine, so a quote from any other platform is
+     `deploy_log_mismatch`.
+     A failure here gives one of `event_log_missing`, `rtmr_replay_mismatch`,
+     `boot_record_missing`, `config_version_unknown`, `compose_mismatch` or `deploy_log_mismatch`;
    - its NVIDIA GPU evidence carries the nonce, is judged by NVIDIA's attestation service (NRAS),
      and NRAS's ES384 token verifies against NVIDIA's published keys with the nonce and an
      overall pass.
@@ -183,11 +196,19 @@ An answer that is not verified can raise a verdict to high at most (threat model
 explanation starts with the level it saw, for example `AI verified (Intel TCB: OutOfDate).`, and
 the verify page must state it too.
 
-What "verified" does not mean: that the machine runs a build Kaap has reviewed. The model's
-measured configuration (RTMR3 event log, MRCONFIGID) is not compared with an allowlist, so
-verified means a genuine, non-debug Intel TDX machine whose GPUs NVIDIA passed holds the key that
-signed this exact answer. NEAR AI's instances of one model share that key, so it does not prove
-which instance answered.
+Verified means a genuine, non-debug Intel TDX machine whose GPUs NVIDIA passed holds the key that
+signed this exact answer, and that the launcher configuration, the system image hash and the
+deployment log in the evidence are the ones that machine's Intel quote commits to.
+
+What "verified" does not mean. It does not mean that software is approved, reviewed or safe: Kaap
+records it and compares it with no allowlist. `os_image_known` only says whether the image hash is
+one the OS vendor published for production, and it never decides anything. It does not prove which
+instance answered: NEAR AI's instances of one model share one key, and the report names only the
+host the gateway picked for that call. And it does not prove that what the deployment log requested
+is what runs now, because the log records requests. NEAR AI put the limit plainly in its report of
+9 Nov 2026 (https://near.ai/blog/security-incident-report-sglang-vulnerability): "Confidential
+computing protects data from the operator and the host. It does not protect against a
+vulnerability in the software running inside the environment."
 
 ## Where the evidence is
 
@@ -200,7 +221,11 @@ GET https://testnet-api.outlayer.ai/public/storage/get?project=<project id>&key=
 ```
 
 It holds ids, hashes, quotes, claims and check results only: the nonce, the clock, each model's
-Intel TDX quote in hex with its TCB level, advisories, signing key and NRAS result, the PCK
+Intel TDX quote in hex with its TCB level, advisories, signing key and NRAS result, its registers
+(MRTD, MRCONFIGID, RTMR0 to RTMR3) and software record (the launcher hash, the system image hash
+and whether the vendor published it, the app and instance ids, and the deployment log's action
+count, actions hash, launcher quote hash and newest `compose_up` tag, commit, file and file hash,
+or `absent`; never the launcher text or the launcher's quote itself), the PCK
 platform flags Kaap accepts without judging (SMT, cached keys, dynamic platform; as ruled on
 2 Nov 2026, NEAR AI's own guide does not judge them), the gateway's Intel claims, the
 completion's id, finish reason, token counts and length, the signature with the two hashes it

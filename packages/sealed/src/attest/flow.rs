@@ -4,7 +4,8 @@
 use serde_json::Value;
 
 use super::evidence::{verify_link, Evidence, GatewayRecord, ModelRecord, SignatureRecord};
-use super::{gpu, ita, report, signature, tdx, Unverified, VerifiedModel};
+use super::report::{DeploymentClaim, SoftwareClaims};
+use super::{gpu, ita, measure, report, signature, tdx, Unverified, VerifiedModel};
 use crate::net::{Deadline, Http, Response};
 
 /// What the job brings to the checks from outside the network.
@@ -24,9 +25,9 @@ pub const PREFLIGHT_BUDGET_MS: u64 = 25_000;
 
 /// Everything NEAR AI's guides require before a completion is sent: the keyed attestation report
 /// fetched with this run's nonce; every model candidate in it checked (collateral, quote, TCB
-/// level, report data, GPUs), keeping those that pass; and the gateway's public Intel token
-/// checked. Returns the verified model keys, or the first reason there are none. Records what it
-/// saw in `evidence`.
+/// level, report data, software record, GPUs), keeping those that pass; and the gateway's public
+/// Intel token checked. Returns the verified model keys, or the first reason there are none.
+/// Records what it saw in `evidence`.
 pub fn preflight(
     http: &mut dyn Http,
     key: &str,
@@ -38,17 +39,17 @@ pub fn preflight(
     let now = trust.now?;
     evidence.clock_unix = Some(now);
     let body = report::fetch(http, key, &nonce, deadline)?;
-    let candidates = report::candidates(&body, &nonce)?;
+    let entries = report::entries(&body, &nonce)?;
 
     let mut collateral = tdx::CollateralCache::default();
     let mut nvidia_keys = None;
     let mut verified = Vec::new();
     let mut first_failure = None;
-    for candidate in candidates {
-        let mut checked = |c: report::Candidate| {
-            check_candidate(http, &c, trust.quote, &nonce, now, deadline, &mut collateral, &mut nvidia_keys, evidence)
+    for entry in entries {
+        let mut checked = |e: report::Entry| {
+            check_candidate(http, &e, trust.quote, &nonce, now, deadline, &mut collateral, &mut nvidia_keys, evidence)
         };
-        match candidate.and_then(&mut checked) {
+        match entry.and_then(&mut checked) {
             Ok(model) => verified.push(model),
             Err(why) => {
                 first_failure.get_or_insert(why);
@@ -68,7 +69,7 @@ pub fn preflight(
 #[allow(clippy::too_many_arguments)]
 fn check_candidate(
     http: &mut dyn Http,
-    candidate: &report::Candidate,
+    entry: &report::Entry,
     quote_check: tdx::QuoteCheck,
     nonce: &[u8; 32],
     now: u64,
@@ -77,9 +78,10 @@ fn check_candidate(
     nvidia_keys: &mut Option<Value>,
     evidence: &mut Evidence,
 ) -> Result<VerifiedModel, Unverified> {
-    let collateral = collateral.get(http, &candidate.quote, deadline)?;
-    let quote = quote_check(&candidate.quote, collateral, now)?;
+    let candidate = &entry.candidate;
+    let quote = quote_check(&candidate.quote, collateral.get(http, &candidate.quote, deadline)?, now)?;
     report::bind(candidate, &quote.report_data, nonce)?;
+    let software = check_software(&entry.software, &quote, quote_check, nonce, now, collateral)?;
 
     let (payload, gpus) = gpu::payload(candidate.nvidia_payload.as_deref(), nonce)?;
     let answer = gpu::attest(http, payload, deadline)?;
@@ -95,8 +97,36 @@ fn check_candidate(
         advisory_ids: quote.advisory_ids.clone(),
         gpus,
     };
-    evidence.model_quotes.push(ModelRecord::new(&model, &candidate.quote, &quote, &facts));
+    evidence.model_quotes.push(ModelRecord::new(&model, &candidate.quote, &quote, &facts, &software));
     Ok(model)
+}
+
+/// The software checks for one candidate whose `quote` already passed `quote_check` and
+/// `report::bind`: `measure::check` on the model machine's own record, then, when the report
+/// carries the launcher's deployment log, that log's own quote through `quote_check` with the
+/// collateral this run already holds for its platform, and `measure::deployment`. It makes no
+/// network call. A log that is unreadable, from a platform this run has not seen, or whose quote
+/// fails gives `DeployLogMismatch`; an absent log is recorded as absent and nothing else
+/// changes.
+pub fn check_software(
+    claims: &SoftwareClaims,
+    quote: &tdx::QuoteFacts,
+    quote_check: tdx::QuoteCheck,
+    nonce: &[u8; 32],
+    now: u64,
+    collateral: &tdx::CollateralCache,
+) -> Result<measure::Software, Unverified> {
+    let mut software = measure::check(claims, quote)?;
+    software.deployment = match &claims.deployment {
+        DeploymentClaim::Absent => None,
+        DeploymentClaim::Unreadable => return Err(Unverified::DeployLogMismatch),
+        DeploymentClaim::Stated(log) => {
+            let collateral = collateral.cached(&log.quote).ok_or(Unverified::DeployLogMismatch)?;
+            let log_quote = quote_check(&log.quote, collateral, now).map_err(|_| Unverified::DeployLogMismatch)?;
+            Some(measure::deployment(log, &log_quote, quote, nonce)?)
+        }
+    };
+    Ok(software)
 }
 
 /// The checks after the completion: the answer came back as one JSON completion, not streamed

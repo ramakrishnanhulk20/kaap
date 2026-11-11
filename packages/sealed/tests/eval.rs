@@ -122,7 +122,7 @@ const CAPTURE: [(&str, &str); 19] = [
     ("vote.json worker, no key evidence 0", "c30668350aa08d2faa2d87314e44d76f6f0369cd64535b4d3d4a6b993873e4cb"),
     ("vote.json paid, no key output", "848a4a546cfc4f10482210d6caa7950b9886ed1a22be91d4e8b302112c77c6eb"),
     ("verified worker output", "51c5f610b104e9f222b8a8cadb393cdff0ba1e36001fc4f7d2ce41561e99844f"),
-    ("verified worker evidence 0", "52e52112c47b13110489ccab904dee9676193d0120278b4b56393497e5f6fa38"),
+    ("verified worker evidence 0", "2e81b12f97df548ccff7a0a8aca9698859af0292e3a9344f65a8d82b98a44457"),
     ("verified paid output", "12f71a635cddbbe215028db1735c2dbe7c5311919de9feb5a2e31bf805432fbc"),
     ("no clock worker output", "cb84e7a9d664e0796e66ce4957bc54a080fe49563ba78fa38250ec94d5cf4076"),
     ("no clock worker evidence 0", "cc55b723b309d5570d3a61e25937ce9aebf4b622ed145a10688ec2c10fd5a025"),

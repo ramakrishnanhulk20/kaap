@@ -1,8 +1,11 @@
 //! Every host the AI step talks to, answered in one place so a whole check can run and one piece
 //! of evidence at a time can be broken. Real where real data exists: Intel's collateral and key
-//! set, and NEAR AI's public Intel token, all of 23 Oct 2026. Signed here where it cannot be:
-//! NVIDIA's verdict (a throwaway P-384 key) and the model's answer signature (a throwaway ed25519
-//! key that a stand-in quote binds, because no real quote binds a key a test holds).
+//! set, and NEAR AI's public Intel token, all of 23 Oct 2026, and the model machine's software
+//! record (event log and launcher configuration) from NEAR AI's report of 11 Nov 2026. Signed here
+//! where it cannot be: NVIDIA's verdict (a throwaway P-384 key) and the model's answer signature (a
+//! throwaway ed25519 key that a stand-in quote binds, because no real quote binds a key a test
+//! holds). The stand-in quote carries the 11 Nov quote's real registers, so that software record
+//! checks against it as it does against the real quote.
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
@@ -23,6 +26,33 @@ pub const ITA_NONCE: &str = include_str!("../fixtures/ita-token-2026-10-23a.nonc
 pub const INTEL_KEYS: &str = include_str!("../fixtures/intel-ita-keys-2026-10-23.json");
 /// Inside the public Intel token's five minutes, and inside the Intel collateral's dates.
 pub const NOW: u64 = 1_792_733_000;
+/// NEAR AI's attestation report of 11 Nov 2026 for the pinned model, fetched with no key, and the
+/// nonce it was fetched with. The nine long dashes in its launcher texts are stored as JSON
+/// unicode escapes, which parse to the same strings, so the repo's dash sweep passes.
+pub const REPORT_11_NOV: &str = include_str!("../fixtures/near-ai-report-2026-11-11.json");
+pub const REPORT_11_NOV_NONCE: &str = include_str!("../fixtures/near-ai-report-2026-11-11.nonce");
+/// Intel's collateral for that report's quotes, recorded the same day with the tool that made the
+/// 23 Oct set (scratchpad/m0d-nearai qvl-live).
+pub const COLLATERAL_11_NOV: &str = include_str!("../fixtures/intel-collateral-2026-11-11.json");
+/// Inside that collateral's dates (issued 06:48 UTC on 11 Nov, valid for 30 days).
+pub const NOW_11_NOV: u64 = 1_794_382_000;
+
+/// The 11 Nov report's model entry, parsed once per test binary.
+pub fn report_11_nov_model() -> Value {
+    static MODEL: std::sync::OnceLock<Value> = std::sync::OnceLock::new();
+    MODEL
+        .get_or_init(|| {
+            let report: Value = serde_json::from_str(REPORT_11_NOV).unwrap();
+            report["model_attestations"][0].clone()
+        })
+        .clone()
+}
+
+/// The 11 Nov model quote's registers, as `tdx::check_quote` reads them.
+fn registers_11_nov() -> dcap_qvl::quote::TDReport10 {
+    let quote = hex::decode(report_11_nov_model()["intel_quote"].as_str().unwrap()).unwrap();
+    *dcap_qvl::quote::Quote::parse(&quote).unwrap().report.as_td10().unwrap()
+}
 
 pub fn nonce() -> [u8; 32] {
     hex::decode(ITA_NONCE.trim()).unwrap().try_into().unwrap()
@@ -51,12 +81,19 @@ fn facts(nonce: &[u8; 32]) -> QuoteFacts {
     let mut report_data = [0u8; 64];
     report_data[..32].copy_from_slice(&model_key().verifying_key().to_bytes());
     report_data[32..].copy_from_slice(nonce);
+    let td = registers_11_nov();
     QuoteFacts {
         tcb_status: "OutOfDate".into(),
         advisory_ids: vec!["INTEL-SA-01192".into(), "INTEL-SA-01245".into()],
         report_data,
         eval_number: 20,
         pck_flags: kaap_sealed::attest::tdx::PckFlags { smt_enabled: "true", cached_keys: "false", dynamic_platform: "true" },
+        mr_td: td.mr_td,
+        mr_config_id: td.mr_config_id,
+        rt_mr0: td.rt_mr0,
+        rt_mr1: td.rt_mr1,
+        rt_mr2: td.rt_mr2,
+        rt_mr3: td.rt_mr3,
     }
 }
 
@@ -86,6 +123,8 @@ pub enum Signing {
 pub struct World {
     pub list: String,
     pub report: Value,
+    /// The Intel collateral every PCS answer is cut from.
+    pub collateral: &'static str,
     pub nras_claims: Value,
     /// Sign NVIDIA's verdict with a key that is not in NVIDIA's set (same kid).
     pub nras_forged: bool,
@@ -107,6 +146,7 @@ impl World {
     pub fn new() -> World {
         let nonce = nonce();
         let payload = json!({ "nonce": hex::encode(nonce), "arch": "HOPPER", "evidence_list": vec![json!({}); 8] }).to_string();
+        let real = report_11_nov_model();
         World {
             list: LIST.to_string(),
             report: json!({
@@ -117,10 +157,11 @@ impl World {
                     "signing_address": hex::encode(model_key().verifying_key().to_bytes()),
                     "signing_algo": "ed25519",
                     "nvidia_payload": payload,
-                    "event_log": "[]",
-                    "info": { "tcb_info": "{}" },
+                    "event_log": real["event_log"],
+                    "info": real["info"],
                 }],
             }),
+            collateral: COLLATERAL,
             nras_claims: json!({ "iss": "https://nras.attestation.nvidia.com", "iat": NOW, "nbf": NOW, "exp": NOW + 3600,
                 "eat_nonce": hex::encode(nonce), "x-nvidia-overall-att-result": true }),
             nras_forged: false,
@@ -189,7 +230,7 @@ impl Http for World {
             return self.overrides.remove(at).1;
         }
         assert!(kaap_sealed::net::is_safe_tail(r.tail), "{}", r.tail);
-        let c: dcap_qvl::QuoteCollateralV3 = serde_json::from_str(COLLATERAL).unwrap();
+        let c: dcap_qvl::QuoteCollateralV3 = serde_json::from_str(self.collateral).unwrap();
         let chain = |name: &str, pem: &str| vec![(name.to_string(), urlencoding::encode(pem).into_owned())];
         let (body, headers) = match (r.endpoint.authority, r.endpoint.path) {
             ("cloud-api.near.ai", "/v1/model/list") => (self.list.clone().into_bytes(), vec![]),
