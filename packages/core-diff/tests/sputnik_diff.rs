@@ -695,7 +695,7 @@ async fn check_label(dao: Arc<Dao>, label: &'static str) -> Result<LabelReport> 
 /// saved NEAR Business template with the owner and the demo member in its places, plus a `guard`
 /// role holding the guard alone, VoteReject on every label but remove_member_from_role, threshold
 /// "1" on each. Returns the policy and the guard account.
-fn m1_policy() -> Result<(Value, String)> {
+fn demo_policy() -> Result<(Value, String)> {
     let read = |file: &str| -> Result<Value> {
         Ok(serde_json::from_str(&std::fs::read_to_string(Path::new(REPO_ROOT).join(file))?)?)
     };
@@ -748,15 +748,15 @@ fn add_to_guard_role(policy: &mut Value, account: &str) {
 #[tokio::test(flavor = "multi_thread")]
 async fn guard_arming_agrees_with_the_binary() -> Result<()> {
     let code = sputnik_wasm()?;
-    let (m1, guard) = m1_policy()?;
-    let mut second = m1.clone();
+    let (demo, guard) = demo_policy()?;
+    let mut second = demo.clone();
     add_to_guard_role(&mut second, "second-guard.kaap-diff");
-    let mut everyone = m1.clone();
+    let mut everyone = demo.clone();
     push_role(&mut everyone, json!({ "name": "all", "kind": "Everyone", "permissions": ["*:AddProposal"], "vote_policy": {} }));
     let mut harness = harness_policy()?;
     add_to_guard_role(&mut harness, "second-guard.sandbox");
     let cases = [
-        ("demo DAO testnet policy", m1, guard.clone()),
+        ("demo DAO testnet policy", demo, guard.clone()),
         ("demo DAO, a second guard member", second, guard.clone()),
         ("demo DAO, Everyone may file", everyone, guard),
         ("harness, a second guard member", harness, "guard.sandbox".to_string()),

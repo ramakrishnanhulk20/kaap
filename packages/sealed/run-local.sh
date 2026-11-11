@@ -1,12 +1,12 @@
 #!/bin/bash
 # The local build under plain wasmtime, against a recorded fixture, signed with the RFC 8032 test
 # key, checked with Node crypto. Also runs the corrupt flag and a refused input. Needs wasmtime
-# 28.0.1 (KAAP_WASMTIME, default ~/kaap-m0-outlayer/tools/wasmtime28).
+# 28.0.1 (KAAP_WASMTIME, default ~/kaap-tools/wasmtime28).
 #
 # Usage: bash packages/sealed/run-local.sh [fixture.json ...]
 set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-WASMTIME=${KAAP_WASMTIME:-$HOME/kaap-m0-outlayer/tools/wasmtime28}
+WASMTIME=${KAAP_WASMTIME:-$HOME/kaap-tools/wasmtime28}
 OUT_DIR=${KAAP_LOCAL_OUT:-$HOME/kaap-target-sealed/local-runs}
 mkdir -p "$OUT_DIR"
 WASM="$OUT_DIR/kaap-sealed-local.wasm"

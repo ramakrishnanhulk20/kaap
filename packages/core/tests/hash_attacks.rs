@@ -195,7 +195,7 @@ fn a_passed_deadline_does_not_hide_a_text_with_no_single_reading() {
     assert_eq!(hash_codes(&honest(&message, "intents.near", DAO, Some(BLOCK_NS))), vec![HashTextDangerous]);
 }
 
-/// Q3 ruling: the planted records' `{"timestamp": <seconds>}` is read as a second form, judged
+/// The planted records' `{"timestamp": <seconds>}` is read as a second form, judged
 /// against the block like the RFC 3339 form.
 #[test]
 fn the_planted_deadline_form_is_read_and_judged() {

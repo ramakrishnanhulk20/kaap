@@ -20,7 +20,7 @@ const OWN_REMOVAL: &str = "remove_member_from_role";
 /// builds it: the saved NEAR Business template with the owner and the demo member in its two
 /// places, plus a `guard` role holding the guard alone, VoteReject on the 16 labels other than
 /// remove_member_from_role, threshold "1" on each. Returns the policy and the guard account.
-fn m1() -> (Value, String) {
+fn demo_policy() -> (Value, String) {
     let read = |file: &str| -> Value {
         serde_json::from_str(&std::fs::read_to_string(repo_root().join(file)).unwrap()).unwrap()
     };
@@ -55,8 +55,8 @@ fn all_but(skip: &[&str]) -> Vec<String> {
 }
 
 #[test]
-fn the_m1_policy_is_armed_on_every_label_but_its_own_removal() {
-    let (policy, guard) = m1();
+fn the_demo_policy_is_armed_on_every_label_but_its_own_removal() {
+    let (policy, guard) = demo_policy();
     let a = guard_arming(&policy, &guard);
     assert_eq!(a.rejects_alone, all_but(&[OWN_REMOVAL]));
     assert_eq!(a.cannot_reject, vec![OWN_REMOVAL.to_string()]);
@@ -72,9 +72,9 @@ fn the_m1_policy_is_armed_on_every_label_but_its_own_removal() {
 #[test]
 fn every_label_is_judged_exactly_once() {
     // Standard 1: the labels come from to_policy_label, so a label missing here fails this test.
-    let (m1_policy, guard) = m1();
+    let (demo, guard) = demo_policy();
     let harness = record(PLANTED, "planted:01")["context"]["policy_before"].clone();
-    for (policy, account) in [(m1_policy, guard.as_str()), (harness, "guard.sandbox"), (json!({}), "x.near")] {
+    for (policy, account) in [(demo, guard.as_str()), (harness, "guard.sandbox"), (json!({}), "x.near")] {
         let a = guard_arming(&policy, account);
         let mut judged: Vec<String> = a.rejects_alone.iter().chain(&a.cannot_reject).cloned().collect();
         judged.sort();
@@ -88,7 +88,7 @@ fn a_second_guard_member_disarms_only_a_ratio_guard() {
     // The demo DAO's guard rule is the absolute "1": with two members to_weight is min(1, 2) = 1
     // (policy.rs 98-106), so one reject still decides and the guard stays armed. The sandbox agrees
     // (core-diff guard_arming_agrees_with_the_binary).
-    let (mut policy, guard) = m1();
+    let (mut policy, guard) = demo_policy();
     role_mut(&mut policy, "guard")["kind"]["Group"].as_array_mut().unwrap().push(json!("second-guard.testnet"));
     assert_eq!(guard_arming(&policy, &guard).rejects_alone, all_but(&[OWN_REMOVAL]));
 
@@ -106,7 +106,7 @@ fn a_second_guard_member_disarms_only_a_ratio_guard() {
 fn others_who_reject_alone_lists_a_second_guard_member() {
     // On the demo DAO the owner and the demo member reject only through Approver and Admin, which
     // need 2 of 2, so nobody but the guard decides with one reject.
-    let (mut policy, guard) = m1();
+    let (mut policy, guard) = demo_policy();
     assert!(guard_arming(&policy, &guard).others_who_reject_alone.is_empty());
 
     // A second member of the demo DAO's guard role meets the same fixed "1", on every label the
@@ -127,7 +127,7 @@ fn others_who_reject_alone_lists_a_second_guard_member() {
 fn others_who_reject_alone_reads_every_group_role_and_only_armed_labels() {
     // A watch role with its own "1" on transfer and on remove_member_from_role. The guard cannot
     // reject remove_member_from_role, so only transfer is listed, with the two accounts sorted.
-    let (mut policy, guard) = m1();
+    let (mut policy, guard) = demo_policy();
     let one = json!({ "weight_kind": "RoleWeight", "quorum": "0", "threshold": "1" });
     policy["roles"].as_array_mut().unwrap().push(json!({
         "name": "watch",
@@ -144,7 +144,7 @@ fn others_who_reject_alone_reads_every_group_role_and_only_armed_labels() {
 
 #[test]
 fn an_everyone_role_gives_the_guard_its_rights() {
-    let (mut policy, guard) = m1();
+    let (mut policy, guard) = demo_policy();
     policy["roles"].as_array_mut().unwrap().push(json!({
         "name": "all", "kind": "Everyone", "permissions": ["*:AddProposal"], "vote_policy": {}
     }));
@@ -156,7 +156,7 @@ fn an_everyone_role_gives_the_guard_its_rights() {
 #[test]
 fn rights_from_any_matching_role_are_extra_rights() {
     // A guard that also sits in the Approver role holds its approve, finalise and remove rights.
-    let (mut policy, guard) = m1();
+    let (mut policy, guard) = demo_policy();
     role_mut(&mut policy, "Approver")["kind"]["Group"].as_array_mut().unwrap().push(json!(guard));
     let a = guard_arming(&policy, &guard);
     let expected = ["call:RemoveProposal", "call:VoteApprove", "call:Finalize", "transfer:RemoveProposal", "transfer:VoteApprove", "transfer:Finalize"];
@@ -166,7 +166,7 @@ fn rights_from_any_matching_role_are_extra_rights() {
     assert_eq!(a.rejects_alone, all_but(&[OWN_REMOVAL]));
 
     // A Member role is taken to match the guard, whose delegated balance no policy shows.
-    let (mut policy, guard) = m1();
+    let (mut policy, guard) = demo_policy();
     policy["roles"].as_array_mut().unwrap().push(json!({
         "name": "holders", "kind": { "Member": "1000000000000000000000000" }, "permissions": ["transfer:VoteApprove"], "vote_policy": {}
     }));
@@ -175,11 +175,11 @@ fn rights_from_any_matching_role_are_extra_rights() {
 
 #[test]
 fn a_guard_vote_that_cannot_decide_is_not_a_reject() {
-    let (mut policy, guard) = m1();
+    let (mut policy, guard) = demo_policy();
     role_mut(&mut policy, "guard")["vote_policy"]["transfer"] = json!({ "weight_kind": "TokenWeight", "quorum": "0", "threshold": [1, 2] });
     assert_eq!(guard_arming(&policy, &guard).cannot_reject, [OWN_REMOVAL, "transfer"]);
 
-    let (mut policy, guard) = m1();
+    let (mut policy, guard) = demo_policy();
     role_mut(&mut policy, "guard")["vote_policy"]["call"] = json!({ "weight_kind": "RoleWeight", "quorum": "0", "threshold": "0" });
     assert!(guard_arming(&policy, &guard).cannot_reject.contains(&"call".to_string()));
 }

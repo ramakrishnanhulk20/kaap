@@ -39,7 +39,7 @@ cargo build --locked -p kaap-sealed --release --target wasm32-wasip2 "${FEATURES
 WASM="$CARGO_TARGET_DIR/wasm32-wasip2/release/kaap-sealed.wasm"
 cp "$WASM" "$OUT"
 
-TOOLS=${KAAP_WASM_TOOLS:-$HOME/kaap-m0-outlayer/tools/wasm-tools}
+TOOLS=${KAAP_WASM_TOOLS:-$HOME/kaap-tools/wasm-tools}
 echo "file: $OUT"
 echo "size_bytes: $(stat -c%s "$OUT")"
 echo "sha256: $(sha256sum "$OUT" | cut -d' ' -f1)"

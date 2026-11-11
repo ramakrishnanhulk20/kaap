@@ -7,7 +7,7 @@
 //! the fields the verifier and 1Click read: `signer_id` (the DAO), `deadline`, `intents`, and an
 //! optional `external_app_data` holding only 1Click auth configs. Anything else is a `Refusal`,
 //! and a refused text that hashed correctly is HASH_TEXT_DANGEROUS: the DAO would sign bytes Kaap
-//! cannot read one way (Q2 ruling, 2 Nov 2026).
+//! cannot read one way.
 //!
 //! One text signs with the empty path: Trezu's login for the DAO's bulk-payment sub-account
 //! (`bulk_account`, `is_bulk_login`). The MPC key for the DAO and path `""` is the one
@@ -169,7 +169,7 @@ fn is_auth_only(data: &Value) -> bool {
 /// The deadline in nanoseconds since 1970. The verifier's own form is an RFC 3339 string. The
 /// planted records write `{"timestamp": <seconds>}`, which the verifier would refuse to parse; it
 /// is read as a second form so those texts are judged on their intents, the worst plausible
-/// reading (Q3 ruling, 2 Nov 2026). Anything else has no reading.
+/// reading. Anything else has no reading.
 pub fn deadline_ns(value: &Value) -> Option<i128> {
     match value {
         Value::String(text) => rfc3339_ns(text),

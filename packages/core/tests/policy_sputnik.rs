@@ -41,7 +41,7 @@ fn with_roles(roles: Value) -> Policy {
 
 /// The DAO of the first sandbox runs: council [alice] with "*:*" and a guard role
 /// [guard] holding VoteReject on the 16 labels other than remove_member_from_role.
-fn m0_policy() -> Policy {
+fn first_sandbox_policy() -> Policy {
     let guard: Vec<String> =
         LABELS.iter().filter(|l| **l != "remove_member_from_role").map(|l| format!("{l}:VoteReject")).collect();
     with_roles(json!([
@@ -85,7 +85,7 @@ fn one_member_council_executes_on_the_first_vote() {
     // lib.rs test_basics (one council member approves alone) and the first sandbox runs'
     // alice_alone_approves_first.
     assert_eq!(votes_needed(&parse(&default_policy(&["a.near"])), "council", "transfer"), 1);
-    assert_eq!(votes_needed(&m0_policy(), "council", "transfer"), 1);
+    assert_eq!(votes_needed(&first_sandbox_policy(), "council", "transfer"), 1);
     // lib.rs test_vote_twice: with two members one approval is not enough.
     assert_eq!(votes_needed(&parse(&default_policy(&["a.near", "b.near"])), "council", "transfer"), 2);
 }
@@ -94,7 +94,7 @@ fn one_member_council_executes_on_the_first_vote() {
 fn guard_rejects_alone_and_can_do_nothing_else() {
     // The first sandbox runs' guard_reject_kills_transfer, guard_cannot_approve and
     // guard_cannot_block_its_removal.
-    let p = m0_policy();
+    let p = first_sandbox_policy();
     assert_eq!(can_execute_action(&p, "guard.sandbox", "transfer", Action::VoteReject), (vec!["guard".to_string()], true));
     assert_eq!(votes_needed(&p, "guard", "transfer"), 1);
     assert!(!can_execute_action(&p, "guard.sandbox", "transfer", Action::VoteApprove).1);

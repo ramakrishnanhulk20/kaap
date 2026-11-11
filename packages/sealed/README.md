@@ -448,15 +448,20 @@ bash packages/sealed/build.sh
 ```
 
 It remaps local paths out of the binary (`--remap-path-prefix`), strips symbols, refuses to finish
-if a home or checkout path is still inside, and prints the sha256. Two builds in separate target
-directories gave `da2c2853...c666` on 11 Nov 2026.
+if a home or checkout path is still inside, and prints the sha256. Three builds in separate target
+directories gave `d8453d6e...9083`, the active version, on 11 Nov 2026.
+
+The build needs nothing else. If `wasm-tools` is at `~/kaap-tools/wasm-tools`, or at the path in
+`KAAP_WASM_TOOLS`, the script also prints the program's manifest section count and its imports;
+without it those two lines are skipped and the hash is the same.
 
 ## Run it
 
 - Tests, natively, on recorded answers: `cargo test -p kaap-sealed`.
 - The local build under plain wasmtime, with recorded answers and a public test key (never
   published): `bash packages/sealed/run-local.sh`. It runs as the worker unless
-  `NEAR_USER_ACCOUNT_ID` is set.
+  `NEAR_USER_ACCOUNT_ID` is set. It needs wasmtime 28.0.1 at `~/kaap-tools/wasmtime28` or at
+  the path in `KAAP_WASMTIME`.
 - Publish a version: `bash scripts/publish-sealed-testnet.sh fastfs` or
   `bash scripts/publish-sealed-testnet.sh https://<host>/<file>.wasm`. It checks the served sha256
   before registering anything.

@@ -13,7 +13,7 @@ Run on 2 Nov 2026 with `cargo test -p kaap-core --test hash_eval -- --nocapture`
 
 No record differs on a finding code, the floor or a veto field. The notes below are readings put up for a ruling. None of them changes the key.
 
-## 1. The planted texts' deadline form (Q3 ruling, 2 Nov 2026)
+## 1. The planted texts' deadline form (ruling of 2 Nov 2026)
 
 Every planted hash text (29 to 34 and 62) writes `"deadline":{"timestamp":1790000000}`. The NEAR Intents verifier reads only an RFC 3339 string (the NEP-413 example on https://docs.near-intents.org/integration/verifier-contract/signing-intents, and the `deadline` row of the payload table on https://docs.near-intents.org/integration/verifier-contract/intent-types-and-execution), so it would refuse these texts. As ruled, `hash::text::deadline_ns` reads that form second, after the RFC 3339 string. It can only keep a text in the analysis, never lower a finding, and `hash_attacks.rs` `the_planted_deadline_form_is_read_and_judged` pins it. 1790000000 is 21 Sep 2026 14:13:20 UTC, a month before the records were filed. The eval has no block time, so the deadline is not judged there. Against any real block from 20 Oct on, all seven texts would count as passed. Regenerating them with ISO deadlines is a separate item, not done here.
 
