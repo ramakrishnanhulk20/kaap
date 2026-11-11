@@ -52,8 +52,9 @@ What one proposal costs the worker account in testnet NEAR (PROOF-M1.md, measure
 honest proposal costs about 0.0086 and a stopped attack about 0.0094. At 50 proposals a day that
 is about 0.45 testnet NEAR a day. The worker holds 9.92 testnet NEAR today (read 29 Oct 2026), which
 lasts about 22 days at that rate, so it needs one top-up before 25 Nov. The daily caps in the
-config stop it from spending more than 1 testnet NEAR a day whatever happens. WO-06b adds the
-low-balance alert.
+config stop it from spending more than 1 testnet NEAR a day whatever happens. Runs started at the
+same moment are each counted at their worst case in the same step that checks the cap, before any
+of them is signed, so a burst cannot slip past it. WO-06b adds the low-balance alert.
 
 Scaling note for later, not for the demo: each extra treasury adds about 104,000 requests a day
 per provider, about 3.1 million a month. On mainnet that means a paid RPC plan after the first
@@ -121,6 +122,11 @@ stricter. Code: `clientAddress` in `src/status.ts`. Test: "behind the HTTPS prox
 machine, POST /subscribe counts each client by the address the proxy saw" in
 `test/health.test.ts`.
 
+Requests from one address that arrive together are counted one by one: the count is taken again
+once each body has been read, so a burst gets no more tokens than the limit. Test: "six POST
+/subscribe requests read at once from one address get exactly the two tokens its limit allows" in
+`test/health.test.ts`.
+
 Two conditions keep this true on the VM:
 
 - The proxy must add its client's address at the end of `X-Forwarded-For`. Caddy's
@@ -172,11 +178,13 @@ JSON with a fixed word, and none repeats anything from the request:
 | 404 `dao_not_watched` | the worker does not watch the DAO |
 | 409 `proposal_not_open` | the proposal is not InProgress, or the two RPC providers do not agree it is |
 | 429 `too_many_requests`, with `retry-after` | the client address sent `KAAP_TEXTS_PER_ADDRESS_HOUR` texts in the past hour (default 3, 1 to 100), counted the way `/subscribe` counts tokens behind the proxy |
-| 503 `over_budget` | the daily caps refuse the run |
+| 503 `over_budget` | the daily caps refuse the run: the DAO has had `KAAP_CAP_TEXT_RUNS_PER_DAO_DAY` text runs today (default 5, 1 to 1,000), or the run would leave less than one stopped attack (0.103 NEAR: run, record and veto) of `KAAP_CAP_NEAR_PER_DAY` for the DAO's own proposal checks, or that NEAR cap is reached outright. A text refused this way does not mark the DAO offline, since its proposal checks still run |
 | 502 `{"error":"run_failed","reason":...}` | the run gave no verdict: the sealed program's own fixed reason when it refused or held the run, else `no_answer` or `failed` |
 
-What it costs and how long it takes. Each text is one sealed run under the same daily caps, attempts
-and window as any other run. On 11 Nov 2026 a text for a planted proposal on the demo treasury cost
+What it costs and how long it takes. Each text is one sealed run with the same attempts and window
+as any other run. Text runs have their own daily count per DAO and never count against
+`KAAP_CAP_RUNS_PER_DAO_DAY`, so texts can never use up the runs the DAO needs for its own proposals;
+they still count against the worker's total spend, `KAAP_CAP_NEAR_PER_DAY`. On 11 Nov 2026 a text for a planted proposal on the demo treasury cost
 0.0042 testnet NEAR to judge, then 0.0008 for the veto and 0.0058 for the registry record. The
 answer waits for the run, about 40 seconds, and for any judgement of the same proposal already
 running: that text was answered after 86 seconds because the worker was judging the new proposal

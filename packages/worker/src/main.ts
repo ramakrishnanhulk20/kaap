@@ -82,7 +82,7 @@ async function main(): Promise<void> {
   health.on((event) => alerts.health(event));
   const subs = new Subscriptions(store, config.KAAP_NETWORK, log);
   const chatBot = new Bot({ subs, telegram, store, log, now, sleep }, bot.username);
-  const caps = new CapGuard(store, { runsPerDaoDay: config.KAAP_CAP_RUNS_PER_DAO_DAY, recordsPerDaoDay: config.KAAP_CAP_RECORDS_PER_DAO_DAY, nearPerDay: config.KAAP_CAP_NEAR_PER_DAY }, config.KAAP_NETWORK);
+  const caps = new CapGuard(store, { runsPerDaoDay: config.KAAP_CAP_RUNS_PER_DAO_DAY, textRunsPerDaoDay: config.KAAP_CAP_TEXT_RUNS_PER_DAO_DAY, recordsPerDaoDay: config.KAAP_CAP_RECORDS_PER_DAO_DAY, nearPerDay: config.KAAP_CAP_NEAR_PER_DAY }, config.KAAP_NETWORK);
   const reads = new Reads(primary, secondary, bridge, 1_000, sleep);
   const submitter = new Submitter(store, chain, config.KAAP_NETWORK, log, { pollMs: 1_500, sendTries: 4, sleep, explorer });
   const acceptedKey = { value: null as string | null };
@@ -132,7 +132,7 @@ async function main(): Promise<void> {
     sealed_project: config.KAAP_SEALED_PROJECT,
     ai_secrets: secretsRef ?? 'none, so verdicts have no AI second opinion',
     providers: [primary.name, secondary.name],
-    caps: { runs_per_dao_day: config.KAAP_CAP_RUNS_PER_DAO_DAY, records_per_dao_day: config.KAAP_CAP_RECORDS_PER_DAO_DAY, near_per_day: formatNear(config.KAAP_CAP_NEAR_PER_DAY) },
+    caps: { runs_per_dao_day: config.KAAP_CAP_RUNS_PER_DAO_DAY, text_runs_per_dao_day: config.KAAP_CAP_TEXT_RUNS_PER_DAO_DAY, records_per_dao_day: config.KAAP_CAP_RECORDS_PER_DAO_DAY, near_per_day: formatNear(config.KAAP_CAP_NEAR_PER_DAY) },
     poll_ms: config.KAAP_POLL_MS,
     db: config.KAAP_WORKER_DB,
     alerts: { telegram_bot: bot.username, site: config.KAAP_SITE_URL ?? 'none, so alerts carry no link', batch_ms: config.KAAP_ALERT_BATCH_MS, cap_per_hour: config.KAAP_ALERT_CAP_PER_HOUR },

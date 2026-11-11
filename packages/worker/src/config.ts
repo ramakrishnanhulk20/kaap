@@ -27,6 +27,9 @@ const schema = z
     KAAP_RPC_SECONDARY: https,
     KAAP_WORKER_DB: z.string().min(1),
     KAAP_CAP_RUNS_PER_DAO_DAY: count(1, 10_000),
+    // Runs that carry a member's text, apart from the runs above, so texts never use up a DAO's
+    // own proposal checks for the day.
+    KAAP_CAP_TEXT_RUNS_PER_DAO_DAY: count(1, 1_000).default(5),
     KAAP_CAP_RECORDS_PER_DAO_DAY: count(1, 10_000),
     KAAP_CAP_NEAR_PER_DAY: z.string().transform((text, ctx) => {
       const yocto = parseNear(text);

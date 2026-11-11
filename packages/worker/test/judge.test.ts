@@ -22,7 +22,7 @@ function setup(opts: { acceptedKey?: string; now?: number; guard?: string; secre
   const store = memoryStore(() => opts.now ?? T0);
   const { log, lines } = memoryLog();
   const health = new Health(log);
-  const caps = new CapGuard(store, { runsPerDaoDay: 50, recordsPerDaoDay: 50, nearPerDay: 10n ** 24n }, NETWORK);
+  const caps = new CapGuard(store, { runsPerDaoDay: 50, textRunsPerDaoDay: 5, recordsPerDaoDay: 50, nearPerDay: 10n ** 24n }, NETWORK);
   const submitter = new Submitter(store, chain, NETWORK, log, { pollMs: 1, sendTries: 3, sleep: noSleep, explorer: (h) => `https://testnet.nearblocks.io/txns/${h}` });
   const key = testKey();
   const judge = new Judge(

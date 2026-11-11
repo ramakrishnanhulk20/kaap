@@ -123,7 +123,7 @@ test('a stale critical verdict is never vetoed: judged again once, then held and
   store.queueNew(NETWORK, DAO, 7, 'new');
   const { log, lines } = memoryLog();
   const health = new Health(log);
-  const caps = new CapGuard(store, { runsPerDaoDay: 50, recordsPerDaoDay: 50, nearPerDay: 10n ** 24n }, NETWORK);
+  const caps = new CapGuard(store, { runsPerDaoDay: 50, textRunsPerDaoDay: 5, recordsPerDaoDay: 50, nearPerDay: 10n ** 24n }, NETWORK);
   const submitter = new Submitter(store, chain, NETWORK, log, { pollMs: 1, sendTries: 3, sleep: noSleep, explorer: (h) => h });
   const reads = new Reads(a, b, bridge, 0, noSleep);
   const key = testKey();

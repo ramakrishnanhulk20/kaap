@@ -1,10 +1,12 @@
 // A member's sealed text (WO-06d): GET /text-key serves the stored key, POST /texts answers every
 // fault with a fixed word and echoes nothing, a judged text goes down the same veto path as any
 // verdict without the answer waiting for the veto, a text waits for a judgement of its proposal
-// already running, the rate limit counts each client address, and neither the ciphertext nor the
-// reply key reaches a log line or a stored row (C26). Not covered: the sealed program opening the
-// text and hashing it, which packages/sealed/tests/texts.rs and scripts/WO-05b-text-roundtrip.mjs
-// prove, and OutLayer's own behaviour, which the live testnet run shows.
+// already running, the rate limit counts each client address, texts have a daily cap of their own
+// and may not spend the NEAR kept for the DAO's own proposal checks (C29), and neither the
+// ciphertext nor the reply key reaches a log line or a stored row (C26). Not covered: the sealed
+// program opening the text and hashing it, which packages/sealed/tests/texts.rs and
+// scripts/WO-05b-text-roundtrip.mjs prove, and OutLayer's own behaviour, which the live testnet
+// run shows.
 
 import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync, randomBytes } from 'node:crypto';
@@ -15,10 +17,11 @@ import type { KeyPair } from 'near-api-js';
 
 import { Actor } from '../src/act.ts';
 import type { VerdictFields } from '../src/bridge.ts';
-import { CapGuard } from '../src/caps.ts';
+import { CapGuard, PER_STOPPED_ATTACK } from '../src/caps.ts';
 import type { Signed } from '../src/chain.ts';
 import { Health } from '../src/health.ts';
-import { Judge } from '../src/judge.ts';
+import { Judge, RUN_DEPOSIT, RUN_GAS } from '../src/judge.ts';
+import { worstCase } from '../src/near.ts';
 import { Reads } from '../src/reads.ts';
 import { RejudgeWatch } from '../src/rejudge.ts';
 import type { At, ViewResult } from '../src/rpc.ts';
@@ -83,7 +86,7 @@ function textKeyFor(signer: KeyPair) {
 
 const replyKeyHex = () => Buffer.from(generateKeyPairSync('x25519').publicKey.export({ format: 'jwk' }).x!, 'base64url').toString('hex');
 
-async function started(opts: { runsPerDaoDay?: number; perHour?: number } = {}) {
+async function started(opts: { runsPerDaoDay?: number; textRunsPerDaoDay?: number; perHour?: number } = {}) {
   const a = new GatedProvider('primary.test');
   const b = new FakeProvider('secondary.test');
   const key = testKey();
@@ -95,7 +98,7 @@ async function started(opts: { runsPerDaoDay?: number; perHour?: number } = {}) 
   const { log, lines, text } = memoryLog();
   const health = new Health(log);
   const chain = new ArgsChain();
-  const caps = new CapGuard(store, { runsPerDaoDay: opts.runsPerDaoDay ?? 50, recordsPerDaoDay: 50, nearPerDay: 10n * NEAR }, NETWORK);
+  const caps = new CapGuard(store, { runsPerDaoDay: opts.runsPerDaoDay ?? 50, textRunsPerDaoDay: opts.textRunsPerDaoDay ?? 50, recordsPerDaoDay: 50, nearPerDay: 10n * NEAR }, NETWORK);
   const submitter = new Submitter(store, chain, NETWORK, log, { pollMs: 1, sendTries: 2, sleep: noSleep, explorer: (h) => h });
   const reads = new Reads(a, b, bridge, 0, noSleep);
   const accepted = { value: null as string | null };
@@ -143,11 +146,29 @@ async function started(opts: { runsPerDaoDay?: number; perHour?: number } = {}) 
   return s;
 }
 
-const vetoLands = (s: Awaited<ReturnType<typeof started>>, out: { verdict: string }) => {
+type Started = Awaited<ReturnType<typeof started>>;
+
+const vetoLands = (s: Started, out: { verdict: string }) => {
   const hash = bridge.decodeVerdict(Buffer.from(out.verdict, 'base64')).verdict_hash;
   bothSet([s.a, s.b], (p) => p.vetoResults.set(hash, 'Ok'));
   return hash;
 };
+
+/** A text verdict that calls for no veto, so a text is judged and recorded and nothing waits. */
+const CALM: Partial<VerdictFields> = { risk: 'high', floor: 'high', findings: ['UNKNOWN_VALUE'], ai_status: 'verified', model_id: 'deepseek-ai/DeepSeek-V3.1' };
+
+/** The DAO's own check of a new proposal `id`, queued and run by the worker as any new proposal
+ *  is, with a verdict that calls for no veto. Texts keep the answer they had. Resolves with the
+ *  stored row once the worker is idle. */
+async function proposalCheck(s: Started, id: number) {
+  bothSet([s.a, s.b], (p) => p.proposals.set(id, proposalText(id)));
+  const texts = s.job;
+  s.job = (input) => ('text_ciphertext' in input ? texts(input) : sealedOutput(verdictFields(id, { risk: 'high', floor: 'high', findings: ['HASH_UNVERIFIED'] }), s.key));
+  s.store.queueNew(NETWORK, DAO, id, 'new');
+  s.worker.enqueue(DAO, id);
+  await s.worker.idle();
+  return s.store.judged(NETWORK, DAO, id);
+}
 
 test('GET /text-key serves the stored key with the headers of /status, and only the accepted key signed it', async () => {
   const s = await started();
@@ -211,12 +232,39 @@ test('a DAO the worker does not watch is 404 and a proposal that is not open is 
   await s.close();
 });
 
-test('a run the caps refuse is 503 over_budget and is never signed (C29)', async () => {
-  const s = await started({ runsPerDaoDay: 1 });
-  s.store.addRun({ idempotency_key: 'run:testnet:earlier', network: NETWORK, dao: DAO, proposal_id: 1, generation: 1, attempt: 1 });
+test("texts up to the text cap pass and the next is 503 over_budget, never signed, while the DAO's own check still runs (C29)", async () => {
+  // One proposal run a day is all this DAO allows, so a text counted against it would block it.
+  const s = await started({ runsPerDaoDay: 1, textRunsPerDaoDay: 2 });
+  s.job = () => textAnswer(s.key, CALM);
+  assert.deepEqual([(await s.post(s.body())).status, (await s.post(s.body())).status], [200, 200]);
+  const over = await s.post(s.body());
+  assert.deepEqual([over.status, over.text], [503, '{"error":"over_budget"}']);
+  assert.equal(s.chain.calls('request_execution').length, 2, 'the refused text was never signed');
+  const refused = events(s.lines(), 'refused').at(-1)!;
+  assert.deepEqual([(JSON.parse(String(refused.detail)) as { cap: string }).cap, refused.sealed_text], ['text_runs_per_dao_day', true]);
+  assert.equal(s.health.has('cap_reached', DAO), false, 'texts cannot mark the DAO offline');
+
+  assert.equal((await proposalCheck(s, 6))?.state, 'judged');
+  assert.equal(s.chain.calls('request_execution').length, 3);
+  await s.close();
+});
+
+test('a text that would spend the NEAR kept for one stopped attack is 503 over_budget, while a proposal check still runs (C29)', async () => {
+  const s = await started();
+  s.job = () => textAnswer(s.key, CALM);
+  // Earlier spending leaves one stopped attack and half a run under the 10 NEAR cap: room for a
+  // text run on its own, but not on top of what is kept for proposal checks.
+  const run = worstCase(RUN_GAS, RUN_DEPOSIT);
+  s.store.addSpend({ idempotency_key: 'veto:earlier', kind: 'veto', network: NETWORK, dao: 'other.sputnik.testnet', proposal_id: 1, tx_hash: 'h0', signed_b64: 'x', nonce: '1', reserved_yocto: (10n * NEAR - PER_STOPPED_ATTACK - run / 2n).toString() });
   const got = await s.post(s.body());
   assert.deepEqual([got.status, got.text], [503, '{"error":"over_budget"}']);
-  assert.equal(s.chain.signed.length, 0);
+  assert.equal(s.chain.calls('request_execution').length, 0, 'never signed');
+  const refused = events(s.lines(), 'refused').at(-1)!;
+  assert.equal((JSON.parse(String(refused.detail)) as { cap: string }).cap, 'near_kept_for_proposals');
+  assert.equal(s.health.has('cap_reached', DAO), false);
+
+  const row = await proposalCheck(s, 6);
+  assert.deepEqual([row?.state, row?.record_state], ['judged', 'recorded'], 'the run and its record fit in what was kept');
   await s.close();
 });
 

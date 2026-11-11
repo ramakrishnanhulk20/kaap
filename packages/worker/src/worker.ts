@@ -3,21 +3,20 @@
 // hands it, so a quiet worker is a disarmed guard; everything that can stop it is logged loudly.
 // A member's sealed text (POST /texts) is judged here too, one proposal at a time like the rest.
 
-import { RECORD_DEPOSIT, RECORD_GAS, VETO_GAS, type Actor, type Signed } from './act.ts';
+import type { Actor, Signed } from './act.ts';
 import type { AlertSink } from './alerts.ts';
 import { Bridge, type DecodedVerdict } from './bridge.ts';
+import { PER_STOPPED_ATTACK } from './caps.ts';
 import { ACCOUNT_ID } from './config.ts';
 import { ALL, type Health, type Signal } from './health.ts';
-import { RUN_DEPOSIT, RUN_GAS, type Judge, type Judgement, type SealedText } from './judge.ts';
+import type { Judge, Judgement, SealedText } from './judge.ts';
 import type { Logger } from './log.ts';
-import { STORAGE_PRICE_PER_BYTE, formatNear, worstCase } from './near.ts';
+import { STORAGE_PRICE_PER_BYTE, formatNear } from './near.ts';
 import type { Reads } from './reads.ts';
 import type { RejudgeWatch } from './rejudge.ts';
 import { dayOf, type Store } from './store.ts';
 import { CounterWatch } from './watcher.ts';
 
-/** What the worker spends to stop one attack at worst: the sealed run, the record and the veto. */
-export const PER_STOPPED_ATTACK = worstCase(RUN_GAS, RUN_DEPOSIT) + worstCase(RECORD_GAS, RECORD_DEPOSIT) + worstCase(VETO_GAS, 0n);
 /** The worker raises "balance low" below the cost of 20 stopped attacks (C18). */
 export const WORKER_FLOOR = 20n * PER_STOPPED_ATTACK;
 /** The guard pays the storage of every verdict it spends, 84 bytes at most (a refused vote,

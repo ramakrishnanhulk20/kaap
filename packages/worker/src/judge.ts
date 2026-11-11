@@ -10,9 +10,10 @@
 // a busy shard never took gives its reservation back under the daily cap when it is finished.
 //
 // A run may carry a member's sealed text (POST /texts): ciphertext only the sealed program can
-// open, and the reply key its explanation is sealed to. Such a run has its own idempotency keys,
-// the same caps, attempts and window, and its signed bytes are kept in memory only, so the store
-// never holds the ciphertext (C26). Not covered: a crash mid-run, after which nothing re-sends that
+// open, and the reply key its explanation is sealed to. Such a run has its own idempotency keys and
+// its own daily count, which leaves the NEAR a proposal check needs untouched (C29), the same
+// attempts and window, and its signed bytes are kept in memory only, so the store never holds the
+// ciphertext (C26). Not covered: a crash mid-run, after which nothing re-sends that
 // run; the member sends the text again.
 
 import { createHash, randomBytes } from 'node:crypto';
@@ -26,8 +27,8 @@ import { ALL, type Health } from './health.ts';
 import type { Logger } from './log.ts';
 import { MIN_GAS_PRICE, TGAS, worstCase } from './near.ts';
 import { events, logs, refusal, successValue, type TxOutcome } from './outcome.ts';
-import type { RunState, Store } from './store.ts';
-import type { Submitter } from './submit.ts';
+import { TEXT_RUN_PREFIX, type RunState, type Store } from './store.ts';
+import type { SubmitResult, Submitter } from './submit.ts';
 
 export const RUN_GAS = 300n * TGAS;
 /** What every run attaches (packages/sealed/RUNS.md); OutLayer keeps its charge and refunds the rest. */
@@ -175,38 +176,45 @@ export class Judge {
     // One text request is one judgement of its own, never resumed from an earlier one.
     const textRun = text ? randomBytes(8).toString('hex') : null;
     for (let attempt = 1; attempt <= RUN_ATTEMPTS; attempt++) {
-      const key = textRun ? `text:${this.#s.network}:${dao}:${id}:${textRun}:a${attempt}` : `run:${this.#s.network}:${dao}:${id}:g${generation}:a${attempt}`;
+      const key = textRun ? `${TEXT_RUN_PREFIX}${this.#s.network}:${dao}:${id}:${textRun}:a${attempt}` : `run:${this.#s.network}:${dao}:${id}:g${generation}:a${attempt}`;
       const seen = this.#store.run(key);
       if (!seen) {
-        const capped = this.#caps.run(dao, reserved);
+        const capped = text ? this.#caps.textRun(dao, reserved, key) : this.#caps.run(dao, reserved, key);
         if (capped) {
           const detail = JSON.stringify(capped, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
-          this.#log.warn('refused', { what: 'sealed_run', dao, proposal_id: id, reason: 'cap', detail });
-          this.#health.raise('cap_reached', dao, { cap: capped.cap });
+          this.#log.warn('refused', { what: 'sealed_run', dao, proposal_id: id, reason: 'cap', detail, sealed_text: text !== undefined });
+          // A text's own caps leave the DAO's proposal checks running, and anyone may send a text,
+          // so a refused one says nothing about the DAO.
+          if (!text) this.#health.raise('cap_reached', dao, { cap: capped.cap });
           return { kind: 'capped', detail };
         }
-        this.#store.addRun({ idempotency_key: key, network: this.#s.network, dao, proposal_id: id, generation, attempt });
       } else if (seen.state !== 'pending' && seen.state !== 'answered') {
         last = { state: seen.state, detail: seen.detail ?? '', tx: null };
         if (seen.state === 'refused') break;
         continue;
       }
 
-      const res = await this.#submitter.submit({
-        key,
-        kind: 'run',
-        dao,
-        proposalId: id,
-        receiver: this.#s.outlayer,
-        method: 'request_execution',
-        args,
-        gas: RUN_GAS,
-        deposit: RUN_DEPOSIT,
-        reserved,
-        windowBlocks: this.#s.windowBlocks,
-        kept: outlayerCharge,
-        ...(text ? { memoryOnly: true } : {}),
-      });
+      let res: SubmitResult;
+      try {
+        if (!seen) this.#store.addRun({ idempotency_key: key, network: this.#s.network, dao, proposal_id: id, generation, attempt });
+        res = await this.#submitter.submit({
+          key,
+          kind: 'run',
+          dao,
+          proposalId: id,
+          receiver: this.#s.outlayer,
+          method: 'request_execution',
+          args,
+          gas: RUN_GAS,
+          deposit: RUN_DEPOSIT,
+          reserved,
+          windowBlocks: this.#s.windowBlocks,
+          kept: outlayerCharge,
+          ...(text ? { memoryOnly: true } : {}),
+        });
+      } finally {
+        this.#caps.settle(key);
+      }
       const result = res.kind === 'final' ? this.read(dao, id, res.outcome, res.hash, text !== undefined) : res.kind === 'no_outcome' ? ({ state: 'no_answer', detail: `nothing final within ${this.#s.windowBlocks} blocks`, tx: res.hash } as const) : ({ state: 'failed', detail: `not sent: ${res.detail}`, tx: null } as const);
       last = result;
       if (result.state === 'answered') {

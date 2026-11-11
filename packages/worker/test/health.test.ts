@@ -2,10 +2,12 @@
 // accepted key and providers that disagree each raise "guard offline" or "guard degraded" for the
 // DAO they concern, reach its members, and show on GET /status, which holds no secret; behind the
 // HTTPS proxy on the same machine, POST /subscribe counts each client by the address the proxy
-// saw. Not covered: a worker process that is down altogether, which only an outside check of
-// /status sees, and the proxy's own behaviour, which HOSTING.md checks on the VM.
+// saw, and a burst from one address gets no more tokens than the limit. Not covered: a worker
+// process that is down altogether, which only an outside check of /status sees, and the proxy's
+// own behaviour, which HOSTING.md checks on the VM.
 
 import assert from 'node:assert/strict';
+import { request } from 'node:http';
 import { test } from 'node:test';
 
 import { Actor } from '../src/act.ts';
@@ -46,7 +48,7 @@ async function started() {
   subs.redeem(subs.issue(DAO).token, CHAT);
   subs.redeem(subs.issue('other.sputnik.testnet').token, OTHER_CHAT);
   const chain = new FakeChain();
-  const caps = new CapGuard(store, { runsPerDaoDay: 50, recordsPerDaoDay: 50, nearPerDay: 10n * NEAR }, NETWORK);
+  const caps = new CapGuard(store, { runsPerDaoDay: 50, textRunsPerDaoDay: 5, recordsPerDaoDay: 50, nearPerDay: 10n * NEAR }, NETWORK);
   const submitter = new Submitter(store, chain, NETWORK, log, { pollMs: 1, sendTries: 2, sleep: noSleep, explorer: (h) => h });
   const reads = new Reads(a, b, bridge, 0, noSleep);
   const accepted = { value: null as string | null };
@@ -220,6 +222,33 @@ test('behind the HTTPS proxy on the same machine, POST /subscribe counts each cl
   assert.equal(await ask('198.51.100.9'), 200, 'another client behind the same proxy is not blocked by the first');
   assert.equal(await ask('198.51.100.1, 203.0.113.7'), 429, 'an address a client writes before the proxy entry changes nothing');
   assert.equal(events(s.lines(), 'rate_limited').at(-1)?.address, '203.0.113.7');
+  await http.stop();
+  await s.worker.stop();
+});
+
+test('six POST /subscribe requests read at once from one address get exactly the two tokens its limit allows', async () => {
+  const s = await started();
+  const http = new StatusServer({ health: s.health, subs: s.subs, log: s.log, now: s.c.now, watching: () => s.worker.watching(), texts: s.worker }, { host: '127.0.0.1', port: 0, network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 2, textsPerAddressHour: 3, textKey: null });
+  const port = await http.start();
+  // Every header arrives before any body, so each request passes the first look at the count
+  // before one of them is counted.
+  const pending = Array.from({ length: 6 }, () => {
+    const req = request({ host: '127.0.0.1', port, path: '/subscribe', method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': '192.0.2.44' } });
+    const status = new Promise<number>((resolve, reject) => {
+      req.on('response', (res) => {
+        res.resume();
+        resolve(res.statusCode ?? 0);
+      });
+      req.on('error', reject);
+    });
+    req.flushHeaders();
+    return { req, status };
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  for (const { req } of pending) req.end(JSON.stringify({ dao: DAO }));
+  const burst = await Promise.all(pending.map((p) => p.status));
+  assert.deepEqual([...burst].sort((a, b) => a - b), [200, 200, 429, 429, 429, 429]);
+  assert.equal(events(s.lines(), 'rate_limited').filter((l) => l.route === '/subscribe').length, 4);
   await http.stop();
   await s.worker.stop();
 });

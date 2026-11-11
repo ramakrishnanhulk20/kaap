@@ -1,8 +1,9 @@
 // The daily ceilings (C29): sealed runs and registry writes per DAO, and NEAR for the whole
 // worker, counted from the store so a restart never resets them, with transactions still in flight
-// counted at their worst case, and a sealed run a busy shard never took giving its reservation
-// back before the retry. Not covered: a second worker process sharing one key, which the
-// deployment never runs.
+// counted at their worst case, runs started together held at their worst case before any is
+// signed, and a sealed run a busy shard never took giving its reservation back before the retry.
+// Not covered: a second worker process sharing one key, which the deployment never runs, and the
+// text cap and its NEAR reserve, which texts.test.ts drives through POST /texts.
 
 import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
@@ -11,7 +12,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { Actor } from '../src/act.ts';
-import { CapGuard } from '../src/caps.ts';
+import { CapGuard, type Caps } from '../src/caps.ts';
 import { Health } from '../src/health.ts';
 import { Judge, RUN_DEPOSIT, RUN_GAS } from '../src/judge.ts';
 import { worstCase, TGAS } from '../src/near.ts';
@@ -22,11 +23,11 @@ import { DAO, FakeChain, GUARD, NETWORK, REGISTRY, T0, bridge, clock, memoryLog,
 
 const NEAR = 10n ** 24n;
 
-function setup(store: Store, caps: { runsPerDaoDay: number; recordsPerDaoDay: number; nearPerDay: bigint }, now: () => number) {
+function setup(store: Store, caps: Omit<Caps, 'textRunsPerDaoDay'>, now: () => number) {
   const chain = new FakeChain();
   const { log, lines } = memoryLog();
   const health = new Health(log);
-  const guard = new CapGuard(store, caps, NETWORK);
+  const guard = new CapGuard(store, { textRunsPerDaoDay: 5, ...caps }, NETWORK);
   const submitter = new Submitter(store, chain, NETWORK, log, { pollMs: 1, sendTries: 2, sleep: noSleep, explorer: (h) => h });
   const key = testKey();
   const judge = new Judge({ store, submitter, caps: guard, bridge, health, log, acceptedKey: () => key.getPublicKey().toString(), now }, { network: NETWORK, guard: GUARD, outlayer: 'outlayer.testnet', project: 'o.testnet/p', verdictTtlMs: 600_000, windowBlocks: 220 });
@@ -68,7 +69,7 @@ test('the per-DAO record cap refuses the next registry write', async () => {
 
 test('the global NEAR cap counts worst cases in flight and refuses what would cross it', () => {
   const store = new Store(':memory:', () => T0);
-  const guard = new CapGuard(store, { runsPerDaoDay: 100, recordsPerDaoDay: 100, nearPerDay: NEAR / 10n }, NETWORK);
+  const guard = new CapGuard(store, { runsPerDaoDay: 100, textRunsPerDaoDay: 100, recordsPerDaoDay: 100, nearPerDay: NEAR / 10n }, NETWORK);
   const run = worstCase(300n * TGAS, 20n * 10n ** 21n);
   assert.equal(run, 5n * 10n ** 22n, 'a run reserves 0.05 NEAR: 300 Tgas at the minimum price plus 0.02 attached');
   store.addSpend({ idempotency_key: 'run:a', kind: 'run', network: NETWORK, dao: DAO, proposal_id: 1, tx_hash: 'h1', signed_b64: 'x', nonce: '1', reserved_yocto: run.toString() });
@@ -84,6 +85,19 @@ test('the global NEAR cap counts worst cases in flight and refuses what would cr
   store.addSpend({ idempotency_key: 'veto:c', kind: 'veto', network: NETWORK, dao: DAO, proposal_id: 3, tx_hash: 'h3', signed_b64: 'x', nonce: '3', reserved_yocto: run.toString() });
   store.markRejected('veto:c', 'InvalidNonce');
   assert.equal(store.spentOn('2026-11-02'), 4n * 10n ** 21n);
+});
+
+test('runs started at once against a NEAR cap with room for two get exactly two through, never all of them (C29)', async () => {
+  const run = worstCase(RUN_GAS, RUN_DEPOSIT);
+  const store = new Store(':memory:', () => T0);
+  const s = setup(store, { runsPerDaoDay: 10, recordsPerDaoDay: 10, nearPerDay: 2n * run + run / 2n }, () => T0);
+  // Each run waits on signing before its spend row is written, so all six are checked first.
+  const got = await Promise.all([1, 2, 3, 4, 5, 6].map((id) => s.judge.judge(DAO, id, 1)));
+  assert.deepEqual(got.map((j) => j.kind), ['verdict', 'verdict', 'capped', 'capped', 'capped', 'capped']);
+  assert.equal(s.chain.calls('request_execution').length, 2, 'the four refused runs were never signed');
+  assert.deepEqual(new Set(got.flatMap((j) => (j.kind === 'capped' ? [(JSON.parse(j.detail) as { cap: string }).cap] : []))), new Set(['near_per_day']));
+  // Once final, the two count at what they really cost, so a later run fits again.
+  assert.equal((await s.judge.judge(DAO, 7, 1)).kind, 'verdict');
 });
 
 test('a congested sealed run releases its first attempt before the retry, so the retry fits under the NEAR cap', async () => {

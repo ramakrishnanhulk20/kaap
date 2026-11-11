@@ -298,14 +298,23 @@ export class StatusServer {
     }
   }
 
+  /** The tokens `address` asked for within the hour before `now`, or null when it may ask for none more. */
+  #tokensLeft(address: string, now: number): number[] | null {
+    const recent = (this.#asked.get(address) ?? []).filter((t) => now - t < HOUR);
+    return recent.length < this.#s.tokensPerAddressHour ? recent : null;
+  }
+
+  #tooManyTokens(res: ServerResponse, address: string, now: number): void {
+    const oldest = (this.#asked.get(address) ?? []).find((t) => now - t < HOUR) ?? now;
+    this.#d.log.warn('rate_limited', { route: '/subscribe', address, per_hour: this.#s.tokensPerAddressHour });
+    this.#json(res, 429, { error: 'too_many_requests' }, { 'retry-after': String(Math.max(1, Math.ceil((HOUR - (now - oldest)) / 1_000))) });
+  }
+
+  /** POST /subscribe. A request is counted against its address once its body checks out, and the
+   *  count is taken again then, since several requests from one address can be read at once. */
   async #subscribe(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const address = clientAddress(req.socket.remoteAddress, req.headers['x-forwarded-for']);
-    const now = this.#d.now();
-    const recent = (this.#asked.get(address) ?? []).filter((t) => now - t < HOUR);
-    if (recent.length >= this.#s.tokensPerAddressHour) {
-      this.#d.log.warn('rate_limited', { route: '/subscribe', address, per_hour: this.#s.tokensPerAddressHour });
-      return this.#json(res, 429, { error: 'too_many_requests' }, { 'retry-after': String(Math.ceil((HOUR - (now - recent[0]!)) / 1_000)) });
-    }
+    if (!this.#tokensLeft(address, this.#d.now())) return this.#tooManyTokens(res, address, this.#d.now());
     const raw = await readBody(req, MAX_BODY);
     if (raw === null) return this.#json(res, 413, { error: 'body_too_large' });
     let parsed;
@@ -316,6 +325,9 @@ export class StatusServer {
     }
     if (!parsed?.success) return this.#json(res, 400, { error: 'bad_request', expected: '{"dao": "<NEAR account id>"}' });
     const dao = parsed.data.dao;
+    const now = this.#d.now();
+    const recent = this.#tokensLeft(address, now);
+    if (!recent) return this.#tooManyTokens(res, address, now);
     recent.push(now);
     this.#asked.set(address, recent);
     if (this.#asked.size > 10_000) this.#asked.delete(this.#asked.keys().next().value!);

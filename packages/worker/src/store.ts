@@ -263,6 +263,9 @@ export interface VerdictColumns {
 /** UTC calendar day, the unit every daily cap counts in. */
 export const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
+/** How the idempotency key of every run that carries a member's text starts, and nothing else's. */
+export const TEXT_RUN_PREFIX = 'text:';
+
 export class Store {
   readonly db: Database.Database;
   readonly #now: () => number;
@@ -390,8 +393,15 @@ export class Store {
     this.db.prepare('UPDATE runs SET state = ?, detail = ?, finished_ms = ? WHERE idempotency_key = ?').run(state, detail, this.#now(), key);
   }
 
+  /** Every run attempt of `dao` on `day`, texts included. */
   runsOn(network: string, dao: string, day: string): number {
     return (this.db.prepare('SELECT COUNT(*) AS n FROM runs WHERE network = ? AND dao = ? AND day = ?').get(network, dao, day) as { n: number }).n;
+  }
+
+  /** The run attempts of `dao` on `day` that carried a member's text. The key is compared byte for
+   *  byte, since LIKE would ignore case. */
+  textRunsOn(network: string, dao: string, day: string): number {
+    return (this.db.prepare('SELECT COUNT(*) AS n FROM runs WHERE network = ? AND dao = ? AND day = ? AND substr(idempotency_key, 1, ?) = ?').get(network, dao, day, TEXT_RUN_PREFIX.length, TEXT_RUN_PREFIX) as { n: number }).n;
   }
 
   spend(key: string): SpendRow | undefined {

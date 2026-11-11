@@ -91,6 +91,12 @@ test('texts one address may send an hour: 3 by default, 1 to 100', () => {
   for (const bad of ['0', '101', '2.5']) assert.ok(problems({ ...complete, KAAP_TEXTS_PER_ADDRESS_HOUR: bad }).some((p) => p.startsWith('KAAP_TEXTS_PER_ADDRESS_HOUR:')), bad);
 });
 
+test('text runs per DAO a day: 5 by default, 1 to 1,000', () => {
+  assert.equal(loadConfig(complete).KAAP_CAP_TEXT_RUNS_PER_DAO_DAY, 5);
+  assert.equal(loadConfig({ ...complete, KAAP_CAP_TEXT_RUNS_PER_DAO_DAY: '1000' }).KAAP_CAP_TEXT_RUNS_PER_DAO_DAY, 1_000);
+  for (const bad of ['0', '1001', '2.5']) assert.ok(problems({ ...complete, KAAP_CAP_TEXT_RUNS_PER_DAO_DAY: bad }).some((p) => p.startsWith('KAAP_CAP_TEXT_RUNS_PER_DAO_DAY:')), bad);
+});
+
 test('the two providers must be different hosts (C22)', () => {
   const got = problems({ ...complete, KAAP_RPC_SECONDARY: 'https://rpc.testnet.fastnear.com/other' });
   assert.deepEqual(got, ['KAAP_RPC_SECONDARY: the two RPC providers must be different hosts (C22)']);
