@@ -119,7 +119,7 @@ The vulnerability categories that typically hit this class, each tied to a Kaap 
 - **C12** Confidential texts and member-only explanations go only to models that meet the sealed-hardware condition in C11.
 
 ### Publisher and registry
-- **C13** Only the publisher key writes verdicts. A verdict is never overwritten; it can only be superseded by a newer one that points back to it. Entries over a size cap are refused. Public fields never hold a confidential text, an explanation of one, or a contact detail (a hash at most).
+- **C13** Only a verdict signed by the sealed program's key is recorded. Anyone may send it: the registry trusts the signature, not the caller. A verdict is never overwritten; it can only be superseded by a newer one that points back to it. Entries over a size cap are refused. Public fields never hold a confidential text, an explanation of one, or a contact detail (a hash at most).
 - **C14** The effects hash uses one published canonical encoder, shared by the service, the registry, the CLI and the browser, so anyone can recompute it from chain data.
 
 ### Guard
