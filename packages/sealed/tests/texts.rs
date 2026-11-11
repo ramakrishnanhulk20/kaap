@@ -15,8 +15,9 @@ use kaap_core::{AiStatus, FindingCode, Network, Severity, Verdict};
 use kaap_sealed::ai::{AiAnswer, AiOutcome, AiRisk, Check, Refusal, MAX_EXPLANATION_BYTES, MAX_MEMBER_EXPLANATION_BYTES, MODEL_ID};
 use kaap_sealed::attest::Unverified;
 use kaap_sealed::fixture::FixtureHttp;
-use kaap_sealed::job::{run, Connections};
+use kaap_sealed::job::{run, Connections, RunEnv};
 use kaap_sealed::net::{Http, HttpFail, Request, Response, DRPC_TESTNET, HOST_STAND_IN_TESTNET};
+use kaap_sealed::payment::PayEnv;
 use kaap_sealed::rpc::RpcProvider;
 use kaap_sealed::texts::*;
 use kaap_sealed::verdict::{member_explanation, public_key_text, seal_encrypted, sign_sealed};
@@ -114,6 +115,8 @@ struct Setup {
     clock: Option<String>,
     nonce: [u8; 32],
     quote: kaap_sealed::attest::tdx::QuoteCheck,
+    /// Kaap's worker unless a test pays.
+    pay: PayEnv,
 }
 
 impl Setup {
@@ -126,12 +129,13 @@ impl Setup {
             clock: None,
             nonce: [0; 32],
             quote: kaap_sealed::attest::tdx::check_quote,
+            pay: worker_env(Some("testnet")).pay,
         }
     }
 
     fn run(self, input: &str, key: Option<&str>) -> String {
-        let Setup { fx, ai, store, texts, clock, nonce, quote } = self;
-        run(input.as_bytes(), worker_env(Some("testnet")), key, move |network, deadline| {
+        let Setup { fx, ai, store, texts, clock, nonce, quote, pay } = self;
+        run(input.as_bytes(), RunEnv { network: Some("testnet"), pay }, key, move |network, deadline| {
             assert_eq!(network, Network::Testnet);
             let http = || FixtureHttp::from_json(&fx.to_string()).unwrap();
             Connections {
@@ -287,12 +291,95 @@ fn the_planted_text_is_judged_and_only_ciphertext_ever_shows() {
     assert!(!stored.contains(MARKER) && !stored.contains(explanation), "{stored}");
 }
 
+/// A stranger paying the price over HTTPS, as `tests/payment.rs` pays.
+fn paid() -> PayEnv {
+    PayEnv { execution_type: Some("HTTPS".into()), usd_payment: Some("10000".into()), attached_usd: Some("0".into()), sender: Some("stranger.testnet".into()) }
+}
+
+/// A run whose text hashes to no payload, with every part of a verified answer in place, so only
+/// the job's own check can keep the model from being asked. Returns the output, every request the
+/// AI step sent, and the evidence store.
+fn mismatched(pay: PayEnv) -> (String, Records, Store) {
+    let mut fx = sign_fixture(&[3; 32]);
+    let ns = NOW * 1_000_000_000;
+    for authority in [HTTPS, HOST] {
+        edit_answer(&mut fx, authority, "block", |b| b["result"]["header"]["timestamp"] = json!(ns));
+    }
+    let sent = Records::default();
+    let mut setup = Setup::new(fx);
+    setup.pay = pay;
+    setup.ai = Box::new(Tap { inner: World::new(), sent: sent.clone() });
+    setup.clock = Some(ns.to_string());
+    setup.nonce = nonce();
+    setup.quote = quote_binding_the_model;
+    let store = setup.store.clone();
+    (setup.run(&good_input(), Some(KEY)), sent, store)
+}
+
+const DOES_NOT_MATCH: &str = r#"{"reason":"text_does_not_match","status":"refused","v":1}"#;
+
+fn assert_refused_and_reached_nothing((out, sent, store): (String, Records, Store)) {
+    assert_eq!(out, DOES_NOT_MATCH);
+    assert_eq!(reason(&out), ("refused".to_string(), "text_does_not_match".to_string()), "no signature");
+    assert!(sent.borrow().is_empty(), "no AI request: {:?}", sent.borrow().iter().map(|(url, _)| url).collect::<Vec<_>>());
+    assert!(store.records.borrow().is_empty(), "no evidence write");
+}
+
 #[test]
-fn a_text_that_does_not_hash_to_the_payload_is_a_mismatch_not_a_reading() {
-    let out = Setup::new(sign_fixture(&[3; 32])).run(&good_input(), None);
-    let (verdict, json) = open(&out);
-    assert!(verdict.findings.contains(&FindingCode::HashMismatch), "{:?}", verdict.findings);
-    assert!(json["explanation"].as_str().unwrap().starts_with(SEALED_PREFIX));
+fn a_text_that_hashes_to_no_payload_is_refused_never_judged() {
+    assert_refused_and_reached_nothing(mismatched(worker_env(Some("testnet")).pay));
+}
+
+#[test]
+fn a_paid_text_that_hashes_to_no_payload_is_refused_the_same_way() {
+    assert_refused_and_reached_nothing(mismatched(paid()));
+}
+
+/// sha256 of whole outputs, taken before a text that matches no payload was refused. Kaap's worker
+/// and a paying stranger printed the same bytes, as neither run had an AI key. The three recorded
+/// fixtures match `tests/prices.rs`'s capture at 28f079d.
+const SIGN_WITH_NO_TEXT: &str = "0f21c5b5077aac8893c7142c748434162b163c17481be374604fa2ba40a8b602";
+const MATCHING_TEXT: &str = "1721963be040af852c88f8ede82a2cb0cb77bffd99dabea8bc3115f9f327283a";
+const FIXTURES_WITH_NO_TEXT: [(&str, &str); 3] = [
+    ("transfer-ft.json", "11b43ca0b4b379fd442cadf48c23594ff56c665f9b98dc4b5be4f57fe8bf78ac"),
+    ("function-call.json", "1053a585e7ffd5a3fd434a0a0f7c225f22bdd9a1af2a4abb8e0386f34651cf19"),
+    ("vote.json", "848a4a546cfc4f10482210d6caa7950b9886ed1a22be91d4e8b302112c77c6eb"),
+];
+
+fn sha(out: &str) -> String {
+    hex::encode(kaap_sealed::verdict::sha256(out.as_bytes()))
+}
+
+fn plain_input(dao: &str, id: u64) -> String {
+    format!(r#"{{"v":1,"network":"testnet","guard":"guard.kaap.testnet","dao":"{dao}","proposal_id":{id},"expires_in_ms":600000}}"#)
+}
+
+#[test]
+fn a_text_that_matches_its_payload_is_still_judged_and_signed_as_before() {
+    for pay in [worker_env(Some("testnet")).pay, paid()] {
+        let mut setup = Setup::new(planted_fixture());
+        setup.pay = pay.clone();
+        let out = setup.run(&good_input(), None);
+        let (verdict, _) = open(&out);
+        assert!(verdict.findings.contains(&FindingCode::HashTextDangerous), "{:?}", verdict.findings);
+        assert!(!verdict.findings.contains(&FindingCode::HashMismatch), "{:?}", verdict.findings);
+        assert_eq!(verdict.risk, Severity::Critical);
+        assert_eq!(sha(&out), MATCHING_TEXT, "{pay:?}");
+    }
+}
+
+#[test]
+fn a_run_with_no_text_prints_what_it_did_before() {
+    for pay in [worker_env(Some("testnet")).pay, paid()] {
+        let mut setup = Setup::new(planted_fixture());
+        setup.pay = pay.clone();
+        assert_eq!(sha(&setup.run(&plain_input(DAO, ID), None)), SIGN_WITH_NO_TEXT, "{pay:?}");
+    }
+    for (name, before) in FIXTURES_WITH_NO_TEXT {
+        let fx = fixture(name);
+        let raw = plain_input(fx["dao"].as_str().unwrap(), fx["proposal_id"].as_u64().unwrap());
+        assert_eq!(sha(&Setup::new(fx).run(&raw, None)), before, "{name}");
+    }
 }
 
 #[test]

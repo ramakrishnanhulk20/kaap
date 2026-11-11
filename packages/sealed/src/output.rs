@@ -17,10 +17,16 @@ struct Plain {
     reason: &'static str,
 }
 
-/// The input was not accepted. No outside call was made.
+/// The input was not accepted. No outside call was made, except for `TEXT_DOES_NOT_MATCH`.
 pub fn refused(reason: &'static str) -> String {
     plain("refused", reason)
 }
+
+/// Why a run is refused when its sealed text hashes to no payload of the proposal. Anyone can
+/// encrypt a text to the job's key, so such a text proves nothing about the proposal and is never
+/// judged. It is known only after the chain reads, so unlike the other refusals it comes after
+/// them, but before the model is asked: no signature, no AI request, no evidence.
+pub const TEXT_DOES_NOT_MATCH: &str = "text_does_not_match";
 
 #[derive(Serialize)]
 struct BelowPrice {

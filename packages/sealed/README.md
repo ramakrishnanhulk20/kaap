@@ -235,7 +235,9 @@ worker and its database only ever hold ciphertext.
 4. The job opens the text inside the enclave and hands it to kaap-core. A ciphertext that does not
    open, for any reason, gives `{"reason":"text_ciphertext could not be opened","status":"refused",
    "v":1}` before any outside call. Because the reply key is bound in, nobody who holds a member's
-   ciphertext, the worker included, can resubmit it with their own key to read the answer.
+   ciphertext, the worker included, can resubmit it with their own key to read the answer. A text
+   that does not match the proposal's hash is refused, never judged, because anyone can send one:
+   `{"reason":"text_does_not_match","status":"refused","v":1}`, with no signature.
 5. The verdict's `explanation` field is `sealed:<base64>`: the explanation encrypted to `reply_key`
    in the same layout, under `kaap-explanation-v1\n<network>\n<dao>\n<proposal id>\n<reply key
    hex>`. `explanation_hash` is the hash of that printed field, as for any verdict, so no hash of

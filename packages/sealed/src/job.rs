@@ -1,10 +1,10 @@
 //! One run of the job, in order: check the input, settle the payment, open a sealed text if there
-//! is one, read both providers at one block, on mainnet read prices and payment history, decode, ask
-//! the model, assemble, sign, print. Every way out that is not a signed verdict prints a fixed reason
-//! and no signature.
+//! is one, read both providers at one block, on mainnet read prices and payment history, decode,
+//! refuse a sealed text that matches no payload, ask the model, assemble, sign, print. Every way out
+//! that is not a signed verdict prints a fixed reason and no signature.
 
 use kaap_core::history::history_before;
-use kaap_core::{verdict_hash, AiStatus, Analysis, Network, Verdict};
+use kaap_core::{verdict_hash, AiStatus, Analysis, FindingCode, Network, Verdict};
 
 use crate::ai::{consult, AiOutcome, Audience, Check};
 use crate::attest::evidence::key_for;
@@ -13,7 +13,7 @@ use crate::attest::{trusted_now, Evidence, EvidenceSink, Trust, Unverified};
 use crate::history::read_proposals;
 use crate::input::{parse_request, JobInput, Request};
 use crate::net::{Deadline, Http};
-use crate::output::{below_price, failed, held, refused};
+use crate::output::{below_price, failed, held, refused, TEXT_DOES_NOT_MATCH};
 use crate::payment::{gate, worker_account, PayEnv, Payer};
 use crate::prices::read_prices;
 use crate::proposal::{judge, Past};
@@ -67,7 +67,7 @@ pub struct RunEnv<'a> {
 /// `env` is what OutLayer set for the run and `ai_key` the `NEAR_AI_API_KEY` secret. A judge run
 /// passes `gate` right after its input is parsed; asking for the text key is free. `connect` is
 /// called only for an input that passed every check and a payment that was accepted, with the
-/// network and the read deadline, so a refused run makes no outside call at all.
+/// network and the read deadline, so a refused input or payment makes no outside call at all.
 pub fn run(raw: &[u8], env: RunEnv<'_>, ai_key: Option<&str>, connect: impl FnOnce(Network, Deadline) -> Connections) -> String {
     let RunEnv { network, pay } = env;
     let request = match parse_request(raw, network) {
@@ -108,7 +108,8 @@ impl EvidenceSink for NoEvidence {
 }
 
 /// Judges an input for a payer `gate` has already settled. A `Payer::Paid` run is the same check
-/// and writes no public evidence.
+/// and writes no public evidence. A sealed text that hashes to no payload ends either run with
+/// `TEXT_DOES_NOT_MATCH` after the reads, before the model is asked.
 pub fn judge_run(input: JobInput, ai_key: Option<&str>, payer: Payer, connect: impl FnOnce(Network, Deadline) -> Connections) -> String {
     let read_deadline = Deadline::after_ms(READ_BUDGET_MS);
     let job_deadline = Deadline::after_ms(JOB_BUDGET_MS);
@@ -132,6 +133,9 @@ pub fn judge_run(input: JobInput, ai_key: Option<&str>, payer: Payer, connect: i
     let audience = if text.is_some() { Audience::Members } else { Audience::Public };
     let past = read_past(http.as_mut(), host.as_mut(), https.as_mut(), &input, &read, read_deadline);
     let (proposal, analysis) = judge(&input, text, &read, past);
+    if sealed_text_matches_no_payload(&input, &analysis) {
+        return refused(TEXT_DOES_NOT_MATCH);
+    }
     let facts = user_message(&proposal, &analysis);
     let trust = Trust { nonce, now: trusted_now(block_timestamp.as_deref(), read.block.timestamp_ns), quote };
     let (outcome, record) = consult(http.as_mut(), ai_key, facts.as_deref(), audience, job_deadline, &trust);
@@ -145,6 +149,14 @@ pub fn judge_run(input: JobInput, ai_key: Option<&str>, payer: Payer, connect: i
         Err(why) => return failed(why),
     };
     sign_sealed(&verdict, &explanation, &public_key, signer.as_mut()).unwrap_or_else(failed)
+}
+
+/// True when the run carried a sealed text and kaap-core found that it hashes to no `sign` payload
+/// (HASH_MISMATCH). Through this channel the sender is anyone with the job's public key, so a
+/// mismatch proves nothing about the proposal, and a critical finding the guard could veto on must
+/// never rest on it (C8). kaap-core keeps the finding for a text the treasury app itself shows.
+fn sealed_text_matches_no_payload(input: &JobInput, analysis: &Analysis) -> bool {
+    input.text.is_some() && analysis.findings.iter().any(|f| f.code == FindingCode::HashMismatch)
 }
 
 /// The prices and payment history this run judges with, both or neither. Testnet reads neither: its
