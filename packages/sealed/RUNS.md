@@ -432,6 +432,108 @@ One eval input, sent once by the worker with the same limits, gas and deposit as
 - The output is byte for byte what the local wasmtime build printed for the same input with no AI
   key, where the clock came from a recorded block instead of a live one.
 
+## The build with the reasoning budget
+
+Run on 11 Nov 2026 between 11:43 and 11:49 UTC, from WSL, on one machine, under Node 24.22.2. This
+section is on its own: the numbers above are from earlier builds.
+
+| Thing | Value |
+| --- | --- |
+| Version (wasm sha256) | `d8453d6e674d15b1c8acd7796e4219f9388e5704cd8996b7f6642370574e9083`, 1,679,633 bytes |
+| Hosted at | the secret gist, commit `104605f8`. The publish script built the wasm again, got the same sha256, and checked that the served bytes had it before it registered anything |
+| Registered by | [add_version CroTVvwf...](https://testnet.nearblocks.io/txns/CroTVvwfKGFTVYFZpr7WQmFzK87477LoVnn4exUXqviV) at 11:43:15 UTC, set active |
+| Still listed | `da2c2853...`, no longer active. `list_versions` names both builds |
+| Demo treasury | `kaap-dao-1111072928.testnet`, guard `kaap-guard-1111072803.testnet` |
+| Caller, all ten runs | `kaap-worker-1029053612.testnet`, no `attached_usd` |
+
+No run named `secrets_ref`, because the NEAR AI key is still locked to build `da2c2853...`. So no
+key reached any of them and `ai_status` is unavailable on purpose.
+
+### The worker runs free
+
+| Thing | Value |
+| --- | --- |
+| Transaction | [4oLxbrYK...](https://testnet.nearblocks.io/txns/4oLxbrYKXZZSs6rFZXBjJRf5qyYDKV1L2pbaPVwnK24J) at 11:43:26 UTC |
+| Proposal judged | `kaap-dao-1111072928.testnet` #3, guard `kaap-guard-1111072803.testnet`, read at block 277210848 |
+| Verdict | status ok, risk critical, floor critical, findings `[DESC_CONTRADICTS, UNKNOWN_VALUE]`, `ai_status` unavailable, passed `check-output.mjs` |
+| Verdict key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN`, the same key as on every earlier build |
+| Worker time | 4,796 ms, the first run of this build ("Freshly compiled", 1,467 ms compile) |
+| Instructions | 16,819,646 of the 10,000,000,000 allowed |
+| Request to result | 52 blocks, 29,723 ms on chain, 36,919 ms wall clock |
+| Paid | 0.00242 testnet NEAR: OutLayer's charge 0.00163, transaction gas 0.00079 |
+
+The wait was more than twice the last build's 22 blocks while the worker's own time was in line
+with it, so the extra time was spent outside the job.
+
+`outlayer-verify tx 4oLxbrYKXZZSs6rFZXBjJRf5qyYDKV1L2pbaPVwnK24J --network testnet --api
+https://testnet-api.outlayer.ai` said PROVEN, exit 0: Intel TCB UpToDate, the enclave measurement
+listed as approved by `worker.outlayer.testnet`, wasm `d8453d6e...`, caller the worker, attached
+payment 0. Its evidence bundle was saved for re-checking offline.
+
+### The sealed text channel
+
+`node scripts/text-roundtrip.mjs`: exit 0, `RESULT: pass`. The demo member filed proposal #6 on
+`kaap-dao-1111072928.testnet`
+([4L8mmtDx...](https://testnet.nearblocks.io/txns/4L8mmtDxBK8vPD7jRQAkKCt669EjBVPQhNNgdFdRoMcG)),
+a sign request whose hash points to a text made up for the run. It is left open.
+
+| Step | Transaction | Output bytes | Blocks | On chain ms | Worker ms | Paid, NEAR |
+| --- | --- | --- | --- | --- | --- | --- |
+| Ask for the key | [GQ2dQ8Vv...](https://testnet.nearblocks.io/txns/GQ2dQ8VvQvVVnuPMQpGdqwA4zHupWn3ZzJi8XfUsp3Ez) | 270 | 15 | 9,018 | 2,907 | 0.0020710 |
+| Judge with the sealed text | [p9kE5hJH...](https://testnet.nearblocks.io/txns/p9kE5hJH4DbJAnWiv7VAy9BzZDrJEHnGzptFsfXK6Sv) | 673 | 35 | 21,245 | 5,932 | 0.0024195 |
+| Attack: tampered ciphertext | [HAGHnz1E...](https://testnet.nearblocks.io/txns/HAGHnz1EGdbTJFbhJRv9McCUTCaNAL8RrhMsnjHDf9Je) | 73 | 28 | 16,802 | 3,621 | 0.0021839 |
+| Attack: a thief's reply key | [GfcqqUYo...](https://testnet.nearblocks.io/txns/GfcqqUYoA6SsJMqdYr8PUFR6TuFzA91zfsx2b6iNNdzG) | 73 | 27 | 16,421 | 3,675 | 0.0021889 |
+| Attack: a ciphertext for another key | [HD7H7Gr1...](https://testnet.nearblocks.io/txns/HD7H7Gr1x8wcm8iqABruvg2Wg391xFk5A9na92kHnWPB) | 73 | 18 | 10,476 | 4,206 | 0.0022419 |
+| Attack: a text that matches no payload | [7JiF9ejj...](https://testnet.nearblocks.io/txns/7JiF9ejjihyBKSBQa5Mq8DaM2VwwQ9k2PhdSDKQcT2cA) | 57 | 17 | 10,268 | 3,743 | 0.0021958 |
+
+Paid over the six runs: 0.0133010 testnet NEAR, of which OutLayer's charge is 0.0084084 and
+transaction gas 0.0048926. The filing, 0.0002838 NEAR of gas, is not counted.
+
+- The job printed text key `09bc21bb...2f6a`, the key `deployments/testnet.json` records from build
+  `bf7bb4f8...`: this build kept it, as it kept the verdict key.
+- The verdict came back risk critical, floor critical, findings `[HASH_TEXT_DANGEROUS]`, `ai_status`
+  unavailable, checked by `check-output.mjs`. Its sealed explanation opened with the member's key to
+  `AI unavailable (ai_key_missing).` and stayed shut for another key.
+- The three ciphertext attacks each got exactly
+  `{"reason":"text_ciphertext could not be opened","status":"refused","v":1}`, with no signature.
+- The text that matches no payload got exactly
+  `{"reason":"text_does_not_match","status":"refused","v":1}`, with no signature, after 30,980,202
+  instructions against about 7,635,000 for a ciphertext that does not open.
+
+### Eval runs with and without a reasoning budget
+
+Three inputs, each sent once by the worker with the same limits, gas and deposit as the runs above:
+an eval input with no budget, the same record with `"thinking_budget":256`, and a judge input of
+proposal #3 carrying `"thinking_budget":256`.
+
+| Input | Transaction, sent | Output bytes | Blocks | On chain ms | Worker ms | Instructions | Paid, NEAR |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Eval, no budget | [8shYtP7k...](https://testnet.nearblocks.io/txns/8shYtP7kt7TtHDWJzyTY3gr9tpazhTA7qroGkjSRQnxK) at 11:47:41 UTC | 332 | 19 | 11,467 | 4,243 | 104,264,726 | 0.00255 |
+| Eval, budget 256 | [5Z8rLGG5...](https://testnet.nearblocks.io/txns/5Z8rLGG5Ua5qBtUaUKtRbR3pdjT91qbn7bRzeoKSjwmi) at 11:47:56 UTC | 332 | 18 | 10,909 | 4,152 | 104,275,606 | 0.00254 |
+| Judge input with a budget | [6UnGKvJY...](https://testnet.nearblocks.io/txns/6UnGKvJYPAmasjBXrNkLPJVfkkpUbrDXmHeYvSKhfEeV) at 11:48:11 UTC | 98 | 27 | 16,356 | 2,930 | 124,351 | 0.00208 |
+
+- The eval input is answer-key record `mainnet:aaapeter.sputnik-dao.near:2`, the first in file order
+  that fits untouched, built by kaap-core exactly as `node scripts/ai-eval.mjs --dry-run` builds it:
+  23,334 bytes, sha256 `69669760...8f1c`. With the budget it is 23,356 bytes, sha256
+  `136d4ea2...bd4c`: the same input with `,"thinking_budget":256` added beside the network.
+- With no budget the output was
+  `{"ai_reason":"ai_key_missing","ai_risk":null,"ai_status":"unavailable","answer_cleaned":null,"completion_tokens":null,"explanation_sha256":null,"findings":["NEW_RECIPIENT"],"finish_reason":null,"floor":"medium","model_id":null,"prompt_tokens":null,"reasoning_tokens":null,"risk":"medium","status":"eval","thinking_budget":512,"v":1}`,
+  the job's own budget of 512. With the budget it was the same line with `"thinking_budget":256`.
+  Neither has a `signature`, `verdict` or `public_key` field. `answer_cleaned` is null because there
+  was no answer to clean.
+- The judge input with a budget got exactly
+  `{"reason":"input is not {v,network,guard,dao,proposal_id,expires_in_ms}","status":"refused","v":1}`,
+  with no signature, after 124,351 instructions against 16,819,646 for the judge run above.
+- `scripts/ai-eval.mjs`'s own output reader, cut from the script's text at run time, kept both eval
+  lines as scores and read the third as the fixed refusal.
+- All three outputs are byte for byte what the local wasmtime build printed for the same inputs with
+  no AI key, where the clock came from a recorded block instead of a live one.
+- Each eval run paid OutLayer 0.00142 and about 0.00112 of gas, 0.00033 more gas than a judge run,
+  because the input is 23 KB.
+
+No key reached these runs, so `answer_cleaned` has only been null live, and a budget changing what
+the model writes has not run live on this build.
+
 ## What these runs do not cover
 
 - One proposal, one location, one 8-minute window, runs one after another. No load, nothing

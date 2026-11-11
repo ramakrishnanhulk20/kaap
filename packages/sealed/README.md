@@ -10,9 +10,9 @@ Kaap's guard contract votes only on verdicts signed by that key.
 | --- | --- |
 | OutLayer project | `kaap-worker-1029053612.testnet/kaap-sealed` on `outlayer.testnet`, uuid `p00000000000000a9` |
 | Worker account (the only free caller) | `kaap-worker-1029053612.testnet` |
-| Build (wasm sha256) | `da2c285350551e2367594121856e29cdfe6bc134f56f7c3ce4372584c7a4c666`, 1,675,100 bytes, wasm32-wasip2, active since 11 Nov 2026. The two builds before it, `bf7bb4f8...4f58` and `e1192b28...0527`, are still listed |
-| Hosted at | secret gist `5ea40ed7c5610efcd50d69af2ae8abe2`, commit `320a36d3`: [raw URL pinned to the commit](https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/320a36d3ae941b60731a83a77ffa2b1b474d90c2/kaap-sealed-da2c2853.wasm) |
-| Registered by | [add_version](https://testnet.nearblocks.io/txns/Cvo1WSGy3T4RPProXexUee5budUS5rvcB2d51A2SFKhg), in the project from [create_project](https://testnet.nearblocks.io/txns/FHy3utGUWWwPtPMGz8ALXh9NLR5G4Mo2h1QTsEDGtuMu) |
+| Build (wasm sha256) | `d8453d6e674d15b1c8acd7796e4219f9388e5704cd8996b7f6642370574e9083`, 1,679,633 bytes, wasm32-wasip2, active since 11 Nov 2026. The build before it, `da2c2853...c666`, is still listed |
+| Hosted at | secret gist `5ea40ed7c5610efcd50d69af2ae8abe2`, commit `104605f8`: [raw URL pinned to the commit](https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/104605f82cf3014bb31304dc66002cc0afbfa3b5/kaap-sealed-d8453d6e.wasm) |
+| Registered by | [add_version](https://testnet.nearblocks.io/txns/CroTVvwfKGFTVYFZpr7WQmFzK87477LoVnn4exUXqviV), in the project from [create_project](https://testnet.nearblocks.io/txns/FHy3utGUWWwPtPMGz8ALXh9NLR5G4Mo2h1QTsEDGtuMu) |
 | Verdict public key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN` |
 
 Testnet FastFS (`test.fastfs.io`) answered HTTP 502 on the publishing day, so the build is served
@@ -328,7 +328,7 @@ model's usual reasoning budget of 512 tokens for that one run (`max_tokens` stay
 400). Any other value, `null`, a fraction or a string included, is refused (`thinking_budget must
 be a whole number from 64 to 1024`). A judge input has no such field: one that carries it is
 refused as any unknown field is. This field and the two output keys `answer_cleaned` and
-`thinking_budget` are newer than build `da2c2853`, which refuses the field as unknown.
+`thinking_budget` are live since build `d8453d6e` (11 Nov 2026).
 
 Every fact judged comes from the input. The one chain read is the final block, from both providers
 by the judge run's rule, for the clock; it is not printed. kaap-core analyses the input, and the
