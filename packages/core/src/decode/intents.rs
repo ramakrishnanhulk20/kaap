@@ -26,6 +26,7 @@ use super::json::{self, Parsed};
 use super::value::{account, amount, object, optional_text, text, token_call, u128_amount};
 use super::value::{Decoded, Move, Refusal, INTENTS, MAX_ITEMS, NATIVE};
 use crate::hash::intents::storage_excess;
+use crate::hash::quote::omni_chain;
 use crate::types::{Effect, KeyOp, MsgKind};
 
 /// Defuse's PoA bridge tokens are `<chain>.omft.near` or `<chain>-<address>.omft.near`, and
@@ -297,17 +298,24 @@ fn destination(
     }
 }
 
+/// HOT Omni, a PoA token (`.omft.near`) or an Omni Bridge token (`.omdep.near`, which replaced
+/// HOT's ids for BNB Chain, Polygon and Avalanche on 9 Nov 2026).
 fn is_bridge(contract: &str) -> bool {
-    contract == HOT_OMNI || contract.strip_suffix(OMFT_SUFFIX).is_some_and(|stem| !stem.is_empty())
+    contract == HOT_OMNI
+        || contract.strip_suffix(OMFT_SUFFIX).is_some_and(|stem| !stem.is_empty())
+        || omni_chain(contract).is_some()
 }
 
-/// The census `blockchain` name of a bridge token, or `unknown`. Never `near`.
+/// The census `blockchain` name of a bridge token, or `unknown`. Never `near`. An Omni Bridge
+/// token is named by `hash::quote::omni_chain`, the reader a quote's payout chain uses.
 fn bridge_chain(contract: &str, token_id: Option<&str>) -> String {
     let named = if contract == HOT_OMNI {
         token_id
             .and_then(|id| id.split_once('_'))
             .and_then(|(chain_id, _)| HOT_CHAINS.iter().find(|(id, _)| *id == chain_id))
             .map(|(_, chain)| *chain)
+    } else if let Some(chain) = omni_chain(contract) {
+        Some(chain)
     } else {
         contract
             .strip_suffix(OMFT_SUFFIX)

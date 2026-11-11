@@ -208,9 +208,41 @@ fn ed25519_bytes<const N: usize>(text: &str) -> Option<[u8; N]> {
     bs58::decode(encoded).into_vec().ok()?.try_into().ok()
 }
 
+/// Omni Bridge tokens are `<stem>.omdep.near` or `<stem>-<address>.omdep.near` (NEAR Intents
+/// changelog, 9 Nov 2026: BNB Chain, Polygon and Avalanche tokens moved here from HOT ids).
+const OMDEP_SUFFIX: &str = ".omdep.near";
+
+/// Omni's stem for a chain is not always the census name (`bnb` is `bsc`), so each stem maps to
+/// the `blockchain` name 1Click's token list gives its tokens, which for `avax`, `bnb` and `pol`
+/// is also the name `decode::intents`' HOT table gives the same chain. Stems checked against the
+/// changelog's table and 1Click's token list on 11 Nov 2026.
+///
+/// `strk` is left out on purpose: 1Click lists strkBTC (`strk-0x....omdep.near`) as blockchain
+/// `near`, but how it leaves NEAR is unproven, so a payout of it reads `unknown` and fails closed
+/// with CROSS_CHAIN_OUT.
+const OMNI_CHAINS: [(&str, &str); 7] = [
+    ("abs", "abs"),
+    ("avax", "avax"),
+    ("base", "base"),
+    ("bnb", "bsc"),
+    ("fogo", "fogo"),
+    ("pol", "pol"),
+    ("sol", "sol"),
+];
+
+/// The census `blockchain` name of the Omni Bridge token `contract`, `unknown` for a stem not in
+/// `OMNI_CHAINS`, and `None` when `contract` is not an Omni Bridge token. Never `near`: anything
+/// under `omdep.near` is a bridged token. `decode::intents` names a withdrawal's chain with this
+/// same function, so a quote and a withdrawal never read one token two ways.
+pub(crate) fn omni_chain(contract: &str) -> Option<&'static str> {
+    let stem = contract.strip_suffix(OMDEP_SUFFIX)?.split('-').next().unwrap_or_default();
+    Some(OMNI_CHAINS.iter().find(|(omni, _)| *omni == stem).map_or("unknown", |(_, census)| *census))
+}
+
 /// The chain a quote pays out on, as the census `blockchain` name: `near` when the recipient is
 /// an account inside NEAR Intents or the destination asset is a NEAR token, the bridge's chain for
-/// a PoA bridge token (`nep141:eth-0x....omft.near` is `eth`) or a 1Click asset id
+/// a PoA bridge token (`nep141:eth-0x....omft.near` is `eth`), an Omni Bridge token
+/// (`nep141:bnb.omdep.near` is `bsc`, `omni_chain`) or a 1Click asset id
 /// (`1cs_v1:btc:native:coin` is `btc`), and `unknown` for anything else, which is never `near`, so
 /// CROSS_CHAIN_OUT still fires.
 pub fn payout_chain(quote: &Quote) -> String {
@@ -220,6 +252,8 @@ pub fn payout_chain(quote: &Quote) -> String {
     let asset = quote.destination_asset.as_str();
     let named = if let Some(rest) = asset.strip_prefix("1cs_v1:") {
         rest.split(':').next()
+    } else if let Some(chain) = asset.strip_prefix("nep141:").and_then(omni_chain) {
+        Some(chain)
     } else if let Some(contract) = asset.strip_prefix("nep141:") {
         match contract.strip_suffix(".omft.near") {
             Some(stem) => stem.split('-').next(),
