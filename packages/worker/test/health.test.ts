@@ -2,7 +2,8 @@
 // accepted key and providers that disagree each raise "guard offline" or "guard degraded" for the
 // DAO they concern, reach its members, and show on GET /status, which holds no secret; behind the
 // HTTPS proxy on the same machine, POST /subscribe counts each client by the address the proxy
-// saw, and a burst from one address gets no more tokens than the limit. Not covered: a worker
+// saw, an IPv6 one by its /64 network, and a burst from one address gets no more tokens than the
+// limit. Not covered: a worker
 // process that is down altogether, which only an outside check of /status sees, and the proxy's
 // own behaviour, which HOSTING.md checks on the VM.
 
@@ -222,6 +223,32 @@ test('behind the HTTPS proxy on the same machine, POST /subscribe counts each cl
   assert.equal(await ask('198.51.100.9'), 200, 'another client behind the same proxy is not blocked by the first');
   assert.equal(await ask('198.51.100.1, 203.0.113.7'), 429, 'an address a client writes before the proxy entry changes nothing');
   assert.equal(events(s.lines(), 'rate_limited').at(-1)?.address, '203.0.113.7');
+  await http.stop();
+  await s.worker.stop();
+});
+
+test('an IPv6 client is counted by its /64 network, and every written form of an IPv4 address as that address', () => {
+  assert.equal(clientAddress('2001:db8:1:2:3:4:5:6', undefined), '2001:db8:1:2::/64');
+  assert.equal(clientAddress('2001:db8:1:2::9', undefined), '2001:db8:1:2::/64', 'one /64, one count');
+  assert.equal(clientAddress('2001:0DB8:0001:0002::1', undefined), '2001:db8:1:2::/64', 'lower case, no leading zeros');
+  assert.equal(clientAddress('2001:db8:1:3::1', undefined), '2001:db8:1:3::/64', 'the next /64 is another client');
+  for (const mapped of ['::ffff:1.2.3.4', '::ffff:102:304', '0:0:0:0:0:ffff:102:304']) assert.equal(clientAddress(mapped, undefined), '1.2.3.4', mapped);
+  assert.equal(clientAddress('fe80::1%eth0', undefined), 'fe80:0:0:0::/64', 'read without its zone');
+  assert.equal(clientAddress('fe80::1%eth0', undefined), clientAddress('fe80::1', undefined));
+  assert.equal(clientAddress('not-an-address', undefined), 'unknown');
+  assert.equal(clientAddress('1.2.3.4%eth0', undefined), 'unknown', 'a zone makes no IPv4 address');
+  assert.equal(clientAddress('::1', '10.0.0.1, 2001:db8:1:2:aaaa::1'), '2001:db8:1:2::/64', 'the proxy entry is counted by its /64');
+  assert.equal(clientAddress('::1', undefined), '0:0:0:0::/64', 'no header counts against the proxy itself');
+});
+
+test('requests from two addresses of one IPv6 /64 share one POST /subscribe limit', async () => {
+  const s = await started();
+  const http = new StatusServer({ health: s.health, subs: s.subs, log: s.log, now: s.c.now, watching: () => s.worker.watching(), texts: s.worker }, { host: '127.0.0.1', port: 0, network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 2, textsPerAddressHour: 3, textKey: null });
+  const base = `http://127.0.0.1:${await http.start()}`;
+  const ask = async (forwarded: string) => (await fetch(`${base}/subscribe`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': forwarded }, body: JSON.stringify({ dao: DAO }) })).status;
+  assert.deepEqual([await ask('2001:db8:1:2::1'), await ask('2001:db8:1:2:ffff::2'), await ask('2001:db8:1:2::3')], [200, 200, 429]);
+  assert.equal(await ask('2001:db8:1:3::1'), 200, 'another /64 behind the same proxy is not blocked by the first');
+  assert.equal(events(s.lines(), 'rate_limited').at(-1)?.address, '2001:db8:1:2::/64');
   await http.stop();
   await s.worker.stop();
 });

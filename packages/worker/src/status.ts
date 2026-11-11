@@ -133,27 +133,62 @@ const LOOPBACK = new BlockList();
 LOOPBACK.addSubnet('127.0.0.0', 8, 'ipv4');
 LOOPBACK.addAddress('::1', 'ipv6');
 
-/** One written form per address, so one client is one count: an IPv4 address written inside
- *  IPv6 is read as plain IPv4. Null for anything that is not an IP address. */
-function oneForm(text: string): string | null {
-  const a = text.trim().toLowerCase();
-  const inside = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(a)?.[1];
-  if (inside !== undefined && isIP(inside) === 4) return inside;
-  return isIP(a) === 0 ? null : a;
+/** The eight 16-bit groups of an IPv6 address `isIP` accepted, its zone already dropped. An IPv4
+ *  tail written with dots is the last two groups. */
+function ipv6Groups(address: string): number[] {
+  let text = address;
+  const tail = /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(text);
+  if (tail) {
+    const [p, q, r, s] = tail.slice(1).map(Number) as [number, number, number, number];
+    text = `${text.slice(0, tail.index)}${((p << 8) | q).toString(16)}:${((r << 8) | s).toString(16)}`;
+  }
+  const [head = '', rest] = text.split('::');
+  const front = head === '' ? [] : head.split(':');
+  const back = rest === undefined || rest === '' ? [] : rest.split(':');
+  const gap = rest === undefined ? [] : Array<string>(8 - front.length - back.length).fill('0');
+  return [...front, ...gap, ...back].map((g) => parseInt(g, 16));
 }
 
-/** The address a request is counted against. A request from loopback came through the HTTPS
- *  proxy on the same machine, which adds the address its client connected from as the last entry
- *  of X-Forwarded-For: that one entry is trusted, and anything a client wrote before it is not.
- *  Any other peer is counted as it connects, its header ignored. A missing or unreadable entry
- *  counts against the proxy itself, which only ever makes the limit stricter. Not covered: a
- *  client that holds many addresses, such as an IPv6 range, which gets one count per address. */
+/** One written form per address, so one client is one count: an IPv6 address as its eight groups
+ *  in lower-case hex without leading zeros, its zone (such as `%eth0`) dropped, and an IPv4
+ *  address written inside IPv6, with dots or in hex, as plain IPv4. Node's `isIP` decides what is
+ *  an address, the zone included, so a zone on IPv4 is no address. Null for anything that is not. */
+function oneForm(text: string): string | null {
+  const a = text.trim().toLowerCase();
+  const family = isIP(a);
+  if (family === 4) return a;
+  if (family !== 6) return null;
+  const zone = a.indexOf('%');
+  const g = ipv6Groups(zone === -1 ? a : a.slice(0, zone));
+  // The IPv4-mapped form (RFC 4291): 80 zero bits, 16 one bits, then the IPv4 address.
+  if (g.slice(0, 5).every((x) => x === 0) && g[5] === 0xffff) return [g[6]! >> 8, g[6]! & 0xff, g[7]! >> 8, g[7]! & 0xff].join('.');
+  return g.map((x) => x.toString(16)).join(':');
+}
+
+/** What one client is counted as: an IPv4 address is itself, an IPv6 address its /64 network,
+ *  written as its first four groups and `::/64`. A /64 is the block one home or server network is
+ *  handed, so every address inside it is one client. */
+function countKey(address: string): string {
+  const a = oneForm(address);
+  if (a === null) return 'unknown';
+  if (isIP(a) === 4) return a;
+  return `${a.split(':').slice(0, 4).join(':')}::/64`;
+}
+
+/** What a request is counted against: `countKey` of one address. A request from loopback came
+ *  through the HTTPS proxy on the same machine, which adds the address its client connected from
+ *  as the last entry of X-Forwarded-For: that one entry is trusted, and anything a client wrote
+ *  before it is not. Any other peer is counted as it connects, its header ignored. A missing or
+ *  unreadable entry counts against the proxy itself, which only ever makes the limit stricter. An
+ *  IPv6 /64 network is one client. Not covered: a client that holds many /64 networks or many
+ *  IPv4 addresses gets a count for each; the per-DAO daily caps still bound what its texts can
+ *  spend, and a token spends nothing on chain. */
 export function clientAddress(peer: string | undefined, forwardedFor: string | string[] | undefined): string {
   const direct = oneForm(peer ?? '');
   if (direct === null) return 'unknown';
-  if (!LOOPBACK.check(direct, isIP(direct) === 4 ? 'ipv4' : 'ipv6')) return direct;
+  if (!LOOPBACK.check(direct, isIP(direct) === 4 ? 'ipv4' : 'ipv6')) return countKey(direct);
   const header = Array.isArray(forwardedFor) ? forwardedFor.join(',') : (forwardedFor ?? '');
-  return oneForm(header.split(',').at(-1) ?? '') ?? direct;
+  return countKey(oneForm(header.split(',').at(-1) ?? '') ?? direct);
 }
 
 const shown = (r: Raised) => ({ signal: r.signal, level: levelOf(r.signal), since: new Date(r.since).toISOString(), says: SAYS[r.signal] });

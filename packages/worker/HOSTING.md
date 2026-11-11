@@ -110,7 +110,7 @@ certificate:
 
 ### The rate limit behind the proxy
 
-`POST /subscribe` gives each address 10 tokens an hour (`TOKENS_PER_ADDRESS_HOUR` in
+`POST /subscribe` gives each client 10 tokens an hour (`TOKENS_PER_ADDRESS_HOUR` in
 `src/main.ts`), counted on an address the caller cannot choose. Behind the proxy, every request
 reaches the worker from 127.0.0.1. Counted by that address, everyone in the world would share one
 count of 10, and one person could use it up for all the others.
@@ -120,9 +120,11 @@ request whose connecting address is loopback (127.0.0.0/8 or ::1) came through t
 same machine, so the worker counts the last address in its `X-Forwarded-For` header, the one the
 proxy added for the client it was talking to. Anything a client wrote earlier in that header is
 ignored. A request from any other address is counted by that address, and its header is ignored.
-A missing or unreadable header counts against the proxy's own address, which only makes the limit
-stricter. Code: `clientAddress` in `src/status.ts`. Test: "behind the HTTPS proxy on the same
-machine, POST /subscribe counts each client by the address the proxy saw" in
+An IPv6 address is counted by its /64 network, the block one home or server network is handed, so
+every address inside one /64 shares one count; an IPv4 address written inside IPv6 counts as the
+plain IPv4 address. A missing or unreadable header counts against the proxy's own address, which
+only makes the limit stricter. Code: `clientAddress` in `src/status.ts`. Test: "behind the HTTPS
+proxy on the same machine, POST /subscribe counts each client by the address the proxy saw" in
 `test/health.test.ts`.
 
 Requests from one address that arrive together are counted one by one: the count is taken again
@@ -149,8 +151,8 @@ Ten `200` and then one `429` shows that a made-up header buys nothing: all eleve
 against the laptop's real address. Each `200` creates an unused subscription token that expires
 after 15 minutes.
 
-Not covered: someone with many addresses, such as an IPv6 range, gets 10 tokens an hour per
-address. A token only lets a chat subscribe to alerts about facts that are public on chain, so
+Not covered: someone who holds many /64 networks or many IPv4 addresses gets 10 tokens an hour for
+each. A token only lets a chat subscribe to alerts about facts that are public on chain, so
 this limit protects the worker from waste, not a secret.
 
 ## Member texts: GET /text-key and POST /texts
