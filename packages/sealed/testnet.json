@@ -11,7 +11,7 @@
       "registered_by": "create_project",
       "tx": "FHy3utGUWWwPtPMGz8ALXh9NLR5G4Mo2h1QTsEDGtuMu",
       "at": "2026-10-29T05:36:22Z",
-      "retired": false
+      "retired": true
     },
     {
       "sha256": "73409203d24cbda98e98511bb97d1a2065b72702140138f85a198bff347cae87",
@@ -20,7 +20,7 @@
       "registered_by": "add_version",
       "tx": "4eofkn7BjiAdsp55KRnSQqdAcS6nFDgWgxzTWAMqDvDJ",
       "at": "2026-11-03T05:06:55Z",
-      "retired": false
+      "retired": true
     },
     {
       "sha256": "e1192b2806dd088541a87794808949fbe35ee5b3422405f07c224f4c02130527",

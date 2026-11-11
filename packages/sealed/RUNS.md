@@ -202,6 +202,88 @@ transaction gas 0.0039836. The filing is not counted.
 - Each attack got `{"reason":"text_ciphertext could not be opened","status":"refused","v":1}`, with
   no signature.
 
+## Paid calls from a stranger
+
+Run on 11 Nov 2026 from 05:23 UTC, from WSL, with `node scripts/WO-05e-paid-call.mjs`, against the
+active build `e1192b28...`. This section is on its own. Testnet money only: testnet NEAR from the
+faucet and `usdc.fakes.testnet`, whose own `mint` any testnet account may call once it has paid
+the token's storage deposit.
+
+| Thing | Value |
+| --- | --- |
+| Payer | `kaap-payer-1794374313.testnet`, a fresh faucet account, given 200,000 micro-USD by [mint 5En3HnaM...](https://testnet.nearblocks.io/txns/5En3HnaMZxiydZcL55F1KJFSvjC4J95rFZHCVgBoUfj7) |
+| Payment key | nonce 1, made by [store_secrets 2j9QXaGL...](https://testnet.nearblocks.io/txns/2j9QXaGLqCfJS5aHzDhtGRXfx8pS6TDDSXn2AnhtqBfW) and topped up with 100,000 micro-USD by [ft_transfer_call CZocCBHb...](https://testnet.nearblocks.io/txns/CZocCBHbezz3u2QJvQfHePj44e1DciJzw7AbNDmmyJgB); limited to this project and 50,000 micro-USD a call |
+| Input, every call | `{"v":1,"network":"testnet","guard":"kaap-guard-1029061211.testnet","dao":"kaap-dao-1029064008.testnet","proposal_id":9,"expires_in_ms":600000}`, the worker's six fields |
+| Price | 10,000 micro-USD, one cent |
+
+| # | Door | Paid, micro-USD | Call or transaction | Answer | Instructions | Worker ms | Wall ms | Compute cost |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | HTTPS | 10,000 | call `a97c82db-ecce-4ab1-adb5-8d4ff7de0c5a` | verdict | 16,804,680 | 2,817 | 4,120 | 1,018 micro-USD |
+| 2 | HTTPS | 5,000 | call `ab14d0b3-a491-4e8d-873e-42ad744c12a9` | `payment_below_price` | 96,545 | 2,683 | 4,333 | 1,002 micro-USD |
+| 3 | HTTPS | 0 | call `f79f5196-e698-4e4f-8044-bbf637e96afb` | `payment_below_price` | 97,783 | 2,703 | 3,843 | 1,002 micro-USD |
+| 4 | chain | 10,000 `attached_usd` | [7UatZZiY...](https://testnet.nearblocks.io/txns/7UatZZiYH43zZzrcx4ghiydYVBJZHovf1dkrbTv2NAC) | verdict | 16,801,317 | 3,095 | 11,991 | 0.0013095 NEAR, plus 0.0008622 gas |
+| 5 | chain | none | [9s9UMFue...](https://testnet.nearblocks.io/txns/9s9UMFuen5shte55JSMpuJjxQJ8L9ivSzBLjCSsoZifp) | `payment_below_price` | 96,431 | 3,378 | 17,047 | 0.0013378 NEAR, plus 0.0007911 gas |
+
+- Both verdicts: risk critical, floor critical, findings `[DESC_CONTRADICTS, UNKNOWN_VALUE]`,
+  `ai_status` unavailable, the same fields as the worker's run of 6 Nov. Each passed
+  `check-output.mjs`. Both are signed by `ed25519:Hay4A8hpt81f4YbjHYFWR2LMwwKUYGVratcHoDE3PHaE`, the
+  payer's own key and the same on both doors, not Kaap's `ed25519:4gaYx4kP...uonuN`, so the guard
+  would refuse either one.
+- Each refusal was `{"detail":"A check costs 10000 millionths of a dollar. This run carried <n>. An
+  underpayment is not refunded.","reason":"payment_below_price","status":"refused","v":1}`, with no
+  signature. A refused run reads nothing: about 97,000 instructions against 16.8 million for a check.
+- Over HTTPS, `output` came back as a parsed JSON object, not a string.
+- The key held 100,000 micro-USD before and 81,978 after: 15,000 attached and 3,022 compute.
+- Call 4 was paid from 10,000 micro-USD the payer first deposited with OutLayer
+  ([ft_transfer_call fCEzuZgp...](https://testnet.nearblocks.io/txns/fCEzuZgpwuCSbosTszKFf7gPo6Pgw4KbxioLEptvMQ9),
+  `deposit_balance`). Its balance there was 0 after call 4.
+
+### Kaap's earnings
+
+| Reading | Before | After | Change |
+| --- | --- | --- | --- |
+| `get_developer_earnings("kaap-worker-1029053612.testnet")` on `outlayer.testnet`: the chain door, withdrawable with `withdraw_developer_earnings` | 0 | 10000 after call 4, still 10000 after call 5 | +10,000 |
+| `GET https://testnet-api.outlayer.ai/public/project-earnings/kaap-worker-1029053612.testnet`: the HTTPS door, in OutLayer's database | `"balance":"0","total_earned":"0"` | `"balance":"15000","total_earned":"15000"` | +15,000 |
+
+The `history` view lists three entries: `source` https, `amount` 10000, call `a97c82db...`; https,
+5000, call `ab14d0b3...`; and blockchain, 10000, transaction `7UatZZiY...`, request 19911. So the
+5,000 underpayment was kept, as OutLayer's docs say, and the call that carried nothing added
+nothing. The public `balance` counts the HTTPS entries only. OutLayer has no withdrawal for HTTPS
+earnings yet, so that 15,000 cannot be taken out today.
+
+### OutLayer's own verifier
+
+`outlayer-verify tx 7UatZZiYH43zZzrcx4ghiydYVBJZHovf1dkrbTv2NAC --network testnet --api
+https://testnet-api.outlayer.ai` and `outlayer-verify call a97c82db-ecce-4ab1-adb5-8d4ff7de0c5a
+--network testnet --api https://testnet-api.outlayer.ai --input <request> --output <response>` both
+said PROVEN, exit 0: Intel TCB UpToDate, the enclave measurement listed as approved by
+`worker.outlayer.testnet`, wasm `e1192b28...`, caller `kaap-payer-1794374313.testnet`, and
+`attached payment 10000` inside what the quote commits to. The HTTPS proof needs the request and
+response, which OutLayer keeps only as hashes; the script saves both. Evidence bundles of both
+proofs were saved for re-checking offline.
+
+### The builds without the price gate, removed
+
+| Build | Removed by |
+| --- | --- |
+| `0099d7b7...ff49` | [remove_version 7ZCfunbc...](https://testnet.nearblocks.io/txns/7ZCfunbc3RheoREXJuiER7uxj7hokPuqm5JNMSZBeQpD) |
+| `73409203...ae87` | [remove_version 8DPDYdqR...](https://testnet.nearblocks.io/txns/8DPDYdqRjjHsmG8Aezo9M7mrkTVyDYYNhaMVTwM1ysxu) |
+
+Both signed by the project owner with `bash scripts/WO-05e-retire-versions.sh <sha256>`. Afterwards
+`list_versions` names `e1192b28...` alone. Both stay in `testnet.json` with `retired: true`.
+
+- An HTTPS call naming either removed build in `version_key` answered HTTP 200 with
+  `{"status":"failed","error":"Failed to resolve project: Failed to parse version view","compute_cost":"0","instructions":0,"time_ms":0}`:
+  nothing ran and nothing was charged. The same call naming `e1192b28...` ran and got
+  `payment_below_price`.
+- The worker's free run afterwards,
+  [2tLDTczE...](https://testnet.nearblocks.io/txns/2tLDTczEgz5vNk46ULurV532eAJVeHUs9dktriug5Zxn),
+  gave the same proposal 9 verdict under Kaap's key: 16,793,507 instructions, 4,330 ms in the
+  worker, 0.00223 testnet NEAR.
+- `kaap verify kaap-dao-1029064008.testnet 2` and `9` passed all 20 checks after the removals,
+  though their runs, and the run that printed Kaap's key, ran on the removed builds. Past runs live in
+  OutLayer's attestation records, not in the version list.
+
 ## What these runs do not cover
 
 - One proposal, one location, one 8-minute window, runs one after another. No load, nothing
@@ -224,8 +306,9 @@ transaction gas 0.0039836. The filing is not counted.
   real pages until a mainnet project exists.
 - The combined build asking the model. Its runs had no key, so the AI step, the checks around it
   and a sealed text reaching the model have not run live on this build.
-- The combined build turning a caller away. Only the worker's free path ran live.
-  `payment_below_price`, a paid run through either door and a paying caller's own keys are proven
-  by the tests and the local build only.
+- Paid runs: one payer, one proposal, five calls one after another. That a paid run writes no
+  public evidence is proven by the tests only. No withdrawal was tried on either door.
+- Why OutLayer refuses a removed build: its answer is the error text above, not the
+  `invalid_version_key` refusal its API spec names, and the code behind it is closed.
 - The leak check on the live round trip reads the job's output. OutLayer's logs are not open to the
   script, so the logged half of that check ran only on the local build.
