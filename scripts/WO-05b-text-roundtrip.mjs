@@ -3,13 +3,15 @@
 // the verdict key signed it, encrypts a planted text here with Node's own crypto, has the job judge
 // a proposal with the ciphertext, and opens the explanation it sends back. Then it attacks the
 // channel: a tampered ciphertext, a ciphertext sent with a thief's reply key, a ciphertext for a key
-// that is not the job's. Exit code 0 only when the text came back HASH_TEXT_DANGEROUS, the request
-// carried nothing but ciphertext, and every attack was refused.
+// that is not the job's, and a text sealed the right way that does not hash to the proposal's
+// payload. Exit code 0 only when the text came back HASH_TEXT_DANGEROUS, the request carried nothing
+// but ciphertext, and every attack was refused, the last one as text_does_not_match.
 //
 //   node scripts/WO-05b-text-roundtrip.mjs
-//     Testnet, inside WSL, needing a published build that has this channel. Signs as the demo
-//     member (files one proposal) and the worker (5 runs). Keys are read from
-//     ~/.near-credentials/testnet and never printed. Spends about 0.01 testnet NEAR.
+//     Testnet, inside WSL, needing a published build that has this channel and refuses a text that
+//     matches no payload. Signs as the demo member (files one proposal) and the worker (6 runs).
+//     Keys are read from ~/.near-credentials/testnet and never printed. Spends about 0.01 testnet
+//     NEAR.
 //   node scripts/WO-05b-text-roundtrip.mjs --local <kaap-sealed-local.wasm>
 //     The same trip against `bash packages/sealed/build.sh local` under plain wasmtime, on a recorded
 //     fixture edited to carry the planted proposal, with the test keys. Needs wasmtime 28
@@ -44,6 +46,8 @@ const EXPLANATION_DOMAIN = 'kaap-explanation-v1';
 const SEALED_PREFIX = 'sealed:';
 const FORMAT = 0x01;
 const OVERHEAD = 1 + 32 + 12 + 16;
+// packages/sealed/src/output.rs, printed whole: a signature anywhere in it would break the match.
+const TEXT_DOES_NOT_MATCH = '{"reason":"text_does_not_match","status":"refused","v":1}';
 
 // RFC 8032's first test key, which the local build signs with (packages/sealed/src/local.rs).
 const LOCAL_VERDICT_KEY = 'ed25519:FVen3X669xLzsi6N2V91DoiyzHzg1uAgqiT8jZ9nS96Z';
@@ -275,6 +279,16 @@ async function main() {
     'a ciphertext for another key': refused(await run(judge(encrypt(x25519Pair().raw, Buffer.from(textJson), bound(TEXT_DOMAIN, dao, id, memberKeys.raw)), memberKeys.raw))),
   };
   for (const [attack, reason] of Object.entries(reasons)) expect(reason !== null, `${attack} is refused, no signature: ${reason}`);
+  // Opens fine and parses, but a fresh nonce gives other bytes than the proposal asks to sign.
+  // Anyone can send such a text, so the job must refuse it rather than judge it.
+  const other = plantedText(dao);
+  const otherJson = JSON.stringify({ message: other.message, nonce: other.nonce.toString('base64'), recipient: RECIPIENT, standard: 'nep413' });
+  const mismatch = await run(judge(encrypt(jobKey, Buffer.from(otherJson), bound(TEXT_DOMAIN, dao, id, memberKeys.raw)), memberKeys.raw));
+  let printed = mismatch;
+  try {
+    printed = JSON.stringify(JSON.parse(mismatch));
+  } catch {}
+  expect(printed === TEXT_DOES_NOT_MATCH, `a sealed text that does not hash to the payload is refused, no signature: ${printed.slice(0, 200)}`);
 
   console.log(failures.length === 0 ? 'RESULT: pass' : `RESULT: FAIL, ${failures.length} check(s): ${failures.join('; ')}`);
   process.exit(failures.length === 0 ? 0 : 1);
