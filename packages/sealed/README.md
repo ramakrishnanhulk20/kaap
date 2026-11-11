@@ -196,8 +196,8 @@ Before the question is sent:
      and NRAS's ES384 token verifies against NVIDIA's published keys with the nonce and an
      overall pass.
 2. `GET /v1/attestation/ita-token` (public): Intel's PS384 token for NEAR AI's gateway, verified
-   against Intel's key set fetched on this run (Intel's current signing certificate expires on
-   2026-11-19, so no key is pinned), with the nonce, no debug, an accepted TCB level, and its report
+   against Intel's key set fetched on this run and picked by the token's key id (no key is pinned,
+   so a rotated signing certificate needs no new build), with the nonce, no debug, an accepted TCB level, and its report
    data rebuilt in Intel's layout. This proves the gateway only: its "model" token carries the
    gateway's own quote and key, so it is shown as gateway evidence, never as the model's.
 
