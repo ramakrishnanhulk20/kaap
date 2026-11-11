@@ -1,7 +1,9 @@
 // `kaap arming <dao>`: whether Kaap's guard is really armed on a DAO (C16), worked out by kaap-core
 // with Sputnik's own formulas from the live policy, never from what the enrolment meant to give the
 // guard. The policy, the DAO's code and the guard's enrolment are read at one final block and must
-// agree across two providers (C22).
+// agree across two providers (C22). The guard is the one the DAO is enrolled with across Kaap's
+// deployment records, current first, else the current one (deployment.ts), and is named with its
+// record.
 //
 // Armed means all three: the DAO enrolled itself in the guard; by kaap-core's `guard_arming`, the
 // guard's one reject decides every kind in Kaap's template; and it does not decide the one kind the
@@ -10,11 +12,11 @@
 // warnings, never as disarming. The guard contract has no code path that could use extra rights
 // (C15).
 
-import { Held, type Reader } from './chain.js';
+import type { Reader } from './chain.js';
 import { type Deps, readers } from './check.js';
 import type { Arming, EnrolmentDrafts } from './core.js';
 import { recognise, type Recognised } from './dao.js';
-import { type Deployment, loadDeployment } from './deployment.js';
+import { type Deployment, describeDeployment, enrolledDeployment } from './deployment.js';
 import { type Block, NETWORKS, type Network } from './rpc.js';
 import { oneLine, utc } from './text.js';
 
@@ -51,15 +53,14 @@ export interface GuardRead {
   state: ArmingState;
 }
 
-/** Everything `arming` and `enroll` read: the deployment, the DAO, its policy, its enrolment. */
+/** Everything `arming` and `enroll` read: the deployment whose guard the DAO is enrolled with (the
+ *  current one when none is), the DAO, its policy, its enrolment. */
 export async function readGuard(deps: Deps & { repoRoot: string }, request: { dao: string; network: Network }): Promise<GuardRead> {
-  const d = loadDeployment(deps.repoRoot, request.network);
   const reader = readers(deps, request.network);
   const head = await reader.head();
   const dao = await recognise(deps.core, reader, NETWORKS[request.network].factory, request.dao, head);
   const policy = await reader.policy(request.dao, head);
-  const enrolled = await reader.sameJson('the guard\'s enrolment', d.guard, 'is_enrolled', { dao: request.dao }, head);
-  if (typeof enrolled !== 'boolean') throw new Held('the guard\'s is_enrolled answer is not true or false');
+  const { d, enrolled } = await enrolledDeployment(reader, deps.repoRoot, request.network, request.dao, head);
   const arming = deps.core.guardArming(policy, d.guard);
   const template = deps.core.enrolmentDrafts(d.guard);
   return { d, reader, head, dao, policy, enrolled, arming, template, state: armingState(arming, template, enrolled) };
@@ -78,6 +79,7 @@ export async function arming(deps: Deps & { repoRoot: string }, request: { dao: 
     facts: [
       `read at final block ${g.head.height} (${utc(g.head.timestampNs)}): the DAO's code, its policy and the guard's enrolment agreed by ${g.reader.providers.join(' and ')}`,
       `DAO: Sputnik ${g.dao.version} (code hash ${g.dao.codeHash})`,
+      `Kaap on ${request.network}: ${describeDeployment(g.d)}`,
       `guard: ${g.d.guard}; enrolled in the guard: ${g.enrolled ? 'yes' : 'no'}`,
     ],
     lines: armingLines(g.arming, g.template, g.state),

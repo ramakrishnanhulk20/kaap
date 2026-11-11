@@ -1,7 +1,8 @@
 // The command router. Exit codes: 0 done; 1 something could not be read or built, or a text was
 // refused, here or by the worker; 2 a usage error; 3 not a recognised DAO, no such proposal, no
 // verdict for it, or a DAO the worker does not watch; 4 held, because the two providers disagreed or
-// one could not be compared; 5 `kaap verify` ran and at least one check failed. No result is
+// one could not be compared; 5 `kaap verify` ran and at least one check failed; 6 `kaap verify` ran,
+// no check failed, and at least one could not be read because no node would answer it. No result is
 // printed for 1, 3 or 4.
 
 import { readFileSync } from 'node:fs';
@@ -24,7 +25,7 @@ import { RpcError } from './rpc.js';
 import { cryptoFresh, type Fresh } from './sealing.js';
 import { render as renderSealText, SealRefused, sealText } from './sealtext.js';
 import { render as renderSubscription, subscribe, WorkerRefused } from './subscribe.js';
-import { NoVerdict, render as renderVerify, verify } from './verify.js';
+import { NoVerdict, outcome, render as renderVerify, verify } from './verify.js';
 
 export interface Env {
   transport: Transport;
@@ -34,7 +35,8 @@ export interface Env {
   repoRoot: string;
   /** Spaces every request; one at `REQUESTS_PER_SECOND` on `clock` when not given. */
   limiter?: RateLimiter;
-  /** The one environment variable the CLI reads, KAAP_WORKER_URL; none when not given. */
+  /** The two environment variables the CLI reads, KAAP_WORKER_URL and KAAP_ARCHIVAL_RPC; none when
+   *  not given. */
   vars?: Readonly<Record<string, string | undefined>>;
   /** Key pairs and nonces for `kaap seal-text`; the system's random source when not given. */
   fresh?: Fresh;
@@ -52,7 +54,7 @@ export function realEnv(): Env {
     clock: realClock,
     loadCore: () => Core.load(),
     repoRoot: fileURLToPath(new URL('../../../../', import.meta.url)),
-    vars: { KAAP_WORKER_URL: process.env['KAAP_WORKER_URL'] },
+    vars: { KAAP_WORKER_URL: process.env['KAAP_WORKER_URL'], KAAP_ARCHIVAL_RPC: process.env['KAAP_ARCHIVAL_RPC'] },
   };
 }
 
@@ -105,7 +107,8 @@ export async function main(argv: string[], env: Env, io: Io): Promise<number> {
       case 'verify': {
         const report = await verify({ ...deps, repoRoot: env.repoRoot }, command);
         io.out(renderVerify(report));
-        return report.checks.every((c) => c.ok) ? 0 : 5;
+        const result = outcome(report);
+        return result === 'fail' ? 5 : result === 'unread' ? 6 : 0;
       }
       case 'enroll':
         io.out(renderEnroll(await enroll({ ...deps, repoRoot: env.repoRoot }, command)));

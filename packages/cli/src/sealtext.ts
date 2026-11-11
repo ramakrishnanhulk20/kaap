@@ -4,7 +4,8 @@
 // by the key the guard accepts on chain, read from two providers at one final block (C22); and the
 // text must hash, by kaap-core's own NEP-413 or NEP-461 hash, to the payload the proposal asks to
 // sign, so a wrong text never costs a paid run; nor does one too long for the run's input, counted
-// as the worker counts it. The text and the reply key's secret stay in memory:
+// as the worker counts it. The guard and the text key come from the deployment record whose guard
+// the DAO is enrolled with, current first (deployment.ts). The text and the reply key's secret stay in memory:
 // they are never written to a file, printed, or sent; only ciphertext and the reply key's public
 // half go to the worker.
 //
@@ -20,7 +21,7 @@ import { MAX_EXPIRES_IN_MS, MAX_RUN_INPUT_BYTES, MAX_TEXT_ANSWER_BYTES, MAX_TEXT
 import { Held, type Reader } from './chain.js';
 import { type Deps, NoProposal, readers } from './check.js';
 import { type Core, CoreError, type ProposalRead } from './core.js';
-import { loadDeployment, loadTextKey, type TextKey } from './deployment.js';
+import { describeDeployment, enrolledDeployment, loadTextKey, type TextKey } from './deployment.js';
 import { type HttpResponse, NetError, type Transport } from './net.js';
 import { type Block, type Network, RpcError } from './rpc.js';
 import { explanationContext, type Fresh, openSealed, SEALED_PREFIX, SealingError, sealTo, textContext, textKeySigned } from './sealing.js';
@@ -197,6 +198,8 @@ export interface SealTextReport {
   request: SealTextRequest;
   block: Block;
   providers: string[];
+  /** The deployment record the guard and the text key were taken from, as one line. */
+  deployment: string;
   guardKey: string;
   textKey: string;
   textKeyRun: string;
@@ -211,10 +214,10 @@ export interface SealTextReport {
 export async function sealText(deps: Deps & { repoRoot: string; fresh: Fresh }, request: SealTextRequest): Promise<SealTextReport> {
   const { core } = deps;
   if (!core.isAccountId(request.dao)) throw new SealRefused(`not a valid NEAR account id. ${NOTHING_SENT}`, 3);
-  const d = loadDeployment(deps.repoRoot, request.network);
-  const textKey = loadTextKey(deps.repoRoot, request.network);
   const reader = readers(deps, request.network);
   const head = await reader.head();
+  const { d } = await enrolledDeployment(reader, deps.repoRoot, request.network, request.dao, head);
+  const textKey = loadTextKey(deps.repoRoot, d);
   const guardKey = await checkTextKey(reader, d.guard, textKey, head);
   const text = readText(core, request.file);
   const read = await readProposal(reader, request, head);
@@ -249,6 +252,7 @@ export async function sealText(deps: Deps & { repoRoot: string; fresh: Fresh }, 
     request,
     block: head,
     providers: reader.providers,
+    deployment: describeDeployment(d),
     guardKey,
     textKey: textKey.key.toString('hex'),
     textKeyRun: textKey.runTx,
@@ -340,6 +344,7 @@ export function render(r: SealTextReport): string {
   return [
     `kaap seal-text ${oneLine(r.request.dao, 80)} #${r.request.id} on ${r.request.network}`,
     `read at final block ${r.block.height} (${utc(r.block.timestampNs)}): the guard's key and the proposal, agreed by ${r.providers.join(' and ')}`,
+    `Kaap on ${r.request.network}: ${r.deployment}`,
     `text key: ${r.textKey} from run ${r.textKeyRun}, signed by the guard's accepted key ${r.guardKey} (checked here with ed25519)`,
     `text: ${r.standard === 'nep413' ? 'NEP-413' : 'NEP-461'}, hashes to ${r.payload}, the payload proposal ${r.request.id} asks to sign`,
     `sent to ${r.request.worker}/texts: ${r.ciphertextBytes} bytes of ciphertext only Kaap's sealed program can open, and a reply key made for this request`,

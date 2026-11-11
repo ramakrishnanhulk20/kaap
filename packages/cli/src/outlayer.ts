@@ -14,10 +14,10 @@
 
 import { z } from 'zod';
 
-import { MAX_ATTESTATION_BYTES, MAX_VIEW_BODY_BYTES, RPC_TIMEOUT_MS, RUN_SCAN_AHEAD, RUN_SCAN_BACK } from './caps.js';
+import { MAX_ATTESTATION_BYTES, MAX_RETRY_WAIT_MS, MAX_VIEW_BODY_BYTES, RPC_TIMEOUT_MS, RPC_TRIES, RUN_SCAN_AHEAD, RUN_SCAN_BACK } from './caps.js';
 import type { Deployment } from './deployment.js';
-import type { RateLimiter } from './limiter.js';
-import { NetError, type Transport } from './net.js';
+import type { Clock, RateLimiter } from './limiter.js';
+import { type HttpResponse, NetError, type Transport } from './net.js';
 import { type Block, type Network, NETWORKS, type Provider, RpcError } from './rpc.js';
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -252,25 +252,40 @@ export async function findRun(archival: Provider, d: Deployment, want: { network
   return search;
 }
 
-export type AttestationRead = { found: true; attestation: Attestation; url: string } | { found: false; why: string; url: string };
+/** `unanswered`: OutLayer never answered at all, so the attestation could not be read, which is not
+ *  the same as OutLayer answering that there is none. */
+export type AttestationRead = { found: true; attestation: Attestation; url: string } | { found: false; why: string; url: string; unanswered: boolean };
 
 /** OutLayer's attestation of the run `tx`. Answered from OutLayer's own API: the CLI checks each
- *  field it uses against the chain, so the API is a source of claims, never of a verdict. */
-export async function readAttestation(network: Network, tx: string, transport: Transport, limiter: RateLimiter): Promise<AttestationRead> {
+ *  field it uses against the chain, so the API is a source of claims, never of a verdict. Asked
+ *  again the way an RPC provider is, after a dropped connection, a timeout, or an HTTP 429 or 5xx:
+ *  up to `RPC_TRIES` tries, waiting 1, 2, then 4 s or its Retry-After up to `MAX_RETRY_WAIT_MS`,
+ *  each through the rate limiter. Any other answer, a 404 included, is OutLayer's word. */
+export async function readAttestation(network: Network, tx: string, transport: Transport, limiter: RateLimiter, clock: Clock): Promise<AttestationRead> {
   const url = `${NETWORKS[network].outlayer}/attestations/by-tx/${tx}`;
-  await limiter.slot();
-  let response;
-  try {
-    response = await transport({ url, method: 'GET', timeoutMs: RPC_TIMEOUT_MS, maxBytes: MAX_ATTESTATION_BYTES });
-  } catch (e) {
-    return { found: false, why: e instanceof NetError ? e.message : 'OutLayer could not be reached', url };
+  let response: HttpResponse | null = null;
+  let why = 'OutLayer could not be reached';
+  for (let attempt = 1; attempt <= RPC_TRIES; attempt++) {
+    if (attempt > 1) await clock.sleep(response?.retryAfterMs === undefined ? 1000 * 2 ** (attempt - 2) : Math.min(response.retryAfterMs, MAX_RETRY_WAIT_MS));
+    await limiter.slot();
+    try {
+      response = await transport({ url, method: 'GET', timeoutMs: RPC_TIMEOUT_MS, maxBytes: MAX_ATTESTATION_BYTES });
+    } catch (e) {
+      response = null;
+      if (!(e instanceof NetError) || e.failure === 'too_large') return { found: false, why: e instanceof NetError ? e.message : why, url, unanswered: false };
+      why = e.message;
+      continue;
+    }
+    if (response.status !== 429 && response.status < 500) break;
+    why = `OutLayer answered HTTP ${response.status}`;
   }
-  if (response.status !== 200) return { found: false, why: `OutLayer answered HTTP ${response.status}`, url };
+  if (response === null || response.status === 429 || response.status >= 500) return { found: false, why, url, unanswered: true };
+  if (response.status !== 200) return { found: false, why: `OutLayer answered HTTP ${response.status}`, url, unanswered: false };
   try {
     const parsed = attestationSchema.safeParse(JSON.parse(response.text));
     if (parsed.success) return { found: true, attestation: parsed.data, url };
   } catch {
     // fall through to the same refusal as a wrong shape
   }
-  return { found: false, why: 'OutLayer\'s answer is not an attestation', url };
+  return { found: false, why: 'OutLayer\'s answer is not an attestation', url, unanswered: false };
 }

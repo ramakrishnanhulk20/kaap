@@ -21,6 +21,15 @@ export class Held extends Error {
   }
 }
 
+/** Held because the second provider did not answer at all, so nothing was compared: a read that
+ *  could not be made, which `kaap verify` shows as unread rather than as a failed check. */
+export class Unanswered extends Held {
+  constructor(message: string) {
+    super(message);
+    this.name = 'Unanswered';
+  }
+}
+
 export class Reader {
   readonly primary: Provider;
   readonly secondary: Provider;
@@ -123,7 +132,8 @@ export class Reader {
     } catch (e) {
       if (!(e instanceof RpcError)) throw e;
       if (e.failure === 'unavailable' || e.failure === 'shape' || e.failure === 'too_large') {
-        throw new Held(`the second provider (${this.secondary.name}) could not be read for ${what}, so nothing can be compared`);
+        const why = `the second provider (${this.secondary.name}) could not be read for ${what}, so nothing can be compared`;
+        throw e.failure === 'unavailable' ? new Unanswered(why) : new Held(why);
       }
       // The first provider answered this same read, so a refusal here is a disagreement.
       throw new Held(`the two providers disagree on ${what}`);

@@ -13,6 +13,7 @@ import { armingLines, armingState, readGuard } from './arming.js';
 import { Held } from './chain.js';
 import { type Deps, plainEffect } from './check.js';
 import type { CheckAnalysis, WhoActs } from './core.js';
+import { describeDeployment } from './deployment.js';
 import { readPrices } from './prices.js';
 import type { Network } from './rpc.js';
 import { oneLine, units, utc } from './text.js';
@@ -118,6 +119,7 @@ export async function enroll(deps: Deps & { repoRoot: string }, request: { dao: 
     facts: [
       `read at final block ${g.head.height} (${utc(g.head.timestampNs)}): the DAO's code, its policy and the guard's enrolment agreed by ${g.reader.providers.join(' and ')}`,
       `DAO: Sputnik ${g.dao.version} (code hash ${g.dao.codeHash}); roles: ${roleSummary(g.policy)}`,
+      `Kaap on ${request.network}: ${describeDeployment(g.d)}`,
       `guard: ${g.d.guard}; enrolled: ${g.enrolled ? 'yes' : 'no'}; armed by the policy now: ${g.state.armed ? 'yes' : policyMatches ? 'the policy matches Kaap\'s template, the enrolment call is missing' : 'no'}`,
     ],
     bondYocto: bond,

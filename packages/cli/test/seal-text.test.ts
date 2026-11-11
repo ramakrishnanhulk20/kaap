@@ -1,7 +1,7 @@
 // `kaap seal-text` against a stand-in chain and a stand-in worker that opens the text with the
 // sealed program's key and seals an explanation back: the encryption against the round-trip
 // script's own code on fixed inputs, the judged answer printed with its explanation opened, every
-// refusal before a request (no text key, a key the guard's key did not sign, a text that does not
+// refusal before anything reaches the worker (no text key, a key the guard's key did not sign, a text that does not
 // hash to the payload, a text too long for the run's input), every answer WO-06d's worker gives,
 // with its model id when judged, and two privacy claims, each checked on
 // the bytes: the request holds no plaintext, and nothing is written to a file while the command
@@ -99,6 +99,7 @@ function chainAnswer(r: HttpRequest, acceptedKey: string, proposal: object): Htt
   if (method === 'query' && params?.request_type === 'call_function') {
     if (params.method_name === 'accepted_key' && params.account_id === GUARD) return viewResult(acceptedKey);
     if (params.method_name === 'get_proposal' && params.account_id === DAO) return viewResult(proposal);
+    if (params.method_name === 'is_enrolled') return viewResult(params.account_id === GUARD);
   }
   return null;
 }
@@ -178,13 +179,16 @@ interface RunOptions {
   watch?: boolean;
 }
 
-/** A clone of the repository's testnet records with `textKey` as the worker's text key record. */
+/** A clone of the testnet records, today's and the 29 Oct one it names in `previous`, with
+ *  `textKey` as the 29 Oct worker's text key record: these answers stand in for the 29 Oct guard,
+ *  the one the DAO is enrolled with. */
 function repoWith(textKey: object | null): string {
   const root = mkdtempSync(join(tmpdir(), 'kaap-seal-text-'));
   mkdirSync(join(root, 'deployments'));
   mkdirSync(join(root, 'packages', 'sealed'), { recursive: true });
-  const { text_key: _recorded, ...record } = JSON.parse(readFileSync(join(REPO_ROOT, 'deployments', 'testnet.json'), 'utf8')) as Record<string, unknown>;
-  writeFileSync(join(root, 'deployments', 'testnet.json'), JSON.stringify(textKey === null ? record : { ...record, text_key: textKey }));
+  copyFileSync(join(REPO_ROOT, 'deployments', 'testnet.json'), join(root, 'deployments', 'testnet.json'));
+  const { text_key: _recorded, ...record } = JSON.parse(readFileSync(join(REPO_ROOT, 'deployments', 'testnet-2026-10-29.json'), 'utf8')) as Record<string, unknown>;
+  writeFileSync(join(root, 'deployments', 'testnet-2026-10-29.json'), JSON.stringify(textKey === null ? record : { ...record, text_key: textKey }));
   copyFileSync(join(REPO_ROOT, 'packages', 'sealed', 'testnet.json'), join(root, 'packages', 'sealed', 'testnet.json'));
   return root;
 }
@@ -273,6 +277,7 @@ test('a sealed text comes back judged: the verdict, the veto and the explanation
   assert.equal(err, '');
   assert.equal(code, 0);
   assert.equal(toWorker.length, 1);
+  assert.match(out, /^Kaap on testnet: deployment record deployments\/testnet-2026-10-29\.json \(an earlier deployment, not the current deployments\/testnet\.json, deployed 2026-10-29T06:12:11Z\): guard kaap-guard-1029061211\.testnet, /m, 'the record whose guard the DAO is enrolled with');
   assert.deepEqual(opened.map((t) => JSON.parse(t) as unknown), [TEXT], 'the sealed program reads the text as the file holds it');
   assert.match(out, new RegExp(`signed by the guard's accepted key ${ACCEPTED_KEY} \\(checked here with ed25519\\)`));
   assert.match(out, new RegExp(`hashes to ${PAYLOAD}, the payload proposal ${ID} asks to sign`));
@@ -344,12 +349,15 @@ test('the reply secret and the text are never written to a file or printed while
   assert.ok(!out.includes('planted-5f1e0c9a2b7d4e83') && !err.includes('planted-5f1e0c9a2b7d4e83'), 'the text is printed');
 });
 
-test('no recorded text key is refused before any request, saying the worker has not published it', async () => {
-  const { code, out, err, asked } = await run({ textKey: null });
+test('no recorded text key is refused before anything reaches the worker, saying the worker has not published it', async () => {
+  // Which record's key counts is known only once the chain says which guard the DAO is enrolled
+  // with, so the only requests made are those reads.
+  const { code, out, err, asked, toWorker } = await run({ textKey: null });
   assert.equal(code, 1);
   assert.equal(out, '');
-  assert.match(err, /^Kaap's worker has not published the key a text is sealed to on testnet yet \(no text_key in .*testnet\.json\)\. Nothing was sent\.$/);
-  assert.equal(asked.length, 0);
+  assert.match(err, /^Kaap's worker has not published the key a text is sealed to on testnet yet \(no text_key in deployments\/testnet-2026-10-29\.json\)\. Nothing was sent\.$/);
+  assert.equal(toWorker.length, 0);
+  assert.ok(asked.every((r) => r.method === 'POST' && /"method":"(block|query)"/.test(r.body ?? '') && !/"method_name":"get_proposal"/.test(r.body ?? '')), 'only the final block and the enrolment are read');
 });
 
 test("a text key the guard's key did not sign is refused before any request to the worker", async () => {

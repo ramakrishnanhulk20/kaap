@@ -3,6 +3,8 @@
 // a DAO's call enrolling in Kaap's guard, an account that is not Sputnik code, two providers that
 // disagree or cannot be compared, the read-only promise, and the terminal escaping of attacker text. The fixtures were recorded while
 // 1Click's list answered HTTP 521, so the priced cases serve the census's own 1Click list instead.
+// The testnet fixtures were recorded under the 29 Oct deployment and read through the real chain of
+// records: Kaap's guard is the one the DAO is enrolled with, else today's.
 // It does not cover the live providers changing after the recording (DONE MEANS 2 runs live), the
 // AI step or the guard, which run only in the sealed program, or a policy rebuilt from a full
 // ChangePolicy (history.test.ts does).
@@ -18,16 +20,25 @@ import { RateLimiter } from '../src/limiter.js';
 import { PRICE_LIST_URL, readPrices } from '../src/prices.js';
 import { NETWORKS } from '../src/rpc.js';
 import { shown } from '../src/text.js';
-import { fakeClock, load, replay, REPO_ROOT, withoutAllowedReads } from './replay.js';
+import { answering, fakeClock, load, type MissingView, replay, REPO_ROOT, UNKNOWN_TODAY, withoutAllowedReads } from './replay.js';
 
 const ADVISORY = "advisory: plain-code check only; the AI and the guard run in Kaap's sealed program";
+
+/** The testnet recordings predate `check` asking which guard a DAO is enrolled with, so they hold
+ *  no `is_enrolled` answer. These are the ones both providers gave live on 11 Nov: the M1 DAO is
+ *  enrolled with the 29 Oct guard, the NEAR Business test DAO with no Kaap guard. */
+const ENROLMENTS: MissingView[] = [
+  ...UNKNOWN_TODAY,
+  { account: 'kaap-guard-1029061211.testnet', method: 'is_enrolled', args: { dao: 'kaap-dao-1029064008.testnet' }, value: true },
+  { account: 'kaap-guard-1029061211.testnet', method: 'is_enrolled', args: { dao: 'kaap-nb-1102140303.sputnikv2.testnet' }, value: false },
+];
 
 async function run(fixture: string, extra: string[] = [], wrap: (t: Transport) => Transport = (t) => t, edit?: (r: HttpRequest, text: string) => string) {
   const fx = load(`${fixture}.json`);
   const log: HttpRequest[] = [];
   const out: string[] = [];
   const err: string[] = [];
-  const code = await main([...fx.argv, ...extra], { transport: wrap(replay(fx, log, edit)), clock: fakeClock(), loadCore: () => Core.load(), repoRoot: REPO_ROOT }, { out: (t) => out.push(t), err: (t) => err.push(t) });
+  const code = await main([...fx.argv, ...extra], { transport: wrap(answering(replay(fx, log, edit), fx, ENROLMENTS)), clock: fakeClock(), loadCore: () => Core.load(), repoRoot: REPO_ROOT }, { out: (t) => out.push(t), err: (t) => err.push(t) });
   return { code, out: out.join('\n'), err: err.join('\n'), log };
 }
 
@@ -49,12 +60,22 @@ test('a payment whose description states another amount is DESC_CONTRADICTS, cri
   assert.ok(out.endsWith(ADVISORY));
 });
 
-test("a DAO's call enrolling in Kaap's guard reads in plain words, with no finding", async () => {
+test("a call enrolling a DAO in an earlier deployment's guard, from a DAO enrolled with no Kaap guard, is not read as Kaap's own", async () => {
+  // The NEAR Business test DAO filed this call into the 29 Oct guard and is enrolled with neither
+  // guard, so Kaap's guard for it is today's and the call stays an unknown call, the cautious
+  // reading. A call into today's guard reads in plain words (enroll.test.ts, its drafts).
   const { code, out } = await run('check-nb-enrol');
   assert.equal(code, 0, out);
-  assert.match(out, /^Kaap's guard: kaap-guard-1029061211\.testnet$/m);
-  assert.match(out, /^effects\n {2}guard_enrol: enrols this DAO in Kaap's guard kaap-guard-1029061211\.testnet, attaching 0\.01 NEAR\nfindings\n {2}none\nrisk floor: low$/m);
+  assert.match(out, /^Kaap's guard: kaap-guard-1111072803\.testnet, from deployment record deployments\/testnet\.json \(the current one, deployed 2026-11-11T07:28:03Z\)$/m);
+  assert.match(out, /^effects\n {2}unknown_call: .*method enroll, receiver kaap-guard-1029061211\.testnet$/m);
+  assert.match(out, /^ {2}UNKNOWN_CALL +high$/m);
   assert.match(out, /^must_veto: false$/m);
+});
+
+test("a DAO enrolled with the 29 Oct guard is checked with that guard as Kaap's, and its record is named", async () => {
+  const { code, out } = await run('check-testnet-7');
+  assert.equal(code, 0, out);
+  assert.match(out, /^Kaap's guard: kaap-guard-1029061211\.testnet, from deployment record deployments\/testnet-2026-10-29\.json \(an earlier deployment, not the current deployments\/testnet\.json, deployed 2026-10-29T06:12:11Z\)$/m);
 });
 
 // The census's own 1Click token list (`GET /v0/tokens` of 20 Oct 2026, kept byte for byte in
@@ -170,7 +191,7 @@ test('when the second provider cannot be read, nothing is compared and the check
 });
 
 test('the CLI only reads: view calls to the fixed providers, the 1Click list, and no key in its code (C31)', async () => {
-  const views = new Set(['get_proposal', 'get_policy', 'get_proposals', 'get_last_proposal_id', 'get_contracts_metadata']);
+  const views = new Set(['get_proposal', 'get_policy', 'get_proposals', 'get_last_proposal_id', 'get_contracts_metadata', 'is_enrolled']);
   const hosts = new Set([...Object.values(NETWORKS).flatMap((n) => [n.primary, n.secondary]), 'https://1click.chaindefuser.com/v0/tokens']);
   for (const fixture of ['check-survival-132', 'check-kmxv7-13', 'check-testnet-7', 'check-wrap-near', 'check-nb-enrol']) {
     const { log } = await run(fixture);

@@ -77,6 +77,20 @@ test('verify, enroll and arming take the network from --network, else from a .te
   }
 });
 
+test('verify takes KAAP_ARCHIVAL_RPC only as an https address, and a bad one exits 2 before any request', async () => {
+  const verify = { command: 'verify', dao: 'a.testnet', id: 2, network: 'testnet' };
+  assert.deepEqual(parse(['verify', 'a.testnet', '2'], { KAAP_ARCHIVAL_RPC: 'https://archive.example.org/rpc/?project=7' }), { ...verify, archival: 'https://archive.example.org/rpc?project=7' });
+  assert.deepEqual(parse(['verify', 'a.testnet', '2'], { KAAP_ARCHIVAL_RPC: '' }), verify);
+  for (const value of ['http://archive.example.org', 'archive.example.org', 'https://user:pw@archive.example.org', 'https://archive.example.org/#x']) {
+    assert.throws(() => parse(['verify', 'a.testnet', '2'], { KAAP_ARCHIVAL_RPC: value }), /^UsageError: KAAP_ARCHIVAL_RPC must /, value);
+  }
+  assert.equal((parse(['check', 'a.testnet'], { KAAP_ARCHIVAL_RPC: 'not a url' }) as { command: string }).command, 'check', 'only verify reads it');
+  const err: string[] = [];
+  const env = { transport: async () => assert.fail('no request'), clock: fakeClock(), loadCore: () => Core.load(), repoRoot: REPO_ROOT, vars: { KAAP_ARCHIVAL_RPC: 'http://archive.example.org' } };
+  assert.equal(await main(['verify', 'a.testnet', '2'], env, { out: () => {}, err: (t) => err.push(t) }), 2);
+  assert.match(err.join('\n'), /^KAAP_ARCHIVAL_RPC must be an https URL/);
+});
+
 test('seal-text needs --dao, --id, --file and a worker from --worker or KAAP_WORKER_URL; subscribe needs an https --worker', () => {
   const sealed = { command: 'seal-text', dao: 'a.testnet', id: 3, file: 't.json', network: 'testnet' };
   assert.deepEqual(parse(['seal-text', '--dao', 'a.testnet', '--id', '3', '--file', 't.json', '--worker', 'https://kaap.example.com/']), { ...sealed, worker: 'https://kaap.example.com' });

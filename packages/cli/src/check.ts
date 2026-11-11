@@ -7,7 +7,7 @@
 import { Held, Reader } from './chain.js';
 import type { CheckAnalysis, Core, History } from './core.js';
 import { recognise } from './dao.js';
-import { loadDeployment, NoDeployment } from './deployment.js';
+import { type Deployment, enrolledDeployment, NoDeployment } from './deployment.js';
 import { historyBefore, policyBefore, readAll } from './history.js';
 import type { Clock, RateLimiter } from './limiter.js';
 import type { Transport } from './net.js';
@@ -54,6 +54,8 @@ export interface CheckReport {
   history: History | null;
   history_source: string;
   prices_source: string;
+  /** The deployment record Kaap's guard was taken from; null where none is recorded. */
+  guard_record: { record: string; deployed_at: string; current: boolean } | null;
   /** Kaap's guard on this network, handed to kaap-core so a call enrolling in it reads as Kaap's
    *  own; null where no deployment is recorded. */
   guard_account: string | null;
@@ -75,11 +77,12 @@ async function counter(reader: Reader, dao: string, block: Block): Promise<numbe
   return last as number;
 }
 
-/** Kaap's guard from the repository's deployment record. Where none is recorded (mainnet today) a
- *  call to `enroll` stays an unknown call, the cautious reading. */
-function kaapGuard(repoRoot: string, network: Network): string | null {
+/** Kaap's guard for this DAO: from the deployment record whose guard it is enrolled with, current
+ *  first, else the current one. Where no deployment is recorded (mainnet today), or a record cannot
+ *  be read, a call to `enroll` stays an unknown call, the cautious reading. */
+async function kaapGuard(reader: Reader, repoRoot: string, network: Network, dao: string, head: Block): Promise<Deployment | null> {
   try {
-    return loadDeployment(repoRoot, network).guard;
+    return (await enrolledDeployment(reader, repoRoot, network, dao, head)).d;
   } catch (e) {
     if (e instanceof NoDeployment) return null;
     throw e;
@@ -110,7 +113,8 @@ export async function check(deps: Deps & { repoRoot: string }, request: CheckReq
   const prices = await readPrices(request.network, core, deps.transport, deps.limiter);
   const before = policyBefore(core, read, policyNow, past);
   const history = past.complete ? historyBefore(past.proposals, read.submission_time, prices.prices) : null;
-  const guard = kaapGuard(deps.repoRoot, request.network);
+  const kaap = await kaapGuard(reader, deps.repoRoot, request.network, request.dao, head);
+  const guard = kaap?.guard ?? null;
 
   const result = core.analyze({
     network: request.network,
@@ -145,6 +149,7 @@ export async function check(deps: Deps & { repoRoot: string }, request: CheckReq
       ? `the DAO's approved payments submitted before this proposal (${past.proposals.length} stored proposals read, USD at today's prices)`
       : 'not available: the DAO\'s earlier proposals could not all be read, so NEW_RECIPIENT and LARGE_AMOUNT are not judged',
     prices_source: prices.source,
+    guard_record: kaap === null ? null : { record: kaap.record, deployed_at: kaap.deployedAt, current: kaap.current },
     guard_account: guard,
     kind_label: result.kind_label,
     analysis: result.analysis,
@@ -191,6 +196,14 @@ function effectLine(effect: Record<string, unknown>, decimals: Map<string, numbe
   return `${String(effect['type'])}: ${parts.join(', ')}`;
 }
 
+/** The guard and the record it came from, with an earlier deployment named as such. */
+function guardLine(report: CheckReport): string {
+  const r = report.guard_record;
+  if (report.guard_account === null || r === null) return `none recorded on ${report.network}`;
+  const which = r.current ? 'the current one' : `an earlier deployment, not the current deployments/${report.network}.json`;
+  return `${report.guard_account}, from deployment record ${oneLine(r.record, 120)} (${which}, deployed ${oneLine(r.deployed_at, 40)})`;
+}
+
 export function render(report: CheckReport, decimals: Map<string, number> = new Map()): string {
   const a = report.analysis;
   const lines = [
@@ -203,7 +216,7 @@ export function render(report: CheckReport, decimals: Map<string, number> = new 
     `policy before: ${report.policy_before.source}`,
     `history: ${report.history ? `${report.history.approved_payments_before} approved payments before this one, median ${report.history.median_payment_usd_before ?? 'n/a'} USD, ${report.history.recipients_paid_before.length} recipients; ${report.history_source}` : report.history_source}`,
     `prices: ${report.prices_source}`,
-    `Kaap's guard: ${report.guard_account ?? `none recorded on ${report.network}`}`,
+    `Kaap's guard: ${guardLine(report)}`,
     '',
     'effects',
     ...(a.effects.length ? a.effects.map((e) => `  ${effectLine(e, decimals)}`) : ['  none']),

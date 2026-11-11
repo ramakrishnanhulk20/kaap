@@ -1,8 +1,10 @@
 // The one way the CLI reaches the network. Every request names a fixed host from this package
 // (rpc.ts, prices.ts, outlayer.ts), never one built from input, carries a timeout and a body cap,
-// follows no redirect, and sends no key or cookie. The one exception is the worker the user names
-// with --worker (or KAAP_WORKER_URL for `kaap seal-text`), held to https by args.ts, which
-// `kaap subscribe` and `kaap seal-text` ask. Tests swap `fetchTransport` for recorded answers.
+// follows no redirect, and sends no key or cookie. There are two exceptions, both hosts the user
+// names and args.ts holds to https: the worker named with --worker (or KAAP_WORKER_URL for
+// `kaap seal-text`), which `kaap subscribe` and `kaap seal-text` ask, and the archival node named
+// in KAAP_ARCHIVAL_RPC, which `kaap verify` asks for old blocks and runs. Tests swap
+// `fetchTransport` for recorded answers.
 
 export interface HttpRequest {
   url: string;

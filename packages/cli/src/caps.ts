@@ -22,6 +22,18 @@ export const RPC_TIMEOUT_MS = 15_000;
 export const RPC_TRIES = 4;
 export const MAX_RETRY_WAIT_MS = 10_000;
 
+/** An archive node that answers HTTP 429 with no Retry-After is asked again after 2 seconds, then
+ *  after 5, and then the request moves to the next node in the list. fastnear's testnet archive
+ *  answered in about 0.3 s and refused after a burst on 11 Nov, while NEAR's own took 3 to 4 s. */
+export const RATE_LIMIT_WAITS_MS: readonly number[] = [2_000, 5_000];
+
+/** How long a run starts its archive reads on the next node once a node has answered HTTP 429. */
+export const RATE_LIMIT_REST_MS = 60_000;
+
+/** Deployment records read for one command: the current `deployments/<network>.json` and the
+ *  earlier ones its `previous` chain names, four in all. A longer chain is not followed further. */
+export const MAX_DEPLOYMENT_RECORDS = 4;
+
 /** Requests a second across every provider, the census scripts' `lib.mjs` limit, which both free
  *  providers held for 10,600 calls without refusing. */
 export const REQUESTS_PER_SECOND = 5;

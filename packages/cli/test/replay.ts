@@ -34,6 +34,51 @@ export function load(name: string): Fixture {
   return JSON.parse(readFileSync(`${FIXTURES}${name}`, 'utf8')) as Fixture;
 }
 
+/** A view a recording lacks because the CLI did not ask it when the recording was made, with the
+ *  JSON the chain answers for it. Without `args`, any arguments match. */
+export interface MissingView {
+  account: string;
+  method: string;
+  args?: object;
+  value: unknown;
+}
+
+/** What the 11 Nov guard and registry answer for the DAOs recorded before them, as both answered
+ *  live on 11 Nov: none of those DAOs is enrolled with that guard, and its registry holds no verdict
+ *  for any of their proposals. With these, a 29 Oct recording replays through the real chain of
+ *  deployment records, today's first. */
+export const UNKNOWN_TODAY: MissingView[] = [
+  { account: 'kaap-guard-1111072803.testnet', method: 'is_enrolled', value: false },
+  { account: 'kaap-registry-1111072803.testnet', method: 'latest', value: null },
+];
+
+/** `t`, with each view in `views` that the recording does not hold answered by either provider
+ *  with its `value`, pinned to the block the request names as the recording knows that block. */
+export function answering(t: Transport, fixture: Fixture, views: readonly MissingView[]): Transport {
+  const hashes = new Map<number, string>();
+  for (const e of fixture.exchanges) {
+    try {
+      const header = (JSON.parse(e.text) as { result?: { header?: { height?: unknown; hash?: unknown } } }).result?.header;
+      if (typeof header?.height === 'number' && typeof header.hash === 'string') hashes.set(header.height, header.hash);
+    } catch {
+      continue;
+    }
+  }
+  return async (r) => {
+    try {
+      return await t(r);
+    } catch (e) {
+      if (!(e instanceof NetError)) throw e;
+      const p = (JSON.parse(r.body ?? '{}') as { params?: { request_type?: string; account_id?: string; method_name?: string; args_base64?: string; block_id?: unknown } }).params;
+      const args = Buffer.from(p?.args_base64 ?? '', 'base64').toString('utf8');
+      const view = p?.request_type === 'call_function' ? views.find((v) => v.account === p.account_id && v.method === p.method_name && (v.args === undefined || JSON.stringify(v.args) === args)) : undefined;
+      const hash = typeof p?.block_id === 'number' ? hashes.get(p.block_id) : undefined;
+      if (view === undefined || hash === undefined) throw e;
+      return { status: 200, text: JSON.stringify({ jsonrpc: '2.0', id: 'kaap', result: { result: [...Buffer.from(JSON.stringify(view.value), 'utf8')], logs: [], block_height: p?.block_id, block_hash: hash } }) };
+    }
+  };
+}
+
 const key = (r: { method: string; url: string; body?: string | null | undefined }) => `${r.method} ${r.url} ${r.body ?? ''}`;
 
 /** Stores a view result as text when its bytes are UTF-8, and a block as its header and the three
@@ -80,11 +125,12 @@ export function replay(fixture: Fixture, log: HttpRequest[] = [], edit?: (reques
   };
 }
 
-/** A source file with the two exact expressions C31's source scan allows taken out: the one
- *  variable `kaap seal-text` reads for its worker's address, and the X25519 pair it seals a text
- *  with, which cannot sign a NEAR transaction. Any other environment read or key pair still shows. */
+/** A source file with the exact expressions C31's source scan allows taken out: the variable
+ *  `kaap seal-text` reads for its worker's address, the one `kaap verify` reads for an archival
+ *  node, and the X25519 pair `seal-text` seals a text with, which cannot sign a NEAR transaction.
+ *  Any other environment read or key pair still shows. */
 export function withoutAllowedReads(text: string): string {
-  return text.replaceAll("process.env['KAAP_WORKER_URL']", '').replaceAll("generateKeyPairSync('x25519')", '');
+  return text.replaceAll("process.env['KAAP_WORKER_URL']", '').replaceAll("process.env['KAAP_ARCHIVAL_RPC']", '').replaceAll("generateKeyPairSync('x25519')", '');
 }
 
 /** A clock whose sleep moves time on at once, so rate limits cost no real time in tests. */

@@ -1,7 +1,9 @@
 // Records the live answers the CLI tests replay: runs each command below against the real
 // providers and writes every exchange to test/fixtures/<name>.json. Read only, like the CLI. Run it
 // after `npm run build -w packages/cli` with `node packages/cli/dist/tools/record-fixtures.js
-// [name ...]`; with no names it records them all.
+// [name ...]`; with no names it records them all. Each case reads deployments/testnet.json as it
+// stands, so the cases on the 29 Oct DAOs, recorded against that deployment, now record against the
+// 11 Nov one unless deployments/testnet-2026-10-29.json is put back in its place.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 
@@ -25,6 +27,10 @@ export const CASES: Record<string, string[]> = {
   'arming-nb': ['arming', 'kaap-nb-1102140303.sputnikv2.testnet'],
   // Its second proposal, the enrolment call `kaap enroll` drafted, filed as printed.
   'check-nb-enrol': ['check', 'kaap-nb-1102140303.sputnikv2.testnet', '1'],
+  // The 11 Nov deployment's demo DAO (WO-02d): proposal 3, which its guard rejected that day, and
+  // the guard's arming on it.
+  'verify-1111-3': ['verify', 'kaap-dao-1111072928.testnet', '3', '--network', 'testnet'],
+  'arming-1111': ['arming', 'kaap-dao-1111072928.testnet'],
 };
 
 const wanted = process.argv.slice(2);

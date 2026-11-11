@@ -1,7 +1,9 @@
 // `kaap arming` and `kaap enroll` against recorded testnet runs: the M1 DAO (enrolled, NEAR Business
 // roles with two members and Kaap's guard role) and a DAO made through sputnikv2.testnet with the
 // NEAR Business roles and one member in each, the shape most NEAR Business treasuries have, not yet
-// enrolled. Edited copies of the M1 recording show the guard losing a kind, a second account in the
+// enrolled, both recorded under the 29 Oct deployment and read through the real chain of records (the
+// M1 DAO is enrolled with the 29 Oct guard, so that record is used; the other with none, so today's),
+// and the 11 Nov demo DAO, enrolled with today's guard. Edited copies of the M1 recording show the guard losing a kind, a second account in the
 // guard role (still armed, with a warning), and a Sputnik 2 DAO being refused. It does not file or vote on any draft (the CLI never does), and it
 // does not cover a DAO whose guard holds delegated tokens.
 
@@ -12,9 +14,11 @@ import { Core } from '../src/core.js';
 import { main } from '../src/main.js';
 import type { HttpRequest } from '../src/net.js';
 import { NETWORKS } from '../src/rpc.js';
-import { fakeClock, load, replay, REPO_ROOT } from './replay.js';
+import { answering, fakeClock, load, replay, REPO_ROOT, UNKNOWN_TODAY } from './replay.js';
 
 const GUARD = 'kaap-guard-1029061211.testnet';
+/** Today's guard, which a DAO enrolled with no Kaap guard is drafted into. */
+const TODAY_GUARD = 'kaap-guard-1111072803.testnet';
 const NB_DAO = 'kaap-nb-1102140303.sputnikv2.testnet';
 const NB_MEMBER = 'kaap-nb-1102140303.testnet';
 
@@ -23,7 +27,7 @@ async function run(fixture: string, edit?: (r: HttpRequest, text: string) => str
   const log: HttpRequest[] = [];
   const out: string[] = [];
   const err: string[] = [];
-  const code = await main(fx.argv, { transport: replay(fx, log, edit), clock: fakeClock(), loadCore: () => Core.load(), repoRoot: REPO_ROOT }, { out: (t) => out.push(t), err: (t) => err.push(t) });
+  const code = await main(fx.argv, { transport: answering(replay(fx, log, edit), fx, UNKNOWN_TODAY), clock: fakeClock(), loadCore: () => Core.load(), repoRoot: REPO_ROOT }, { out: (t) => out.push(t), err: (t) => err.push(t) });
   return { code, out: out.join('\n'), err: err.join('\n'), log };
 }
 
@@ -46,6 +50,7 @@ const guardRole = (p: { roles: { name: string; kind: { Group?: string[] }; permi
 test('arming: the M1 DAO is armed on every kind but its own removal, with no extra rights (C16)', async () => {
   const { code, out } = await run('arming-m1');
   assert.equal(code, 0, out);
+  assert.match(out, /^Kaap on testnet: deployment record deployments\/testnet-2026-10-29\.json \(an earlier deployment, not the current deployments\/testnet\.json, deployed 2026-10-29T06:12:11Z\): guard kaap-guard-1029061211\.testnet, registry kaap-registry-1029061211\.testnet$/m);
   assert.match(out, /^guard: kaap-guard-1029061211\.testnet; enrolled in the guard: yes$/m);
   assert.match(out, /^armed: yes\. The guard's one reject decides every kind except remove_member_from_role/m);
   assert.match(out, /^kinds the guard cannot reject: remove_member_from_role \(left out by design\)$/m);
@@ -89,11 +94,22 @@ test('arming: the NEAR Business test DAO is not armed and one approval passes ev
   assert.match(out, /^race: One approval passes .*so the guard can only alert after the fact\.$/m);
 });
 
+test('arming: the 11 Nov demo DAO is armed by the guard today\'s deployment record names', async () => {
+  const { code, out } = await run('arming-1111');
+  assert.equal(code, 0, out);
+  assert.match(out, /^kaap arming kaap-dao-1111072928\.testnet on testnet$/m);
+  assert.match(out, /^guard: kaap-guard-1111072803\.testnet; enrolled in the guard: yes$/m);
+  assert.match(out, /^armed: yes\. The guard's one reject decides every kind except remove_member_from_role/m);
+  assert.match(out, /^rights beyond rejecting: none$/m);
+  assert.match(out, /^race: Every kind that can pass needs at least 2 approvals/m);
+});
+
 test('enroll: a NEAR Business treasury gets two drafts, the role filed by Admin and the call by Requestor (C30)', async () => {
   const { code, out } = await run('enroll-nb');
   assert.equal(code, 0, out);
   assert.match(out, /roles: Requestor \(1 member\), Admin \(1 member\), Approver \(1 member\)$/m);
   assert.match(out, /^Kaap's enrolment, from its one template: 2 proposals$/m);
+  assert.match(out, /^Kaap on testnet: deployment record deployments\/testnet\.json \(the current one, deployed 2026-11-11T07:28:03Z\): guard kaap-guard-1111072803\.testnet, registry kaap-registry-1111072803\.testnet$/m);
   const sections = out.split(/^proposal \d of 2: /m);
   const [role, call] = [sections[1] ?? '', sections[2] ?? ''];
   assert.match(role, /^add Kaap's reject-only guard role \(kind policy_add_or_update_role\)/);
@@ -104,17 +120,17 @@ test('enroll: a NEAR Business treasury gets two drafts, the role filed by Admin 
 
   const args = (section: string) => JSON.parse(section.split('\n').find((l) => l.trim().startsWith('{"proposal"'))?.trim() ?? '{}') as { proposal: { description: string; kind: Record<string, Record<string, unknown>> } };
   const added = args(role).proposal.kind['ChangePolicyAddOrUpdateRole']?.['role'] as { name: string; kind: unknown; permissions: string[]; vote_policy: Record<string, unknown> };
-  assert.deepEqual([added.name, added.kind], ['guard', { Group: [GUARD] }]);
+  assert.deepEqual([added.name, added.kind], ['guard', { Group: [TODAY_GUARD] }]);
   assert.equal(added.permissions.length, 16);
   assert.ok(added.permissions.every((x) => x.endsWith(':VoteReject')) && !added.permissions.includes('remove_member_from_role:VoteReject'));
   assert.deepEqual(added.vote_policy['transfer'], { quorum: '0', threshold: '1', weight_kind: 'RoleWeight' });
   const enrol = args(call).proposal.kind['FunctionCall'] as { receiver_id: string; actions: { method_name: string; deposit: string; gas: string; args: string }[] };
-  assert.deepEqual([enrol.receiver_id, enrol.actions], [GUARD, [{ args: 'e30=', deposit: '10000000000000000000000', gas: '10000000000000', method_name: 'enroll' }]]);
+  assert.deepEqual([enrol.receiver_id, enrol.actions], [TODAY_GUARD, [{ args: 'e30=', deposit: '10000000000000000000000', gas: '10000000000000', method_name: 'enroll' }]]);
 
   // Kaap's own decoding of each draft, by the decoder that judges every proposal: kaap-core reads
   // its own enrolment as nothing to warn about, so neither draft carries a finding or a note.
-  assert.match(role, /policy_change: .*"members_added":\[\{"approver":false,"member":"kaap-guard-1029061211\.testnet","role":"guard"\}\].*"roles_added":\["guard"\]/);
-  assert.match(call, /^ {4}guard_enrol: enrols this DAO in Kaap's guard kaap-guard-1029061211\.testnet, attaching 0\.01 NEAR$/m);
+  assert.match(role, /policy_change: .*"members_added":\[\{"approver":false,"member":"kaap-guard-1111072803\.testnet","role":"guard"\}\].*"roles_added":\["guard"\]/);
+  assert.match(call, /^ {4}guard_enrol: enrols this DAO in Kaap's guard kaap-guard-1111072803\.testnet, attaching 0\.01 NEAR$/m);
   for (const draft of [role, call]) {
     assert.match(draft, /^ {4}findings: none\n {4}risk floor low; description check \w+; must_veto false$/m, draft);
     assert.doesNotMatch(draft, /note:|GUARD_WEAKENED|unknown_call/, draft);

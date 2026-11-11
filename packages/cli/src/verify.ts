@@ -1,14 +1,18 @@
 // `kaap verify <dao> <id>`: checks the verdict Kaap's registry holds for one proposal, down to the
-// sealed hardware run that produced it, and prints each check as pass or fail. Every signature and
+// sealed hardware run that produced it, and prints each check as pass or fail. The verdict is looked
+// for in the current deployment's registry, then in each earlier record's (deployment.ts), and every
+// check is made against the deployment that holds it, named in its own line. Every signature and
 // hash is recomputed here, with Node's ed25519 and kaap-core's own encoders, from values read off
 // the chain; no service's "valid" is taken (A8, C28). Reads that decide a check are made at one
 // final block and must agree across two providers (C22); the verdict's own block and its sealed run
-// are older than the live providers keep, so those come from one archival node, and say so. That
-// covers the policy and the called contracts' code at the verdict's block: both live providers
-// answer that the block is gone (checked 3 Nov), and the one other archival endpoint that answers,
-// archival-rpc.testnet.near.org, is served by the same operator, so a second read there would not
-// be independent. As corroboration, the same contracts' code is read again at the final block from
-// both live providers, and a redeploy since the verdict is a warning.
+// soon grow older than the live providers keep, so each of those reads comes from one node (rpc.ts
+// `Archive`): a live provider while it still holds the data, else KAAP_ARCHIVAL_RPC when set, else
+// a public archival node, and every line that rests on them names the node that answered. That
+// covers the policy and the called contracts' code at the verdict's block. They are never compared:
+// the two public testnet archives are served by the same operator (checked 3 Nov), so a second read
+// there would not be independent. As corroboration, the same contracts' code is read again at the
+// final block from both live providers, and a redeploy since the verdict is a warning. A read that
+// no node would answer is shown as unread, never as a failed check, and the command exits 6, not 5.
 //
 // What it does not check, and prints as such: Intel's signature on the TDX quote inside OutLayer's
 // attestation, and OutLayer's approval of its measurements (see outlayer.ts and binding.ts). A
@@ -18,13 +22,13 @@
 import { z } from 'zod';
 
 import { BindingRefused, quoteReportData, taskHash } from './binding.js';
-import { Held, type Reader } from './chain.js';
+import { Held, type Reader, Unanswered } from './chain.js';
 import { type Deps, readers } from './check.js';
 import { type Core, CoreError } from './core.js';
 import { recognise } from './dao.js';
-import { type Deployment, loadDeployment } from './deployment.js';
+import { type Deployment, deploymentChain, describeDeployment } from './deployment.js';
 import { type Attestation, type AttestationRead, findRun, readAttestation, readRun, type Run, type Search } from './outlayer.js';
-import { type Block, NETWORKS, type Network, Provider, RpcError } from './rpc.js';
+import { Archive, archiveHosts, type Block, NETWORKS, type Network, RpcError } from './rpc.js';
 import { oneLine, utc } from './text.js';
 import { BadVerdict, decodeVerdict, ed25519Valid, edKeyBytes, sha256Hex, signedBytes, type VerdictFields } from './verdict.js';
 
@@ -39,6 +43,8 @@ export interface VerifyRequest {
   dao: string;
   id: number;
   network: Network;
+  /** KAAP_ARCHIVAL_RPC, asked before the public archival nodes. */
+  archival?: string;
 }
 
 export interface Check {
@@ -46,6 +52,9 @@ export interface Check {
   text: string;
   /** Passed, but the reader should know something: shown as "warn", never as a failure. */
   warning?: boolean;
+  /** Could not be read at all, so neither passed nor failed: shown as "unread". Names where the
+   *  read was asked: the archive list, the two live providers, or OutLayer's API. */
+  unread?: Unread;
 }
 
 export interface VerifyReport {
@@ -80,7 +89,11 @@ type RegistryRecord = z.output<typeof recordSchema>;
 
 const pass = (text: string): Check => ({ ok: true, text });
 const fail = (text: string): Check => ({ ok: false, text });
+type Unread = 'archive' | 'live' | 'outlayer';
+const unread = (text: string, from: Unread = 'archive'): Check => ({ ok: false, unread: from, text });
 const check = (ok: boolean, yes: string, no: string): Check => (ok ? pass(yes) : fail(no));
+/** A failed read: unread when no node answered, failed when one did with something else. */
+const notRead = (e: RpcError, text: string, from: Unread = 'archive'): Check => (e.failure === 'unavailable' ? unread(text, from) : fail(text));
 const short = (hex: string) => `${hex.slice(0, 8)}...${hex.slice(-4)}`;
 
 async function key(reader: Reader, what: string, account: string, head: Block): Promise<string> {
@@ -182,16 +195,29 @@ function bindingProblems(run: Run, a: Attestation, d: Deployment): { hash: strin
   return { hash, problems };
 }
 
-function runChecks(run: Run, att: AttestationRead, d: Deployment, label: string): Check[] {
+/** The run's checks, each naming `source`, the nodes its chain record was read from. When OutLayer
+ *  never answered for its attestation, the three checks that need it are unread. */
+function runChecks(run: Run, att: AttestationRead, d: Deployment, label: string, source: string): Check[] {
   const p = runProblems(run, att, d);
   const b = att.found ? bindingProblems(run, att.attestation, d) : { hash: null, problems: [att.why] };
   const build = run.requested?.build ? short(run.requested.build) : 'unknown';
-  return [
+  const why = att.found ? '' : att.why;
+  const unreadAttestation = (what: string): Check => unread(`${label}: ${what} could not be checked, because OutLayer's API did not answer for its attestation (${why})`, 'outlayer');
+  const checks = [
     check(
       !p.chain.length,
       `${label}: ${d.outlayer} recorded the request from ${d.worker} for project ${d.project} (uuid ${d.uuid}), build ${build}, a published build`,
       `${label}: on chain, ${p.chain.join('; ')}`,
     ),
+    ...(!att.found && att.unanswered
+      ? [unreadAttestation('the attested project, caller and wasm'), unreadAttestation('the attested input and output hashes'), unreadAttestation('OutLayer\'s record against its TDX quote')]
+      : attestationChecks(p, b, d, label, build)),
+  ];
+  return checks.map((c) => ({ ...c, text: `${c.text} (chain read from ${source})` }));
+}
+
+function attestationChecks(p: ReturnType<typeof runProblems>, b: { hash: string | null; problems: string[] }, d: Deployment, label: string, build: string): Check[] {
+  return [
     check(
       !p.attested.length,
       `${label}: OutLayer's attestation names the same project, caller ${d.worker} and wasm ${build}, the build that ran`,
@@ -208,28 +234,39 @@ function runChecks(run: Run, att: AttestationRead, d: Deployment, label: string)
   ];
 }
 
+/** The first deployment, current first, whose registry holds a verdict for the proposal, read by
+ *  both providers at `head`, with the registries before it that hold none. */
+async function withVerdict(reader: Reader, repoRoot: string, request: VerifyRequest, head: Block): Promise<{ d: Deployment; latest: unknown; without: string[] }> {
+  const without: string[] = [];
+  for (const d of deploymentChain(repoRoot, request.network)) {
+    if (without.includes(d.registry)) continue;
+    const latest = await reader.sameJson('the registry\'s latest verdict', d.registry, 'latest', { network: request.network, dao: request.dao, proposal_id: request.id }, head);
+    if (latest !== null) return { d, latest, without };
+    without.push(d.registry);
+  }
+  throw new NoVerdict(`${without.join(' and ')} ${without.length === 1 ? 'holds' : 'hold'} no verdict for proposal ${request.id} of ${request.dao} on ${request.network}`);
+}
+
 export async function verify(deps: Deps & { repoRoot: string }, request: VerifyRequest): Promise<VerifyReport> {
   const { core } = deps;
-  const d = loadDeployment(deps.repoRoot, request.network);
   const reader = readers(deps, request.network);
   const head = await reader.head();
   const dao = await recognise(core, reader, NETWORKS[request.network].factory, request.dao, head);
-  const latest = await reader.sameJson('the registry\'s latest verdict', d.registry, 'latest', { network: request.network, dao: request.dao, proposal_id: request.id }, head);
-  if (latest === null) throw new NoVerdict(`${d.registry} holds no verdict for proposal ${request.id} of ${request.dao} on ${request.network}`);
+  const { d, latest, without } = await withVerdict(reader, deps.repoRoot, request, head);
   const parsed = recordSchema.safeParse(latest);
   if (!parsed.success) throw new Held('the registry\'s latest verdict is not the expected record');
   const record = parsed.data;
   const guardKey = await key(reader, 'the guard\'s accepted key', d.guard, head);
   const registryKey = await key(reader, 'the registry\'s accepted key', d.registry, head);
-  const archival = new Provider(NETWORKS[request.network].archival, deps.transport, deps.limiter, deps.clock);
+  const archive = new Archive(archiveHosts(request.network, request.archival ?? null), deps.transport, deps.limiter, deps.clock);
 
   const bytes = Buffer.from(record.verdict, 'base64');
   const signature = Buffer.from(record.signature, 'base64');
   const signedHash = sha256Hex(signedBytes(bytes));
   const facts = [
-    `read at final block ${head.height} (${utc(head.timestampNs)}): agreed by ${reader.providers.join(' and ')}; the verdict's own block (the policy and the called contracts' code) and its sealed run from ${archival.name} alone, the one archival provider`,
+    `read at final block ${head.height} (${utc(head.timestampNs)}): agreed by ${reader.providers.join(' and ')}; the verdict's own block (the policy and the called contracts' code) and the sealed runs from one node per read, never compared: a live provider while it still holds them, else an archival node, named on each line`,
     `DAO: Sputnik ${dao.version} (code hash ${dao.codeHash})`,
-    `Kaap on ${request.network}: guard ${d.guard}, registry ${d.registry}, sealed program ${d.project} called by ${d.worker}`,
+    `Kaap on ${request.network}: ${describeDeployment(d)}, sealed program ${d.project} called by ${d.worker}${without.length ? `; used because ${without.join(' and ')} ${without.length === 1 ? 'holds' : 'hold'} no verdict for this proposal` : ''}`,
     `verdict: record ${record.index} in ${d.registry}, recorded by ${oneLine(record.recorded_by, 80)} at block ${record.recorded_at_block}`,
   ];
   const checks: Check[] = [];
@@ -273,36 +310,40 @@ export async function verify(deps: Deps & { repoRoot: string }, request: VerifyR
   if (v !== null) {
     const kind = await storedKind(reader, request, head, notes);
     checks.push(kindCheck(core, request, v, kind));
-    checks.push(await policyCheck(archival, deps, request, v));
-    const receivers = await receiversCheck(archival, core, request, v, kind);
+    checks.push(await policyCheck(archive, deps, request, v));
+    const receivers = await receiversCheck(archive, core, request, v, kind);
     checks.push(receivers.check);
     if (receivers.pairs !== null) checks.push(await receiversNow(reader, head, receivers.pairs));
     checks.push(decoderCheck(v.decoder_version, core.decoderVersion()));
   }
 
   let search: Search | null = null;
-  let searchError: string | null = null;
+  let searchError: RpcError | null = null;
+  const searchMark = archive.answered.length;
   try {
-    if (v !== null) search = await findRun(archival, d, { network: request.network, dao: request.dao, proposalId: request.id, verdict: bytes, signature }, v.block_height);
+    if (v !== null) search = await findRun(archive, d, { network: request.network, dao: request.dao, proposalId: request.id, verdict: bytes, signature }, v.block_height);
   } catch (e) {
     if (!(e instanceof RpcError)) throw e;
-    searchError = `could not be read: ${e.message}`;
+    searchError = e;
   }
+  const searched = archive.hostsSince(searchMark);
   const run = search?.run ?? null;
-  if (run === null) {
+  if (searchError !== null) {
+    checks.push(notRead(searchError, `sealed run: could not be read: ${searchError.message}`));
+  } else if (run === null) {
     const why =
       v === null
         ? 'the verdict did not decode, so its block is unknown'
-        : (searchError ?? `no run by ${d.worker} in blocks ${search?.to} to ${search?.from} returned this verdict and signature${search?.otherRuns ? ` (${search.otherRuns} ${search.otherRuns === 1 ? 'run' : 'runs'} for this proposal returned another)` : ''}`);
+        : `no run by ${d.worker} in blocks ${search?.to} to ${search?.from} returned this verdict and signature${search?.otherRuns ? ` (${search.otherRuns} ${search.otherRuns === 1 ? 'run' : 'runs'} for this proposal returned another)` : ''}${searched ? ` (read from ${searched})` : ''}`;
     checks.push(fail(`sealed run: ${why}`));
   } else {
-    checks.push(pass(`sealed run: transaction ${run.tx} returned exactly this verdict and signature (found in ${search?.blocksRead} blocks)`));
-    const att = await readAttestation(request.network, run.tx, deps.transport, deps.limiter);
-    checks.push(...runChecks(run, att, d, 'the run'));
+    checks.push(pass(`sealed run: transaction ${run.tx} returned exactly this verdict and signature (found in ${search?.blocksRead} blocks, read from ${searched})`));
+    const att = await readAttestation(request.network, run.tx, deps.transport, deps.limiter, deps.clock);
+    checks.push(...runChecks(run, att, d, 'the run', searched));
     notChecked.push(`Intel's signature on the TDX quote and OutLayer's approval of its measurements (OutLayer's own tool: outlayer-verify tx ${run.tx} --network ${request.network} --api ${NETWORKS[request.network].outlayer}); record: ${att.url}`);
   }
 
-  checks.push(...(await keyChecks(archival, deps, request.network, d, guardRaw)));
+  checks.push(...(await keyChecks(archive, deps, request.network, d, guardRaw)));
 
   notes.push(aiEvidence(v));
   const used = await reader.sameJson('the guard\'s veto result', d.guard, 'veto_result', { verdict_hash_hex: signedHash }, head);
@@ -334,13 +375,18 @@ function kindCheck(core: Core, request: VerifyRequest, v: VerdictFields, kind: s
   return check(kindHash === v.kind_hash, `kind hash: kaap-core recomputes ${short(kindHash)} from proposal ${request.id} as stored`, `kind hash: kaap-core gives ${short(kindHash)} from the stored proposal, the verdict says ${short(v.kind_hash)}`);
 }
 
-async function policyCheck(archival: Provider, deps: Deps, request: VerifyRequest, v: VerdictFields): Promise<Check> {
+async function policyCheck(archive: Archive, deps: Deps, request: VerifyRequest, v: VerdictFields): Promise<Check> {
   try {
-    const view = await archival.view(request.dao, 'get_policy', {}, v.block_height);
+    const view = await archive.view(request.dao, 'get_policy', {}, v.block_height);
     const policyHash = deps.core.policyHash(view.text);
-    return check(policyHash === v.policy_hash, `policy hash: kaap-core recomputes ${short(policyHash)} from the DAO's policy at block ${v.block_height}`, `policy hash: kaap-core gives ${short(policyHash)} at block ${v.block_height}, the verdict says ${short(v.policy_hash)}`);
+    const from = `(read from ${archive.name}, one node, not compared)`;
+    return check(
+      policyHash === v.policy_hash,
+      `policy hash: kaap-core recomputes ${short(policyHash)} from the DAO's policy at block ${v.block_height} ${from}`,
+      `policy hash: kaap-core gives ${short(policyHash)} at block ${v.block_height} ${from}, the verdict says ${short(v.policy_hash)}`,
+    );
   } catch (e) {
-    if (e instanceof RpcError) return fail(`policy hash: the policy at block ${v.block_height} could not be read (${e.message})`);
+    if (e instanceof RpcError) return notRead(e, `policy hash: the policy at block ${v.block_height} could not be read (${e.message})`);
     throw e;
   }
 }
@@ -387,27 +433,28 @@ export function calledAccounts(core: Core, dao: string, kindJson: string): strin
 
 /** C4: the verdict pins the code of the DAO and of every contract the kind calls, at its block.
  *  Returns the (account, code hash) pairs read there, or null when they could not all be read. */
-async function receiversCheck(archival: Provider, core: Core, request: VerifyRequest, v: VerdictFields, kind: string | null): Promise<{ check: Check; pairs: [string, string][] | null }> {
+async function receiversCheck(archive: Archive, core: Core, request: VerifyRequest, v: VerdictFields, kind: string | null): Promise<{ check: Check; pairs: [string, string][] | null }> {
   const at = v.block_height;
   const refused = (text: string) => ({ check: fail(`receivers hash: ${text}`), pairs: null });
   if (kind === null) return refused(`proposal ${request.id} is no longer stored, so the contracts it calls cannot be named`);
   const accounts = calledAccounts(core, request.dao, kind);
   if (accounts === null) return refused('the proposal names a receiver that is not a valid account id, which Kaap\'s sealed program never judges');
   const pairs: [string, string][] = [];
+  const mark = archive.answered.length;
   for (const account of accounts) {
     try {
-      const state = await archival.account(account, at);
-      if (state.blockHeight !== at) return refused(`${archival.name} answered for block ${state.blockHeight} when asked for ${oneLine(account, 80)} at block ${at}`);
+      const state = await archive.account(account, at);
+      if (state.blockHeight !== at) return refused(`${archive.name} answered for block ${state.blockHeight} when asked for ${oneLine(account, 80)} at block ${at}`);
       pairs.push([account, state.codeHash]);
     } catch (e) {
       if (!(e instanceof RpcError)) throw e;
-      const why = e.failure === 'missing_account' ? 'no such account at that block' : e.message;
-      return refused(`the code of ${oneLine(account, 80)} at block ${at} could not be read (${why})`);
+      const why = e.failure === 'missing_account' ? `${e.provider}: no such account at that block` : e.message;
+      return { check: notRead(e, `receivers hash: the code of ${oneLine(account, 80)} at block ${at} could not be read (${why})`), pairs: null };
     }
   }
   const hash = core.receiversHash(pairs);
   const named = accounts.map((a) => oneLine(a, 80)).join(', ');
-  const source = `(archival node, one provider: no independent archive keeps block ${at})`;
+  const source = `(read from ${archive.hostsSince(mark)}, one node per read, not compared)`;
   return {
     check: check(
       hash === v.receivers_hash,
@@ -428,8 +475,9 @@ async function receiversNow(reader: Reader, head: Block, pinned: [string, string
     try {
       now = (await reader.account(account, head)).codeHash;
     } catch (e) {
+      if (e instanceof Unanswered) return unread(`receivers now: ${e.message} at block ${head.height}`, 'live');
       if (e instanceof Held) return fail(`receivers now: ${e.message} at block ${head.height}`);
-      if (e instanceof RpcError) return fail(`receivers now: the code of ${oneLine(account, 80)} at block ${head.height} could not be read (${e.failure === 'missing_account' ? 'no such account' : e.message})`);
+      if (e instanceof RpcError) return notRead(e, `receivers now: the code of ${oneLine(account, 80)} at block ${head.height} could not be read (${e.failure === 'missing_account' ? 'no such account' : e.message})`, 'live');
       throw e;
     }
     if (now !== then) changed.push(oneLine(account, 80));
@@ -455,24 +503,26 @@ export function decoderCheck(verdictDecoder: string, ours: string): Check {
 
 /** The guard's key must be the one a run of this project, caller and published build printed in
  *  its attested output: no OutLayer call returns a project's key directly. */
-async function keyChecks(archival: Provider, deps: Deps, network: Network, d: Deployment, guardRaw: Buffer | null): Promise<Check[]> {
+async function keyChecks(archive: Archive, deps: Deps, network: Network, d: Deployment, guardRaw: Buffer | null): Promise<Check[]> {
   const label = `the key's run ${d.attestedRunTx.slice(0, 8)}...`;
+  const mark = archive.answered.length;
   let run: Run | null;
   try {
-    run = await readRun(archival, d.attestedRunTx, d.worker, d.outlayer);
+    run = await readRun(archive, d.attestedRunTx, d.worker, d.outlayer);
   } catch (e) {
     if (!(e instanceof RpcError)) throw e;
-    return [fail(`${label}: could not be read (${e.message})`)];
+    return [notRead(e, `${label}: could not be read (${e.message})`)];
   }
-  if (run === null) return [fail(`${label}: ${archival.name} does not know transaction ${d.attestedRunTx}`)];
-  const att = await readAttestation(network, run.tx, deps.transport, deps.limiter);
+  if (run === null) return [fail(`${label}: ${archive.name} does not know transaction ${d.attestedRunTx}`)];
+  const source = archive.hostsSince(mark);
+  const att = await readAttestation(network, run.tx, deps.transport, deps.limiter, deps.clock);
   const printed = run.sealed ? edKeyBytes(run.sealed.public_key) : null;
   return [
-    ...runChecks(run, att, d, label),
+    ...runChecks(run, att, d, label, source),
     check(
       guardRaw !== null && printed !== null && printed.equals(guardRaw),
-      `${label}: its attested output prints the guard's accepted key`,
-      `${label}: its attested output prints ${run.sealed ? oneLine(run.sealed.public_key, 60) : 'no key'}, not the guard's accepted key`,
+      `${label}: its attested output prints the guard's accepted key (chain read from ${source})`,
+      `${label}: its attested output prints ${run.sealed ? oneLine(run.sealed.public_key, 60) : 'no key'}, not the guard's accepted key (chain read from ${source})`,
     ),
   ];
 }
@@ -483,25 +533,43 @@ function aiEvidence(v: VerdictFields | null): string {
   return `AI evidence: AI ${v.ai_status}, model ${oneLine(v.model_id, 80)}; NEAR AI's own verifier: https://cloud.near.ai/verify?model=${encodeURIComponent(v.model_id)}`;
 }
 
+/** `fail` when any check failed, whatever else could not be read; `unread` when none failed but at
+ *  least one could not be read; `pass` otherwise, warnings included. */
+export function outcome(r: VerifyReport): 'pass' | 'fail' | 'unread' {
+  if (r.checks.some((c) => !c.ok && !c.unread)) return 'fail';
+  return r.checks.some((c) => c.unread) ? 'unread' : 'pass';
+}
+
 export function render(r: VerifyReport): string {
-  const failed = r.checks.filter((c) => !c.ok).length;
+  const failed = r.checks.filter((c) => !c.ok && !c.unread).length;
+  const unreadChecks = r.checks.filter((c) => c.unread);
   const warned = r.checks.filter((c) => c.ok && c.warning).length;
   const result =
     failed > 0
-      ? `result: ${failed} of ${r.checks.length} checks fail`
-      : warned > 0
-        ? `result: no check fails; ${r.checks.length - warned} pass and ${warned} ${warned === 1 ? 'warns' : 'warn'}`
-        : `result: all ${r.checks.length} checks pass`;
+      ? `result: ${failed} of ${r.checks.length} checks fail${unreadChecks.length ? `, and ${unreadChecks.length} could not be read` : ''}`
+      : unreadChecks.length > 0
+        ? `result: no check fails, but ${unreadChecks.length} of ${r.checks.length} could not be read`
+        : warned > 0
+          ? `result: no check fails; ${r.checks.length - warned} pass and ${warned} ${warned === 1 ? 'warns' : 'warn'}`
+          : `result: all ${r.checks.length} checks pass`;
+  const advice = !unreadChecks.length
+    ? []
+    : unreadChecks.some((c) => c.unread === 'archive')
+      ? ['The archive nodes are rate-limiting or not answering: wait a minute and run again, or set KAAP_ARCHIVAL_RPC to the https address of an archival node you can use.']
+      : unreadChecks.some((c) => c.unread === 'outlayer')
+        ? ['OutLayer\'s API is not answering: wait a minute and run again.']
+        : ['The RPC providers are rate-limiting or not answering: wait a minute and run again.'];
   return [
     r.title,
     ...r.facts,
     '',
     'checks',
-    ...r.checks.map((c) => `  ${!c.ok ? 'fail' : c.warning ? 'warn' : 'pass'}  ${c.text}`),
+    ...r.checks.map((c) => `  ${c.unread ? 'unread' : !c.ok ? 'fail' : c.warning ? 'warn' : 'pass'}  ${c.text}`),
     '',
     ...(r.notChecked.length ? ['not checked here', ...r.notChecked.map((t) => `  ${t}`), ''] : []),
     ...r.notes,
     '',
     result,
+    ...advice,
   ].join('\n');
 }

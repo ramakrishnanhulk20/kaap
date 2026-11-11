@@ -10,7 +10,7 @@ export type Command =
   | { command: 'check'; dao: string; id: number | null; network: Network; json: boolean }
   | { command: 'eval' }
   | { command: 'census'; sample: number | null }
-  | { command: 'verify'; dao: string; id: number; network: Network }
+  | { command: 'verify'; dao: string; id: number; network: Network; archival?: string }
   | { command: 'enroll'; dao: string; network: Network }
   | { command: 'arming'; dao: string; network: Network }
   | { command: 'seal-text'; dao: string; id: number; file: string; network: Network; worker: string }
@@ -35,7 +35,9 @@ export const USAGE = `kaap: check NEAR DAO proposals with no keys, and rerun Kaa
       Checks the verdict Kaap's registry holds for one proposal: the sealed signature against
       the guard's key, the hashes kaap-core recomputes, the sealed run on chain and OutLayer's
       attestation of it, and the run that printed the guard's key. Prints each check as pass
-      or fail.
+      or fail, or unread when no node would answer it. Old blocks and runs come from the live
+      providers while they hold them, else from archival nodes; KAAP_ARCHIVAL_RPC names an
+      archival node (https) to ask before the public ones.
   kaap enroll <dao> [--network mainnet|testnet]
       Prints the proposals a member files to put the DAO under Kaap's guard, who files and who
       approves each, Kaap's own decoding of each draft, and the cost.
@@ -117,7 +119,22 @@ function workerUrl(text: string, name = '--worker'): string {
   return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
 }
 
-/** `vars` is the environment, read only for KAAP_WORKER_URL, through the same check as --worker. */
+/** KAAP_ARCHIVAL_RPC: https only, with no user name, password or fragment. A path or query stays,
+ *  since some providers put a project key there; only the host is ever printed. */
+function archivalUrl(text: string): string {
+  let url: URL;
+  try {
+    url = new URL(text);
+  } catch {
+    throw new UsageError('KAAP_ARCHIVAL_RPC must be a URL, for example https://archival-rpc.testnet.fastnear.com');
+  }
+  if (url.protocol !== 'https:') throw new UsageError('KAAP_ARCHIVAL_RPC must be an https URL');
+  if (url.username || url.password || url.hash) throw new UsageError('KAAP_ARCHIVAL_RPC must not carry a user name, password or fragment');
+  return `${url.origin}${url.pathname.replace(/\/+$/, '')}${url.search}`;
+}
+
+/** `vars` is the environment, read only for KAAP_WORKER_URL, through the same check as --worker,
+ *  and for KAAP_ARCHIVAL_RPC, which only `verify` uses. */
 export function parse(argv: string[], vars: Readonly<Record<string, string | undefined>> = {}): Command {
   const [command, ...rest] = argv;
   if (command !== undefined && (rest.includes('--help') || rest.includes('-h'))) return { command: 'help' };
@@ -142,7 +159,14 @@ export function parse(argv: string[], vars: Readonly<Record<string, string | und
       const [dao, id, ...extra] = positionals;
       if (dao === undefined || dao === '' || id === undefined) throw new UsageError('kaap verify needs a DAO account and a proposal id, for example: kaap verify example.sputnik-dao.near 12');
       if (extra.length) throw new UsageError('kaap verify takes a DAO and one proposal id');
-      return { command: 'verify', dao, id: wholeNumber(id, 'the proposal id', 0, Number.MAX_SAFE_INTEGER), network: networkFor(values['network'], dao) };
+      const archival = vars['KAAP_ARCHIVAL_RPC'];
+      return {
+        command: 'verify',
+        dao,
+        id: wholeNumber(id, 'the proposal id', 0, Number.MAX_SAFE_INTEGER),
+        network: networkFor(values['network'], dao),
+        ...(archival !== undefined && archival !== '' ? { archival: archivalUrl(archival) } : {}),
+      };
     }
     case 'enroll':
     case 'arming': {
