@@ -152,7 +152,7 @@ test('the worker logs every money movement with its explorer link', async () => 
   assert.equal(events(s.lines(), 'tx_signed')[0]?.reserved_near, '0.050000');
 });
 
-const SECRET_ROW: SecretsRef = { profile: 'near-ai', account_id: 'ramn-ai.testnet' };
+const SECRET_ROW: SecretsRef = { profile: 'near-ai', account_id: 'secrets-owner.testnet' };
 
 test('every run names the NEAR AI secret row when one is set, the retry included, and none when unset', async () => {
   const s = setup({ secretsRef: SECRET_ROW });

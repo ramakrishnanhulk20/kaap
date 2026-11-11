@@ -50,7 +50,7 @@ function editPolicy(change: (policy: { roles: { name: string; kind: { Group?: st
 const guardRole = (p: { roles: { name: string; kind: { Group?: string[] }; permissions: string[] }[] }) => p.roles.find((r) => r.name === 'guard');
 
 test('arming: the 29 Oct DAO is armed on every kind but its own removal, with no extra rights (C16)', async () => {
-  const { code, out } = await run('arming-m1');
+  const { code, out } = await run('arming-1029');
   assert.equal(code, 0, out);
   assert.match(out, /^Kaap on testnet: deployment record deployments\/testnet-2026-10-29\.json \(an earlier deployment, not the current deployments\/testnet\.json, deployed 2026-10-29T06:12:11Z\): guard kaap-guard-1029061211\.testnet, registry kaap-registry-1029061211\.testnet$/m);
   assert.match(out, /^guard: kaap-guard-1029061211\.testnet; enrolled in the guard: yes$/m);
@@ -63,7 +63,7 @@ test('arming: the 29 Oct DAO is armed on every kind but its own removal, with no
 });
 
 test('arming: a guard role without transfer:VoteReject is not armed', async () => {
-  const { code, out } = await run('arming-m1', editPolicy((p) => {
+  const { code, out } = await run('arming-1029', editPolicy((p) => {
     const role = guardRole(p);
     if (role) role.permissions = role.permissions.filter((x) => x !== 'transfer:VoteReject');
   }));
@@ -77,7 +77,7 @@ test('arming: a second member of the guard role leaves the guard armed and is wa
   // Under the template's threshold of one vote, kaap-core's guard_arming still finds the guard
   // deciding every template kind (C16, one source), and names the second account in
   // others_who_reject_alone.
-  const { code, out } = await run('arming-m1', editPolicy((p) => {
+  const { code, out } = await run('arming-1029', editPolicy((p) => {
     guardRole(p)?.kind.Group?.push('kaap-intruder.testnet');
   }));
   assert.equal(code, 0);
@@ -147,7 +147,7 @@ test('enroll: a NEAR Business treasury gets two drafts, the role filed by Admin 
 });
 
 test('enroll: the 29 Oct DAO has nothing to file', async () => {
-  const { code, out } = await run('enroll-m1');
+  const { code, out } = await run('enroll-1029');
   assert.equal(code, 0, out);
   assert.match(out, /^nothing to file: the DAO is enrolled and its policy already matches Kaap's template\n\nnow:\n {2}armed: yes\./m);
   assert.doesNotMatch(out, /add_proposal|^cost$/m);
@@ -168,7 +168,7 @@ test('enroll refuses a DAO on Sputnik 2, whose kinds Kaap has not tested', async
 
 test('arming and enroll only read: the two testnet providers, view_account and four views', async () => {
   const views = new Set(['get_contracts_metadata', 'get_policy', 'is_enrolled', 'get_last_proposal_id']);
-  for (const fixture of ['arming-m1', 'arming-nb', 'enroll-m1', 'enroll-nb']) {
+  for (const fixture of ['arming-1029', 'arming-nb', 'enroll-1029', 'enroll-nb']) {
     const { log } = await run(fixture);
     for (const r of log) {
       assert.ok(r.url === NETWORKS.testnet.primary || r.url === NETWORKS.testnet.secondary, r.url);

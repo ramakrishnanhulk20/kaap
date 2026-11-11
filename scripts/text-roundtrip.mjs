@@ -15,7 +15,7 @@
 //   node scripts/text-roundtrip.mjs --local <kaap-sealed-local.wasm>
 //     The same trip against `bash packages/sealed/build.sh local` under plain wasmtime, on a recorded
 //     fixture edited to carry the planted proposal, with the test keys. Needs wasmtime 28
-//     (KAAP_WASMTIME, default ~/kaap-m0-outlayer/tools/wasmtime28). No account, no network.
+//     (KAAP_WASMTIME, default ~/kaap-tools/wasmtime28). No account, no network.
 //
 // What this does not cover: the "preflight failed, so the text stays in" rule (C12), which needs a
 // keyed run with broken attestation and is proven by the transport tests in packages/sealed/tests.
@@ -156,8 +156,8 @@ function plantedFixture(dir, payload) {
 }
 
 function localTrip(wasm) {
-  const dir = mkdtempSync(join(tmpdir(), 'kaap-wo05b-'));
-  const wasmtime = process.env.KAAP_WASMTIME ?? join(homedir(), 'kaap-m0-outlayer', 'tools', 'wasmtime28');
+  const dir = mkdtempSync(join(tmpdir(), 'kaap-text-'));
+  const wasmtime = process.env.KAAP_WASMTIME ?? join(homedir(), 'kaap-tools', 'wasmtime28');
   const fixture = JSON.parse(readFileSync(FIXTURE, 'utf8'));
   const text = plantedText(fixture.dao);
   plantedFixture(dir, text.payload);
@@ -200,7 +200,7 @@ async function testnetTrip() {
     console.log(`  run: ${txLink(hash)}`);
     return Buffer.from(outcome.status.SuccessValue, 'base64').toString('utf8');
   };
-  return { dir: mkdtempSync(join(tmpdir(), 'kaap-wo05b-')), dao, id, guard, verdictKey, text, run, logs: [] };
+  return { dir: mkdtempSync(join(tmpdir(), 'kaap-text-')), dao, id, guard, verdictKey, text, run, logs: [] };
 }
 
 const refused = (output) => {

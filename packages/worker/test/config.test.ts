@@ -9,14 +9,14 @@ import { ConfigError, loadConfig } from '../src/config.ts';
 const complete = {
   KAAP_NETWORK: 'testnet',
   KAAP_WORKER_ACCOUNT: 'kaap-worker-1029053612.testnet',
-  KAAP_WORKER_CREDENTIALS_FILE: '/home/ram/.near-credentials/testnet/kaap-worker-1029053612.testnet.json',
+  KAAP_WORKER_CREDENTIALS_FILE: '/home/worker/.near-credentials/testnet/kaap-worker-1029053612.testnet.json',
   KAAP_GUARD: 'kaap-guard-1029061211.testnet',
   KAAP_REGISTRY: 'kaap-registry-1029061211.testnet',
   KAAP_OUTLAYER: 'outlayer.testnet',
   KAAP_SEALED_PROJECT: 'kaap-worker-1029053612.testnet/kaap-sealed',
   KAAP_RPC_PRIMARY: 'https://rpc.testnet.fastnear.com',
   KAAP_RPC_SECONDARY: 'https://near-testnet.drpc.org/',
-  KAAP_WORKER_DB: '/home/ram/kaap-worker/testnet.sqlite',
+  KAAP_WORKER_DB: '/home/worker/kaap-worker/testnet.sqlite',
   KAAP_CAP_RUNS_PER_DAO_DAY: '60',
   KAAP_CAP_RECORDS_PER_DAO_DAY: '60',
   KAAP_CAP_NEAR_PER_DAY: '1',
@@ -114,8 +114,8 @@ test('the NEAR AI secret row is optional: no account by default, profile near-ai
   const c = loadConfig(complete);
   assert.equal(c.KAAP_AI_SECRETS_ACCOUNT, undefined, 'no default account');
   assert.equal(c.KAAP_AI_SECRETS_PROFILE, 'near-ai');
-  const set = loadConfig({ ...complete, KAAP_AI_SECRETS_ACCOUNT: 'ramn-ai.testnet', KAAP_AI_SECRETS_PROFILE: 'kaap_ai-2' });
-  assert.deepEqual([set.KAAP_AI_SECRETS_ACCOUNT, set.KAAP_AI_SECRETS_PROFILE], ['ramn-ai.testnet', 'kaap_ai-2']);
+  const set = loadConfig({ ...complete, KAAP_AI_SECRETS_ACCOUNT: 'secrets-owner.testnet', KAAP_AI_SECRETS_PROFILE: 'kaap_ai-2' });
+  assert.deepEqual([set.KAAP_AI_SECRETS_ACCOUNT, set.KAAP_AI_SECRETS_PROFILE], ['secrets-owner.testnet', 'kaap_ai-2']);
   assert.equal(loadConfig({ ...complete, KAAP_AI_SECRETS_ACCOUNT: '' }).KAAP_AI_SECRETS_ACCOUNT, undefined, 'empty counts as unset');
   const got = problems({ ...complete, KAAP_AI_SECRETS_ACCOUNT: 'Not An Account', KAAP_AI_SECRETS_PROFILE: 'near ai/x' });
   assert.ok(got.some((p) => p.startsWith('KAAP_AI_SECRETS_ACCOUNT:')));

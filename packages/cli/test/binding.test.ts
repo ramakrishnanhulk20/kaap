@@ -94,8 +94,8 @@ function matches(name: string, record: Served, want: string) {
   assert.ok(quote.rest.equals(Buffer.alloc(32)), `${name}: REPORTDATA after the hash is zero`);
 }
 
-const RUN_2 = ours('verify-m1-2.json', '7vT7uwgwggGUc3CpNgLApgyjFS4s65KTfZTbMF2enx6T');
-const RUN_9 = ours('verify-m1-9.json', '8P46vmTE9pUDxCX3s4yS5DCUpXdWEVPDRdfGYWJYyTqY');
+const RUN_2 = ours('verify-1029-2.json', '7vT7uwgwggGUc3CpNgLApgyjFS4s65KTfZTbMF2enx6T');
+const RUN_9 = ours('verify-1029-9.json', '8P46vmTE9pUDxCX3s4yS5DCUpXdWEVPDRdfGYWJYyTqY');
 
 test('our two testnet runs hash to the bytes their quotes commit to', () => {
   matches('7vT7uw', RUN_2, '9b4c3c22b0285e72a10939d1a2a0e6b040aeda6761a426b33d7c6b5abd8bda4f');

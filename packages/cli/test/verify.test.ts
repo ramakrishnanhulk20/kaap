@@ -79,7 +79,7 @@ interface RunEnv {
   vars?: Record<string, string>;
 }
 
-async function run(edit?: (r: HttpRequest, text: string) => string, wrap: (t: Transport) => Transport = (t) => t, fixture = 'verify-m1-2.json', env: RunEnv = {}) {
+async function run(edit?: (r: HttpRequest, text: string) => string, wrap: (t: Transport) => Transport = (t) => t, fixture = 'verify-1029-2.json', env: RunEnv = {}) {
   const fx = load(fixture);
   const log: HttpRequest[] = [];
   const out: string[] = [];
@@ -95,7 +95,7 @@ async function run(edit?: (r: HttpRequest, text: string) => string, wrap: (t: Tr
 /** A changed verdict has a hash the guard never voted with, which the recording cannot hold: both
  *  providers answer its `veto_result` with null, at the recorded block. */
 function neverVoted(t: Transport): Transport {
-  const recorded = load('verify-m1-2.json').exchanges.filter((e) => e.body?.includes('"method_name":"veto_result"'));
+  const recorded = load('verify-1029-2.json').exchanges.filter((e) => e.body?.includes('"method_name":"veto_result"'));
   return async (r) => {
     if (params(r).params?.method_name !== 'veto_result') return t(r);
     const body = recorded.find((e) => e.url === r.url)?.body;
@@ -202,7 +202,7 @@ test('the 11 Nov demo verdict passes every check on today\'s record, reading its
 });
 
 test('the verdict on proposal 9 of the 29 Oct DAO, from the second published build, passes every check with its run bound to its quote', async () => {
-  const { code, out } = await run(undefined, undefined, 'verify-m1-9.json');
+  const { code, out } = await run(undefined, undefined, 'verify-1029-9.json');
   assert.equal(code, 0, out);
   assert.match(out, /^kaap verify kaap-dao-1029064008\.testnet #9 on testnet$/m);
   assert.match(out, OCT_29_RECORD);
@@ -510,7 +510,7 @@ test('verify only reads: fixed hosts, view, block, chunk and tx calls, and GETs 
 });
 
 test('the verdict reader refuses what kaap-verdict would not write, and ed25519 refuses a changed bit', () => {
-  const fx = load('verify-m1-2.json');
+  const fx = load('verify-1029-2.json');
   const latest = fx.exchanges.find((e) => e.body?.includes('"method_name":"latest"'));
   const record = JSON.parse((JSON.parse(latest?.text ?? '{}') as { result: { result_text: string } }).result.result_text) as { verdict: string; signature: string };
   const bytes = Buffer.from(record.verdict, 'base64');

@@ -48,7 +48,7 @@ async function main() {
   if (!(await viewFinal(guard, 'is_enrolled', { dao }))) throw new Error(`${dao} is not enrolled in ${guard}`);
   const member = accountFor(memberId);
 
-  const rootId = `w6-${stamp()}.${memberId}`;
+  const rootId = `pay-${stamp()}.${memberId}`;
   const made = await send(member, rootId, [actions.createAccount(), actions.transfer(ROOT_FUNDING), actions.addFullAccessKey(PublicKey.fromString(newSavedKey(rootId)))]);
   if (made.failure) throw new Error(`creating ${rootId} failed in ${made.hash}: ${refusal(made.failure)}`);
   console.log(`payees root: ${rootId}: ${txLink(made.hash)}`);

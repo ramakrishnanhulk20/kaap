@@ -11,14 +11,14 @@ import type { TxOutcome } from '../src/outcome.ts';
 import { bridge, daoReads, fixture } from './helpers.ts';
 
 const enc = (s: string) => new TextEncoder().encode(s);
-const m1 = () => {
+const okRun = () => {
   const o = fixture<TxOutcome>('run-ok');
   const out = JSON.parse(Buffer.from((o.status as { SuccessValue: string }).SuccessValue, 'base64').toString('utf8')) as { verdict: string };
   return { b64: out.verdict, v: bridge.decodeVerdict(Buffer.from(out.verdict, 'base64')) };
 };
 
 test("the 29 Oct attack verdict's kind, policy and receivers hashes recompute from the chain through the bridge", () => {
-  const { v } = m1();
+  const { v } = okRun();
   const p2 = bridge.readProposal(enc(daoReads.get_proposal_2));
   assert.equal(p2.id, 2);
   assert.equal(bridge.kindHash(p2.kind), v.kind_hash);
@@ -28,7 +28,7 @@ test("the 29 Oct attack verdict's kind, policy and receivers hashes recompute fr
 });
 
 test('a verdict decodes and encodes back to the same bytes, and anything else is refused', () => {
-  const { b64, v } = m1();
+  const { b64, v } = okRun();
   const { verdict_hash, signed_b64, vetoable, ...fields } = v;
   assert.equal(bridge.encodeVerdict(fields), b64);
   assert.ok(verdict_hash.length === 64 && signed_b64.length > b64.length && vetoable);

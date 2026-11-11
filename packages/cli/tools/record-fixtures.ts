@@ -17,11 +17,11 @@ export const CASES: Record<string, string[]> = {
   'check-testnet-7': ['check', 'kaap-dao-1029064008.testnet', '7', '--network', 'testnet'],
   'check-wrap-near': ['check', 'wrap.near', '1'],
   'census-sample-5': ['census', '--sample', '5'],
-  'verify-m1-2': ['verify', 'kaap-dao-1029064008.testnet', '2', '--network', 'testnet'],
+  'verify-1029-2': ['verify', 'kaap-dao-1029064008.testnet', '2', '--network', 'testnet'],
   // The no-key run on proposal 9: sealed build 73409203, a record with no secrets reference.
-  'verify-m1-9': ['verify', 'kaap-dao-1029064008.testnet', '9', '--network', 'testnet'],
-  'arming-m1': ['arming', 'kaap-dao-1029064008.testnet'],
-  'enroll-m1': ['enroll', 'kaap-dao-1029064008.testnet'],
+  'verify-1029-9': ['verify', 'kaap-dao-1029064008.testnet', '9', '--network', 'testnet'],
+  'arming-1029': ['arming', 'kaap-dao-1029064008.testnet'],
+  'enroll-1029': ['enroll', 'kaap-dao-1029064008.testnet'],
   // A testnet DAO made through sputnikv2.testnet with the NEAR Business roles, one member in each.
   'enroll-nb': ['enroll', 'kaap-nb-1102140303.sputnikv2.testnet'],
   'arming-nb': ['arming', 'kaap-nb-1102140303.sputnikv2.testnet'],

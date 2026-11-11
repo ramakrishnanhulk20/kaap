@@ -320,7 +320,7 @@ async function main() {
   const before = await Promise.all([member, worker].map(async (s) => (await accountState(s.account.accountId)).amount));
   // The faucet gives one account per machine every few hours, so each run's payees live under a
   // fresh sub-account of the demo member: alice.sandbox becomes alice.<that account>.
-  const rootId = `m1-${stamp()}.${memberId}`;
+  const rootId = `pay-${stamp()}.${memberId}`;
   const rootKey = newSavedKey(rootId);
   const made = await send(member, rootId, [actions.createAccount(), actions.transfer(ROOT_FUNDING), actions.addFullAccessKey(PublicKey.fromString(rootKey))]);
   tally(made.outcome);
@@ -328,7 +328,7 @@ async function main() {
   const root = accountFor(rootId);
   console.log(`payees root: ${rootId}, made by ${memberId} with ${toNear(ROOT_FUNDING)} NEAR: ${txLink(made.hash)}`);
   const signers = [member, worker, root];
-  const dir = mkdtempSync(join(tmpdir(), 'kaap-m1-'));
+  const dir = mkdtempSync(join(tmpdir(), 'kaap-prove-'));
 
   const cases = [caseFor('attack', rootId), caseFor('control', rootId)];
   const payees = new Set(cases.flatMap((c) => [c.payee, ...c.named]));
