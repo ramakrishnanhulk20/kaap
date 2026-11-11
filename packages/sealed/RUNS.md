@@ -284,6 +284,71 @@ Both signed by the project owner with `bash scripts/WO-05e-retire-versions.sh <s
   though their runs, and the run that printed Kaap's key, ran on the removed builds. Past runs live in
   OutLayer's attestation records, not in the version list.
 
+## The checked build
+
+Run on 11 Nov 2026 between 06:25 and 06:28 UTC, from WSL, on one machine, under Node 24.22.2. This
+section is on its own: the numbers above are from earlier builds.
+
+| Thing | Value |
+| --- | --- |
+| Version (wasm sha256) | `bf7bb4f86fe7b1531946d8e5b5b7bab39d3e98a3a97ecab00dd9f0e4c4d34f58`, 1,583,153 bytes |
+| Hosted at | the secret gist, commit `9f0c5cc2`. The publish script built the wasm again and checked that the served bytes had the same sha256 before it registered anything |
+| Registered by | [add_version 8CdP5kjL...](https://testnet.nearblocks.io/txns/8CdP5kjLhvxDSwWJFiWPzUgiiuzEDvud8rXMg7xSGrr3) at 06:25:14 UTC, set active |
+| Still listed | `e1192b28...`, no longer active. `list_versions` names both builds |
+| Caller, all seven runs | `kaap-worker-1029053612.testnet`, no `attached_usd` |
+
+No run named `secrets_ref`, because the NEAR AI key's lock still names build `e1192b28...`. So no
+key reached any of them and `ai_status` is unavailable on purpose.
+
+### The worker runs free
+
+| Thing | Value |
+| --- | --- |
+| Transaction | [Edzq3KED...](https://testnet.nearblocks.io/txns/Edzq3KEDgXQBeLEEZ62mqRT97mAJMpVbZVcB3dxbh6sW) at 06:25:47 UTC |
+| Proposal judged | `kaap-dao-1029064008.testnet` #9, guard `kaap-guard-1029061211.testnet`, read at block 277178025 |
+| Verdict | status ok, risk critical, floor critical, findings `[DESC_CONTRADICTS, UNKNOWN_VALUE]`, `ai_status` unavailable, passed `check-output.mjs` |
+| Verdict key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN`, the same key as on every earlier build |
+| Worker time | 4,330 ms, the first run of this build ("Freshly compiled", 1,184 ms compile) |
+| Instructions | 16,804,882 of the 10,000,000,000 allowed |
+| Request to result | 21 blocks, 12,439 ms on chain, 17,108 ms wall clock |
+| Paid | 0.00234 testnet NEAR: OutLayer's charge 0.00155, transaction gas 0.00079 |
+
+`outlayer-verify tx Edzq3KEDgXQBeLEEZ62mqRT97mAJMpVbZVcB3dxbh6sW --network testnet --api
+https://testnet-api.outlayer.ai` said PROVEN, exit 0: Intel TCB UpToDate, the enclave measurement
+listed as approved by `worker.outlayer.testnet`, wasm `bf7bb4f8...`, caller the worker, attached
+payment 0. Its evidence bundle was saved for re-checking offline.
+
+### The sealed text channel
+
+`node scripts/WO-05b-text-roundtrip.mjs`: exit 0, `RESULT: pass`. The demo member filed proposal
+#13 on `kaap-dao-1029064008.testnet`
+([2MJB3m8A...](https://testnet.nearblocks.io/txns/2MJB3m8AHMx6pE5e6G7ZjJ7mbYQx4dwyQR8HDK3Kp4vH)),
+a sign request whose hash points to a text made up for the run. It is left open.
+
+| Step | Transaction | Output bytes | Blocks | On chain ms | Worker ms | Paid, NEAR |
+| --- | --- | --- | --- | --- | --- | --- |
+| Ask for the key | [Eg1XNnPf...](https://testnet.nearblocks.io/txns/Eg1XNnPfYyDQ2MgjchXNq3KRCUL6MqZ5R3AS7MBv8ZGA) | 270 | 17 | 8,879 | 2,740 | 0.0020543 |
+| Judge with the sealed text | [6WmzAzw4...](https://testnet.nearblocks.io/txns/6WmzAzw4oWpWJrikdxhNgigQ4AcofGVuSMbajjBb8iAa) | 673 | 17 | 10,227 | 3,775 | 0.0022040 |
+| Attack: tampered ciphertext | [HTENzUSE...](https://testnet.nearblocks.io/txns/HTENzUSEpoBwAL9dKRoiAc78vcxD8dsmvqahuhiZQrZ) | 73 | 15 | 8,645 | 2,730 | 0.0020944 |
+| Attack: a thief's reply key | [5ZC6C3f5...](https://testnet.nearblocks.io/txns/5ZC6C3f5dojgC2iEm664ZpGwdJHg9g5ZLiKWT3RzbNKU) | 73 | 16 | 8,492 | 2,695 | 0.0020909 |
+| Attack: a ciphertext for another key | [2ZAWpmCk...](https://testnet.nearblocks.io/txns/2ZAWpmCkESq4DFpXmS53H9V841XGpakmAsaWPsAwqrAT) | 73 | 18 | 10,956 | 2,696 | 0.0020914 |
+| Attack: a text that matches no payload | [7UsmD7Ke...](https://testnet.nearblocks.io/txns/7UsmD7KeHfcYACf31vesFPygG78ckq4W2mMciycy7ySr) | 57 | 16 | 9,608 | 3,265 | 0.0021426 |
+
+Paid over the six runs: 0.0126776 testnet NEAR, of which OutLayer's charge is 0.0077901 and
+transaction gas 0.0048875. The filing, 0.0002925 NEAR of gas, is not counted.
+
+- The job printed text key `09bc21bb...2f6a`, the same key `deployments/testnet.json` recorded from
+  build `e1192b28...`: a new version of the project keeps its text key, as it keeps its verdict key.
+- The verdict came back risk critical, floor critical, findings `[HASH_TEXT_DANGEROUS]`, `ai_status`
+  unavailable, checked by `check-output.mjs`. Its sealed explanation opened with the member's key to
+  `AI unavailable (ai_key_missing).` and stayed shut for another key.
+- The three attacks first run on 6 Nov each got this again, with no signature:
+  `{"reason":"text_ciphertext could not be opened","status":"refused","v":1}`.
+- The new attack, a text sealed the right way to the job's key whose hash is not the proposal's
+  payload, got exactly `{"reason":"text_does_not_match","status":"refused","v":1}`, with no
+  signature. It took 31,005,118 instructions against about 7,600,000 for a ciphertext that does not
+  open, because the job reads the proposal before it can compare the text's hash with it.
+
 ## What these runs do not cover
 
 - One proposal, one location, one 8-minute window, runs one after another. No load, nothing
@@ -304,8 +369,8 @@ Both signed by the project owner with `bash scripts/WO-05e-retire-versions.sh <s
   from the run's (`parse_input` in `src/input.rs`, kept on purpose) and this project runs on
   testnet, so a mainnet read cannot be proven from here. Prices and history stay proven on recorded
   real pages until a mainnet project exists.
-- The combined build asking the model. Its runs had no key, so the AI step, the checks around it
-  and a sealed text reaching the model have not run live on this build.
+- The combined build and the checked build asking the model. Their runs had no key, so the AI step,
+  the checks around it and a sealed text reaching the model have not run live on either build.
 - Paid runs: one payer, one proposal, five calls one after another. That a paid run writes no
   public evidence is proven by the tests only. No withdrawal was tried on either door.
 - Why OutLayer refuses a removed build: its answer is the error text above, not the
