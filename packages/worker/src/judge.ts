@@ -53,7 +53,7 @@ export const MAX_RUN_INPUT_BYTES = 32_768;
 /** Gas NEAR charges per byte of a call's method name and arguments sent to another account:
  *  nearcore's `action_function_call_per_byte`, its send and execution parts (2,235,934 each).
  *  A plain input is about 200 bytes, which the caps leave out; a sealed text can bring 32 KiB,
- *  about 0.015 NEAR at the minimum gas price, so a text run reserves it too. */
+ *  about 0.000015 NEAR at the minimum gas price, so a text run reserves it too. */
 const ARG_BYTE_GAS = 2n * 2_235_934n;
 
 /** A member's text as POST /texts hands it on: ciphertext only the sealed program can open, and
