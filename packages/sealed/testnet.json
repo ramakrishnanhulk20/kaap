@@ -29,7 +29,7 @@
       "registered_by": "add_version",
       "tx": "A6SXB84XCupvTXWLecteauyHqQzBYZTNC4cG5H7kGR9K",
       "at": "2026-11-06T04:06:51Z",
-      "retired": false
+      "retired": true
     },
     {
       "sha256": "bf7bb4f86fe7b1531946d8e5b5b7bab39d3e98a3a97ecab00dd9f0e4c4d34f58",
@@ -38,7 +38,7 @@
       "registered_by": "add_version",
       "tx": "8CdP5kjLhvxDSwWJFiWPzUgiiuzEDvud8rXMg7xSGrr3",
       "at": "2026-11-11T06:25:14Z",
-      "retired": false
+      "retired": true
     },
     {
       "sha256": "da2c285350551e2367594121856e29cdfe6bc134f56f7c3ce4372584c7a4c666",
