@@ -23,6 +23,11 @@ export const RECORD_DEPOSIT = 20n * 10n ** 21n;
 export const EXPIRY_MARGIN_MS = 30_000;
 /** Record and veto outcomes are final within a few blocks; this is generous. */
 const SHORT_WINDOW_BLOCKS = 60;
+/** kaap-registry's MAX_HISTORY_PAGE: one `history` page never holds more. */
+const HISTORY_PAGE = 50;
+/** 500 records of one proposal is far past what its judgements produce, and every record is a
+ *  verdict the sealed program signed, so a longer history is read no further. */
+const HISTORY_PAGES = 10;
 
 /** The per-DAO signals one proposal's veto or record raises, each with the stored state that
  *  keeps it true. */
@@ -278,6 +283,28 @@ export class Actor {
     return null;
   }
 
+  /** Whether the registry's history for this proposal, read at final, holds a record of
+   *  `verdictHash`. A read that fails, or does not show the hash, is tried again a second later,
+   *  five tries in all; false after that, and never a throw. */
+  async #registryHolds(dao: string, id: number, verdictHash: string): Promise<boolean> {
+    for (let i = 0; i < 5; i++) {
+      if (i > 0) await this.#sleep(1_000);
+      try {
+        for (let page = 0; page < HISTORY_PAGES; page++) {
+          const args = { network: this.#s.network, dao, proposal_id: id, from: page * HISTORY_PAGE, limit: HISTORY_PAGE };
+          const r = await this.#reads.primary.callFunction(this.#s.registry, 'history', args, { finality: 'final' });
+          const records: unknown = JSON.parse(r.text);
+          if (!Array.isArray(records)) break;
+          if (records.some((rec: unknown) => typeof rec === 'object' && rec !== null && (rec as { verdict_hash?: unknown }).verdict_hash === verdictHash)) return true;
+          if (records.length < HISTORY_PAGE) break;
+        }
+      } catch {
+        // Read again on the next try; a provider a block behind catches up within seconds.
+      }
+    }
+    return false;
+  }
+
   /** From the proposal's own submission time (the add_proposal block) to the block of the DAO's
    *  act_proposal receipt that carried the guard's vote. */
   async #secondsSinceFiled(outcome: Parameters<typeof receiptBlock>[0], dao: string, submissionTime: string | null): Promise<number | null> {
@@ -339,6 +366,15 @@ export class Actor {
       return 'refused';
     }
     const code = refusal(res.outcome);
+    // The registry refuses a verdict it already stores, and anyone may send one the sealed program
+    // signed, so a stranger who relayed ours first, or our own send landing twice, leaves it
+    // recorded. The refusal alone is not taken for that: the registry's history must show it.
+    if (code === 'ERR_DUPLICATE' && (await this.#registryHolds(dao, id, signed.verdict.verdict_hash))) {
+      this.#store.setRecordState(this.#s.network, dao, id, 'recorded');
+      this.#clearNoOutcome('record_no_outcome', dao);
+      this.#log.info('recorded', { dao, proposal_id: id, tx: res.hash, note: 'the registry already held this verdict' });
+      return 'recorded';
+    }
     if (code) {
       this.#store.setRecordState(this.#s.network, dao, id, 'refused');
       this.#log.error('record_refused', { dao, proposal_id: id, code, tx: res.hash });

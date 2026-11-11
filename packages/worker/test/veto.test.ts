@@ -1,9 +1,10 @@
 // The veto decision: the worker's mirror of the guard's ERR_NOT_VETOABLE rule (with its ai_status
 // rule), the last check against live state on both providers (C4, C22), and the veto itself: the
-// kind sent exactly as read (C5), veto_result read after the callback, a refusal raised, and a
-// veto and a record checked at once never both passing a NEAR cap with room for one (C29). Not
-// covered: the guard's own checks, which its sandbox tests and the testnet proof in PROOF.md show
-// on chain.
+// kind sent exactly as read (C5), veto_result read after the callback, a refusal raised, a
+// registry refusal of a verdict it already holds read back from its history before it counts as
+// recorded, and a veto and a record checked at once never both passing a NEAR cap with room for
+// one (C29). Not covered: the guard's own checks, which its sandbox tests and the testnet proof
+// in PROOF.md show on chain, and a primary provider that lies about the registry's history.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -122,6 +123,60 @@ test('a veto the guard refuses is logged with its code', async () => {
   const got = await s.actor.veto(DAO, 2, s.signed);
   assert.deepEqual([got.kind, got.kind === 'refused_by_guard' && got.code], ['refused_by_guard', 'ERR_NOT_ENROLLED']);
   assert.equal(events(s.lines(), 'tx_refused')[0]?.refusal, 'ERR_NOT_ENROLLED');
+});
+
+const historyReads = (s: ReturnType<typeof setup>) => s.a.calls.filter((c) => c.method === 'history');
+
+test('a record the registry refuses as a duplicate it already holds ends recorded, with no refusal raised', async () => {
+  const s = setup();
+  s.chain.respond = () => failedOutcome('ERR_DUPLICATE');
+  s.a.registryHistory.set(`${DAO}#2`, [s.signed.verdict.verdict_hash]);
+  assert.equal(await s.actor.record(DAO, 2, s.signed), 'recorded');
+  assert.equal(s.store.judged(NETWORK, DAO, 2)?.record_state, 'recorded');
+  assert.equal(s.health.has('record_refused', DAO), false);
+  assert.equal(events(s.lines(), 'record_refused').length, 0);
+  assert.equal(events(s.lines(), 'recorded')[0]?.note, 'the registry already held this verdict');
+  assert.deepEqual(historyReads(s).map((c) => c.at), [{ finality: 'final' }]);
+});
+
+test('a duplicate refusal the registry history does not confirm stays refused and raised, after five reads (C18)', async () => {
+  const s = setup();
+  s.chain.respond = () => failedOutcome('ERR_DUPLICATE');
+  s.a.registryHistory.set(`${DAO}#2`, ['e'.repeat(64)]);
+  assert.equal(await s.actor.record(DAO, 2, s.signed), 'refused');
+  assert.equal(s.store.judged(NETWORK, DAO, 2)?.record_state, 'refused');
+  assert.equal(s.health.has('record_refused', DAO), true);
+  assert.equal(events(s.lines(), 'record_refused')[0]?.code, 'ERR_DUPLICATE');
+  assert.equal(historyReads(s).length, 5);
+
+  // A registry that cannot be read confirms nothing either.
+  const down = setup();
+  down.chain.respond = () => failedOutcome('ERR_DUPLICATE');
+  down.a.registryHistory.set(`${DAO}#2`, [down.signed.verdict.verdict_hash]);
+  down.a.down = true;
+  assert.equal(await down.actor.record(DAO, 2, down.signed), 'refused');
+  assert.equal(down.health.has('record_refused', DAO), true);
+  assert.equal(historyReads(down).length, 5);
+});
+
+test('a verdict the registry holds on the second page of its history is found', async () => {
+  const s = setup();
+  s.chain.respond = () => failedOutcome('ERR_DUPLICATE');
+  const earlier = Array.from({ length: 50 }, (_, i) => i.toString(16).padStart(64, '0'));
+  s.a.registryHistory.set(`${DAO}#2`, [...earlier, s.signed.verdict.verdict_hash]);
+  assert.equal(await s.actor.record(DAO, 2, s.signed), 'recorded');
+  assert.equal(s.health.has('record_refused', DAO), false);
+  assert.equal(historyReads(s).length, 2, 'a full first page, then the second');
+});
+
+test('any other registry refusal, such as ERR_TOO_LARGE, still ends refused and raised', async () => {
+  const s = setup();
+  s.chain.respond = () => failedOutcome('ERR_TOO_LARGE');
+  s.a.registryHistory.set(`${DAO}#2`, [s.signed.verdict.verdict_hash]);
+  assert.equal(await s.actor.record(DAO, 2, s.signed), 'refused');
+  assert.equal(s.store.judged(NETWORK, DAO, 2)?.record_state, 'refused');
+  assert.equal(s.health.has('record_refused', DAO), true);
+  assert.equal(historyReads(s).length, 0, 'only a duplicate refusal is read back');
 });
 
 test('when the live state moved after the verdict, nothing is sent and a re-judge is asked for (C4)', async () => {

@@ -74,6 +74,8 @@ export class FakeProvider implements ViewProvider {
   acceptedKey = '';
   enrolled: string[] = [DAO];
   vetoResults = new Map<string, string | null>();
+  /** The registry's verdict hashes per `${dao}#${proposal_id}`, oldest first, as `history` pages them. */
+  registryHistory = new Map<string, string[]>();
   /** Liquid yoctoNEAR per account; 1 NEAR when unset. Every account uses 100 bytes of storage. */
   balances = new Map<string, bigint>();
   down = false;
@@ -106,6 +108,12 @@ export class FakeProvider implements ViewProvider {
     if (method === 'accepted_key') return this.#result(JSON.stringify(this.acceptedKey));
     if (method === 'enrolled_daos') return this.#result(JSON.stringify(Number(args.from_index) === 0 ? this.enrolled : []));
     if (method === 'veto_result') return this.#result(JSON.stringify(this.vetoResults.get(String(args.verdict_hash_hex)) ?? null));
+    if (method === 'history' && account === REGISTRY) {
+      if (!['mainnet', 'testnet', 'sandbox'].includes(String(args.network))) throw new Error('ERR_BAD_NETWORK');
+      const from = Number(args.from);
+      const page = (this.registryHistory.get(`${String(args.dao)}#${Number(args.proposal_id)}`) ?? []).slice(from, from + Math.min(Number(args.limit), 50));
+      return this.#result(JSON.stringify(page.map((verdict_hash, i) => ({ index: from + i, verdict_hash }))));
+    }
     throw new Error(`no fake answer for ${account}.${method}`);
   }
 
