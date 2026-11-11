@@ -476,3 +476,14 @@ price list); a kind or policy over kaap-core's 256 KiB limit, which always holds
 being judged; what an unknown receiver contract does; a NEAR AI model machine running a build
 nobody reviewed (no measurement allowlist, above); whether the model's judgement is right; and
 attacks on the TDX hardware, NVIDIA's GPUs or OutLayer's dstack stack, which this program trusts.
+
+Attestation says which software ran on which hardware. It does not say that software is free of
+bugs: a flaw inside a correctly measured machine, NEAR AI's or OutLayer's or this program's own,
+passes every check here.
+
+The AI opinion is only as available as NEAR AI's chat service. When that call fails or is slow,
+the verdict is still signed on the plain rules, with `ai_status` `unavailable` and the reason in
+the evidence record. The guard then vetoes what the plain rules alone call critical; a proposal
+that needed the model's opinion to reach critical is not vetoed while the service is down. On
+11 November 2026 NEAR AI's status page reported a major outage of its chat API, and three runs in
+a row on testnet ended that way.
