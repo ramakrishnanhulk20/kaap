@@ -418,9 +418,11 @@ export class Store {
   }
 
   /** Swaps in a new signing of the same transaction. Only for one the chain refused outright
-   *  (a nonce or expiry refusal), which can therefore never land. */
+   *  (a nonce or expiry refusal), which can therefore never land. The row goes back to the shape
+   *  `addSpend` writes, so one marked rejected before is counted at its worst case again while in
+   *  flight, not at the zero the rejection set (C29). */
   resign(key: string, txHash: string, signedB64: string, nonce: string): void {
-    this.db.prepare("UPDATE spend SET tx_hash = ?, signed_b64 = ?, nonce = ?, state = 'signed', refusal = NULL, include_height = NULL WHERE idempotency_key = ?").run(txHash, signedB64, nonce, key);
+    this.db.prepare("UPDATE spend SET tx_hash = ?, signed_b64 = ?, nonce = ?, state = 'signed', refusal = NULL, include_height = NULL, actual_yocto = NULL, finished_ms = NULL WHERE idempotency_key = ?").run(txHash, signedB64, nonce, key);
   }
 
   markSent(key: string, includeHeight: number | null): void {

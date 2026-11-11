@@ -1,6 +1,6 @@
 // The daily ceilings (C29): sealed runs and registry writes per DAO, and NEAR for the whole
 // worker, counted from the store so a restart never resets them, with transactions still in flight
-// counted at their worst case, runs started together held at their worst case before any is
+// counted at their worst case (one signed again after a refusal included), runs started together held at their worst case before any is
 // signed, and a sealed run a busy shard never took giving its reservation back before the retry.
 // Not covered: a second worker process sharing one key, which the deployment never runs, and the
 // text cap and its NEAR reserve, which texts.test.ts drives through POST /texts.
@@ -87,6 +87,19 @@ test('the global NEAR cap counts worst cases in flight and refuses what would cr
   store.addSpend({ idempotency_key: 'veto:c', kind: 'veto', network: NETWORK, dao: DAO, proposal_id: 3, tx_hash: 'h3', signed_b64: 'x', nonce: '3', reserved_yocto: run.toString() });
   store.markRejected('veto:c', 'InvalidNonce');
   assert.equal(store.spentOn('2026-11-02'), 4n * 10n ** 21n);
+});
+
+test("a spend row marked rejected and then signed again counts its reserved amount in the day's spend, not 0", () => {
+  const store = new Store(':memory:', () => T0);
+  const reserved = 23n * 10n ** 21n;
+  store.addSpend({ idempotency_key: 'record:a', kind: 'record', network: NETWORK, dao: DAO, proposal_id: 1, tx_hash: 'h1', signed_b64: 'x', nonce: '1', reserved_yocto: reserved.toString() });
+  const fresh = store.spend('record:a')!;
+  store.markRejected('record:a', 'InvalidNonce');
+  assert.equal(store.spentOn('2026-11-02'), 0n);
+  store.resign('record:a', 'h2', 'y', '2');
+  assert.equal(store.spentOn('2026-11-02'), reserved, 'in flight again, so counted at its worst case');
+  const again = store.spend('record:a')!;
+  assert.deepEqual([again.state, again.actual_yocto, again.finished_ms], [fresh.state, fresh.actual_yocto, fresh.finished_ms], 'the same shape as a freshly signed row');
 });
 
 test('runs started at once against a NEAR cap with room for two get exactly two through, never all of them (C29)', async () => {
