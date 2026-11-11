@@ -1,9 +1,10 @@
 // The first true decoders, each tested on three named records of the answer key: the Transfer
 // kind, AddMemberToRole with and without the policy before, the Transfer description checks, and
 // the high fallback for kinds nothing decodes. It does not cover NEW_RECIPIENT, LARGE_AMOUNT,
-// LOOKALIKE_TOKEN or any FunctionCall decoding (WO-03a), the other policy kinds (WO-03b), or
-// description claims beyond NEAR amounts and recipients (WO-03c). Agreement with the whole key is
-// the evaluation runner's job, not this file's.
+// LOOKALIKE_TOKEN or any FunctionCall decoding (tests/value_*.rs), the other policy kinds
+// (tests/policy_*.rs), or description claims beyond NEAR amounts and recipients
+// (tests/describe_*.rs). Agreement with the whole key is the evaluation runner's job, not this
+// file's.
 
 mod common;
 

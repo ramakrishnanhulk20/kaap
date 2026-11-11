@@ -1,9 +1,9 @@
-// Golden records for the description check: the five the work order names (techbros #4,
-// subdued-snow #6, nearlytrade #12, chicago #2, and defuse-labs #6 from the private second set),
-// one planted record per ruling 26 rule, the release table, and the three honest records the
-// first evaluation run flagged by mistake. Each asserts the check, the severity and the reason.
-// It does not cover the other records of the key (describe_eval.rs scores all of them) or
-// random text (describe_props.rs).
+// Golden records for the description check: five chosen records (techbros #4, subdued-snow #6,
+// nearlytrade #12, chicago #2, and defuse-labs #6 from the private second set), one planted
+// record per ruling 26 rule, the release table, and the three honest records the first
+// evaluation run flagged by mistake. Each asserts the check, the severity and the reason. It
+// does not cover the other records of the key (describe_eval.rs scores all of them) or random
+// text (describe_props.rs).
 
 mod common;
 

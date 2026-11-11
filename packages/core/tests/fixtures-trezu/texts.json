@@ -1,7 +1,7 @@
 [
   {
     "name": "swap",
-    "source": "1Click generate-intent swap_transfer response, reference/tech/intents/docs/integration__distribution-channels__1click-api__quickstart__signed-intent-execution.md lines 68-75 (saved 20 Oct 2026), nonce and intent as published, signer_id set to the DAO and the deadline moved after the test block. Trezu does not build this text: it passes 1Click's /v0/generate-intent answer through (NEAR-DevHub/trezu 7b063dd, nt-be/src/handlers/intents/confidential/generate_intent.rs 90-108).",
+    "source": "1Click generate-intent swap_transfer response, the example response on https://docs.near-intents.org/integration/distribution-channels/1click-api/quickstart/signed-intent-execution (read 20 Oct 2026), nonce and intent as published, signer_id set to the DAO and the deadline moved after the test block. Trezu does not build this text: it passes 1Click's /v0/generate-intent answer through (NEAR-DevHub/trezu 7b063dd, nt-be/src/handlers/intents/confidential/generate_intent.rs 90-108).",
     "dao": "kmxv7.sputnik-dao.near",
     "path": "kmxv7.sputnik-dao.near",
     "recipient": "intents.near",
@@ -10,7 +10,7 @@
   },
   {
     "name": "native_withdraw",
-    "source": "NativeWithdraw {receiver_id, amount} (near/intents d340060, contracts/defuse/core/src/intents/tokens.rs 436-439), listed in reference/tech/intents/docs/integration__verifier-contract__intent-types-and-execution.md line 270, which gives no example. 5 NEAR to vendor.near. The nonce is a versioned nonce with the 20 Oct salt 252812b3 and made-up bytes after it.",
+    "source": "NativeWithdraw {receiver_id, amount} (near/intents d340060, contracts/defuse/core/src/intents/tokens.rs 436-439), listed under withdrawal intents on https://docs.near-intents.org/integration/verifier-contract/intent-types-and-execution, which gives no example. 5 NEAR to vendor.near. The nonce is a versioned nonce with the 20 Oct salt 252812b3 and made-up bytes after it.",
     "dao": "kmxv7.sputnik-dao.near",
     "path": "kmxv7.sputnik-dao.near",
     "recipient": "intents.near",
@@ -19,7 +19,7 @@
   },
   {
     "name": "storage_deposit",
-    "source": "The storage_deposit example, reference/tech/intents/docs/integration__verifier-contract__intent-types-and-execution.md lines 315-345, nonce and intent as published, signer_id set to the DAO and the deadline moved after the test block.",
+    "source": "The storage_deposit example on https://docs.near-intents.org/integration/verifier-contract/intent-types-and-execution, nonce and intent as published, signer_id set to the DAO and the deadline moved after the test block.",
     "dao": "kmxv7.sputnik-dao.near",
     "path": "kmxv7.sputnik-dao.near",
     "recipient": "intents.near",

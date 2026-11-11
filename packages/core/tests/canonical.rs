@@ -1,7 +1,8 @@
 // Checks the canonical kind and policy forms: two reads of one live DAO proposal, made on 24 and
 // 26 Oct 2026 with no edit in between, hash alike; real edits and reorderings of ordered arrays
-// hash differently; and the strict parser refuses what it must. It does not check the hash against a live RPC read, and it
-// does not check that the guard forwards the raw kind bytes (WO-02a tests that on chain).
+// hash differently; and the strict parser refuses what it must. It does not check the hash
+// against a live RPC read, and it does not check that the guard forwards the raw kind bytes
+// (packages/contracts/tests/guard.rs tests that against the real Sputnik binary).
 
 use kaap_core::canonical::{
     canonical_kind, canonical_policy, kind_hash, policy_hash, CanonError, MAX_CANON_BYTES,

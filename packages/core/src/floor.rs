@@ -15,7 +15,7 @@ pub const REMOVE_MEMBER_FROM_ROLE: &str = "remove_member_from_role";
 /// `kind_label` is the proposal's Sputnik policy label. The risk floor is the highest severity,
 /// with UNKNOWN counted and reported as high, or low when nothing fired. `must_veto` is a
 /// critical floor. `veto_allowed` needs a high or critical floor, a high or critical finding
-/// other than HASH_UNVERIFIED (Ram's rule, 20 Oct 2026: an unverifiable hash alone never vetoes),
+/// other than HASH_UNVERIFIED (section 4, 20 Oct 2026: an unverifiable hash alone never vetoes),
 /// and a kind the Guard role can reject.
 pub fn finish(
     effects: Vec<Effect>,

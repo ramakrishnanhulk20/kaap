@@ -1,8 +1,9 @@
 // Scores `analyze` against the answer key (eval/real and eval/planted, guide v2.3) field by field
 // and prints the agreement table. It asserts only that all 373 records load and run without a
-// panic: agreement bars belong to the later work orders. It does not compare severities one by
-// one (the risk floor carries them), `should_veto`, `is_test` or the notes, and it never judges
-// whether the key or the decoder is right where they differ.
+// panic: agreement bars belong to the per-module scoreboards (value_eval.rs, policy_eval.rs,
+// describe_eval.rs, hash_eval.rs). It does not compare severities one by one (the risk floor
+// carries them), `should_veto`, `is_test` or the notes, and it never judges whether the key or
+// the decoder is right where they differ.
 //
 // KAAP_EVAL_FILTER=<kind or code> scores only the records of that kind (`Transfer`) or with that
 // finding code in the label or in the result (`DESC_CONTRADICTS`), and lists each one that

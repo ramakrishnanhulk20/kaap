@@ -1,9 +1,10 @@
-// Scores `analyze` on the answer-key records whose label holds only value-type effects (the
-// WO-03a scoreboard): the effects multiset, the set of codes `decode::value` owns, and the veto
-// fields on the records whose label carries no description, prompt or hash code. It prints the
-// table and every record that differs, then fails below the work order's bars. It does not score
-// the codes of other modules, the risk floor or the description check, and it never judges
-// whether the key or the decoder is right where they differ; docs/answer-key-notes/value-decoder.md does that.
+// Scores `analyze` on the answer-key records whose label holds only value-type effects: the
+// effects multiset, the set of codes `decode::value` owns, and the veto fields on the records
+// whose label carries no description, prompt or hash code. It prints the table and every record
+// that differs, then fails below its bars (98 percent on effects, 97 on owned codes, every scored
+// veto field). It does not score the codes of other modules, the risk floor or the description
+// check, and it never judges whether the key or the decoder is right where they differ;
+// docs/answer-key-notes/value-decoder.md does that.
 
 mod common;
 
@@ -41,7 +42,7 @@ const OWNED: [FindingCode; 9] = [
     IntentsKeyChange,
 ];
 
-/// Codes of the description check (WO-03c) and the hash check (WO-04). A label carrying one of
+/// Codes of the description check (`describe`) and the hash check (`hash`). A label carrying one of
 /// them can floor at critical for a reason this decoder does not own.
 const OTHER_MODULES: [FindingCode; 6] =
     [DescContradicts, EmptyDescription, PromptInjection, HashUnverified, HashMismatch, HashTextDangerous];
@@ -89,7 +90,7 @@ fn value_eval() {
     let veto = rows.iter().filter(|r| r.veto_scored && r.veto.is_none()).count();
 
     println!();
-    println!("== WO-03a value records: {of} of 373");
+    println!("== value records: {of} of 373");
     println!("{:<44} {:>6} {:>6} {:>8}", "measure", "agree", "of", "percent");
     println!("{:<44} {effects:>6} {of:>6} {:>8}", "effects multiset", percent(effects, of));
     println!("{:<44} {effects_exact:>6} {of:>6} {:>8}", "effects multiset, protocol case kept", percent(effects_exact, of));

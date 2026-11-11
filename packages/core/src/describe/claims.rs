@@ -91,7 +91,7 @@ pub struct PolicyClaims {
 }
 
 impl PolicyClaims {
-    /// True when the text names a specific member, role or threshold change (Ram, 26 Oct 2026).
+    /// True when the text names a specific member, role or threshold change (ruling 22, 26 Oct 2026).
     pub fn names_a_change(&self) -> bool {
         !self.adds.is_empty() || !self.removes.is_empty() || !self.rosters.is_empty() || self.threshold.is_some()
     }

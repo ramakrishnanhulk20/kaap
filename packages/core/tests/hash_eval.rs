@@ -1,4 +1,4 @@
-// The WO-04 scoreboard: `analyze` on every record a `sign` call or a hash text decides (every
+// The hash scoreboard: `analyze` on every record a `sign` call or a hash text decides (every
 // real record whose kind calls `sign` on v1.signer, planted families i, j and k, and the auth
 // control #62), scored on the finding codes and the risk floor, with must_veto, veto_allowed,
 // effects and the description check printed beside them. It fails unless codes and floor agree
@@ -104,7 +104,7 @@ fn hash_eval() {
 
     let of = records.len();
     println!();
-    println!("== WO-04 hash scoreboard: {real} real sign records, {} planted hash records", of - real);
+    println!("== hash scoreboard: {real} real sign records, {} planted hash records", of - real);
     println!("{:<20} {:>6} {:>6}", "field", "agree", "of");
     for (field, agreed) in fields.iter().zip(agree) {
         println!("{field:<20} {agreed:>6} {of:>6}");

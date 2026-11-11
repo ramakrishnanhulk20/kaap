@@ -1,6 +1,6 @@
 //! Policy kinds: what the text says about members, rosters, thresholds and roles, against what
-//! the change does measured from the policy before (guide sections 4 and 7; rulings 9, 22 to 25,
-//! and Ram's rule of 26 Oct 2026).
+//! the change does measured from the policy before (guide sections 4 and 7; rulings 9 and 22 to
+//! 25, ruling 22 being the hidden-control rule of 26 Oct 2026).
 //!
 //! A described change that the effects do not make, including one already in place, is a
 //! contradiction. When the text names a specific member, role or threshold change, any change of

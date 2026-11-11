@@ -1,8 +1,8 @@
 // Differential test: kaap-core's port of Sputnik's `can_execute_action` and of the threshold in
 // `proposal_status` (kaap_core::policy::sputnik) against the real Sputnik DAO 3.2 binary.
 //
-// The policies are the head chef's list: the policy before of the first 20 distinct DAOs, in
-// record-id order, among eval/real/sample.jsonl records with a policy kind. Four planted policies
+// The policies are a fixed list: the policy before of the first 20 distinct DAOs, in record-id
+// order, among eval/real/sample.jsonl records with a policy kind. Four planted policies
 // are added because no real one has duplicate role names or a reject-only guard: the after policies
 // of planted:11, 12 and 13 (two roles of one name) and the planted harness policy. Each policy is
 // deployed exactly as written on Sputnik 3.2 (code hash checked) in a fresh sandbox, with every
@@ -24,8 +24,8 @@
 // one allowed account per kind; proposal expiry.
 //
 // One more test uses the same sandbox setup: `guard_arming_agrees_with_the_binary` checks
-// `policy::arming` (C16) on the M1 testnet policy and three edits of it, the guard's own reject and
-// the other accounts `others_who_reject_alone` lists.
+// `policy::arming` (C16) on the testnet demo DAO's policy and three edits of it, the guard's own
+// reject and the other accounts `others_who_reject_alone` lists.
 //
 // Run inside WSL after `bash scripts/fetch-sputnik-wasm.sh`. NEAR_SANDBOX_BIN_PATH may point at a
 // neard sandbox binary already on disk; otherwise near-sandbox downloads one.
@@ -691,7 +691,7 @@ async fn check_label(dao: Arc<Dao>, label: &'static str) -> Result<LabelReport> 
     Ok(report)
 }
 
-/// The M1 testnet DAO's policy as scripts/setup-demo-dao.mjs `demoPolicy` builds it: the
+/// The testnet demo DAO's policy as scripts/setup-demo-dao.mjs `demoPolicy` builds it: the
 /// saved NEAR Business template with the owner and the demo member in its places, plus a `guard`
 /// role holding the guard alone, VoteReject on every label but remove_member_from_role, threshold
 /// "1" on each. Returns the policy and the guard account.
@@ -738,12 +738,12 @@ fn add_to_guard_role(policy: &mut Value, account: &str) {
     }
 }
 
-/// C16 against the binary. For the M1 testnet policy and three edits of it, the guard tries to
-/// file one proposal of every kind, then casts one VoteReject on a proposal of that kind, and the
-/// binary's answer is compared with `guard_arming`: the filing with `extra_rights`, the reject
-/// with `rejects_alone`. Then every account `others_who_reject_alone` lists for the kind casts one
-/// VoteReject on its own fresh proposal, which must come out Rejected. It prints one line per
-/// check. It does NOT cover approval races, a guard with delegated tokens, kinds nobody in the
+/// C16 against the binary. For the testnet demo DAO's policy and three edits of it, the guard
+/// tries to file one proposal of every kind, then casts one VoteReject on a proposal of that kind,
+/// and the binary's answer is compared with `guard_arming`: the filing with `extra_rights`, the
+/// reject with `rejects_alone`. Then every account `others_who_reject_alone` lists for the kind
+/// casts one VoteReject on its own fresh proposal, which must come out Rejected. It prints one line
+/// per check. It does NOT cover approval races, a guard with delegated tokens, kinds nobody in the
 /// policy may file (listed as notes), or accounts left off `others_who_reject_alone`.
 #[tokio::test(flavor = "multi_thread")]
 async fn guard_arming_agrees_with_the_binary() -> Result<()> {
@@ -756,9 +756,9 @@ async fn guard_arming_agrees_with_the_binary() -> Result<()> {
     let mut harness = harness_policy()?;
     add_to_guard_role(&mut harness, "second-guard.sandbox");
     let cases = [
-        ("M1 testnet policy", m1, guard.clone()),
-        ("M1, a second guard member", second, guard.clone()),
-        ("M1, Everyone may file", everyone, guard),
+        ("demo DAO testnet policy", m1, guard.clone()),
+        ("demo DAO, a second guard member", second, guard.clone()),
+        ("demo DAO, Everyone may file", everyone, guard),
         ("harness, a second guard member", harness, "guard.sandbox".to_string()),
     ];
     let mut runs = JoinSet::new();

@@ -31,7 +31,7 @@ num-bigint = "=0.5.1"
 unicode-normalization = "=0.1.26"
 
 # Cargo reads profiles only from the workspace root, so the contract settings live here.
-# These match what the M0 contracts built and deployed with.
+# These match what the first sandbox contracts built and deployed with.
 [profile.release]
 codegen-units = 1
 opt-level = "z"

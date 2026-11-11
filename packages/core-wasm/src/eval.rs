@@ -1,6 +1,6 @@
 //! The answer-key scoreboards behind `kaap eval`, ported from kaap-core's own tests so the CLI
 //! prints the numbers `cargo test -p kaap-core` prints: `tests/eval.rs` (every field), and the
-//! work-order scoreboards `value_eval.rs`, `policy_eval.rs`, `describe_eval.rs` and `hash_eval.rs`.
+//! per-module scoreboards `value_eval.rs`, `policy_eval.rs`, `describe_eval.rs` and `hash_eval.rs`.
 //! Each selection, normalisation and count below is copied from those files; a change there must be
 //! copied here, and the CLI test that pins today's numbers fails until it is.
 //!
@@ -68,7 +68,7 @@ fn read_jsonl(text: &str) -> Result<Vec<Value>, Error> {
 }
 
 /// One answer-key record as the ProposalInput `scoreboards` judges, priced with the census token
-/// list, written by serde: the input of kaap-sealed's eval mode (WO-05c), so the AI run and the
+/// list, written by serde: the input of kaap-sealed's eval mode, so the AI run and the
 /// scoreboards judge the very same inputs. The error never quotes the record.
 pub fn eval_input(record_json: &str, tokens_json: &str) -> Result<String, Error> {
     let prices = prices_from_tokens(tokens_json)?;
@@ -78,7 +78,7 @@ pub fn eval_input(record_json: &str, tokens_json: &str) -> Result<String, Error>
 }
 
 /// `eval_input` with the price table cut down, for a record whose full input is over the sealed
-/// job's 32 KiB (WO-05c). Kept: `near`, and every price whose token id is a string somewhere in the
+/// job's 32 KiB cap. Kept: `near`, and every price whose token id is a string somewhere in the
 /// effects kaap-core finds with the full table. Refused unless kaap-core's whole analysis (effects,
 /// findings, floor, description check and veto fields) is the same with the cut table as with the
 /// full one, so the cut changes the size and nothing that is judged.
@@ -159,7 +159,7 @@ fn supplied(t: &Value) -> Result<SuppliedText, String> {
     })
 }
 
-/// Codes of the description check (WO-03c) and the hash check (WO-04). A label carrying one of
+/// Codes of the description check (`describe`) and the hash check (`hash`). A label carrying one of
 /// them can floor at critical for a reason the value and policy decoders do not own.
 const OTHER_MODULES: [FindingCode; 6] = [DescContradicts, EmptyDescription, PromptInjection, HashUnverified, HashMismatch, HashTextDangerous];
 

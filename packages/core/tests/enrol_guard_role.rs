@@ -1,6 +1,6 @@
 // Kaap's own enrolment role draft read with the guard account known: the exact role the template
 // adds (`enrolment::role`, which core-wasm's drafts are built from) gives no GUARD_WEAKENED, and
-// every departure from it still does, on the M1 testnet DAO's policy as it was before enrolment.
+// every departure from it still does, on the testnet demo DAO's policy as it was before enrolment.
 // It does NOT cover the draft with no policy before (GUARD_WEAKENED still fires there, since the
 // guard's roles cannot be known), the guard account being Kaap's (the caller vouches for that),
 // the template's `enroll` call (enrol_guard_call.rs), or a DAO on a Sputnik version other than 3.2.
@@ -13,7 +13,7 @@ use kaap_core::policy::GUARD_ROLE;
 use kaap_core::{analyze, FindingCode, Network, Prices, ProposalInput};
 use serde_json::{json, Value};
 
-/// The M1 testnet DAO's policy before enrolment, rebuilt as scripts/setup-demo-dao.mjs
+/// The testnet demo DAO's policy before enrolment, rebuilt as scripts/setup-demo-dao.mjs
 /// builds it (the NEAR Business template with the owner and the demo member in its places), the
 /// DAO and the guard account.
 fn dao_before() -> (Value, String, String) {
@@ -65,7 +65,7 @@ fn add_role(role: Value) -> Value {
     json!({ "ChangePolicyAddOrUpdateRole": { "role": role } })
 }
 
-/// The findings for adding `role` to the M1 DAO before enrolment.
+/// The findings for adding `role` to the demo DAO before enrolment.
 fn codes_for_role(role: Value) -> Vec<FindingCode> {
     let (policy, dao, guard) = dao_before();
     codes(add_role(role), policy, &dao, &guard)

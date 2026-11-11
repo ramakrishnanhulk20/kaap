@@ -28,7 +28,7 @@ and prints the exact count beside it.
 ## Readings the agreement rests on
 
 These records agree, but each agreement depends on a reading the guide does not spell out. They
-are listed so the head chef can rule on the reading, not only on the result.
+are listed so the reading can be ruled on, not only the result.
 
 1. planted:23, 24, 25, 47 and 53 send tokens to `intents.near` with a message of the form
    `{"intents":[{"intent":"ft_withdraw", ..., "chain":"eth"}]}`. That is not the deposit message

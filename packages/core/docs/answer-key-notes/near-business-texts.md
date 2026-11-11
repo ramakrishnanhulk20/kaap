@@ -1,29 +1,29 @@
-# Honest NEAR Business texts: where the code, the order and the sources differ
+# Honest NEAR Business texts: where the code, the plan and the sources differ
 
 Built on 2 Nov 2026. Trezu was read one file at a time through `gh api` at `NEAR-DevHub/trezu` main 7b063dd (30 Oct 2026). The verifier was read at `near/intents` main d340060 (21 Oct 2026). Mainnet was read with views only.
 
-## 1. Where each text comes from (DONE MEANS 1)
+## 1. Where each text comes from
 
 Trezu builds only its two login texts itself. Every money text (payment, swap, bulk leg) comes from 1Click's `/v0/generate-intent`, which Trezu passes through and hashes (`nt-be/src/handlers/intents/confidential/generate_intent.rs` 90-108, `bulk_payment_prepare.rs` 239-255). As ruled, those texts are built from the 1Click and NEAR Intents docs instead. All are in `tests/fixtures-trezu/texts.json`, each with its source, and `tests/hash_trezu.rs` reads each one.
 
 | text | source | Kaap reads it as |
 |---|---|---|
-| swap | 1Click swap_transfer example, `reference/tech/intents/docs/integration__distribution-channels__1click-api__quickstart__signed-intent-execution.md` 68-75 | `intents_swap`, no finding |
-| NEAR withdrawal | `NativeWithdraw`, near/intents `contracts/defuse/core/src/intents/tokens.rs` 436-439; docs `integration__verifier-contract__intent-types-and-execution.md` 270 | `intents_withdraw` near, near, receiver |
-| storage registration | docs `integration__verifier-contract__intent-types-and-execution.md` 315-345 | `storage_deposit`, no finding |
+| swap | 1Click swap_transfer example response, https://docs.near-intents.org/integration/distribution-channels/1click-api/quickstart/signed-intent-execution | `intents_swap`, no finding |
+| NEAR withdrawal | `NativeWithdraw`, near/intents `contracts/defuse/core/src/intents/tokens.rs` 436-439; the withdrawal intents list on https://docs.near-intents.org/integration/verifier-contract/intent-types-and-execution | `intents_withdraw` near, near, receiver |
+| storage registration | the `storage_deposit` section of https://docs.near-intents.org/integration/verifier-contract/intent-types-and-execution | `storage_deposit`, no finding |
 | bulk-payment login | Trezu `nt-be/src/handlers/intents/confidential/prepare_auth.rs` 92-202, signer from `nt-be/src/handlers/treasury/confidential_setup.rs` 266-294 and `nt-be/src/utils/env.rs` 126-129 | `sign_request` alone, no finding |
-| DAO login | Trezu `prepare_auth.rs` 92-187 | `sign_request` alone, no finding (read before this order too) |
-| Trezu's own samples | `nt-be/examples/fixtures/signed_confidential_intent.json` 3-8 (signed for real), `nt-fe/e2e/fixtures/confidential-intent.json` 4-8, `sandbox/sandbox-init/src/mock_server.rs` 129-160 | `intents_transfer` to the deposit address, no finding (read before this order too) |
+| DAO login | Trezu `prepare_auth.rs` 92-187 | `sign_request` alone, no finding (read this way before this change too) |
+| Trezu's own samples | `nt-be/examples/fixtures/signed_confidential_intent.json` 3-8 (signed for real), `nt-fe/e2e/fixtures/confidential-intent.json` 4-8, `sandbox/sandbox-init/src/mock_server.rs` 129-160 | `intents_transfer` to the deposit address, no finding (read this way before this change too) |
 
 ## 2. What the sources do not settle
 
-- **A two-token `token_diff` is documented, not observed.** 1Click's docs show generate-intent swap_transfer returning a `token_diff`. Every Trezu sample is a same-token wNEAR `transfer` to a deposit address. NEAR Intents issue #383 (open since 18 Oct, `reference/tech/intents/repo.md`) reports that confidential cross-token swaps fail on every route. So no text exists yet that proves 1Click's shape for a Trezu swap.
+- **A two-token `token_diff` is documented, not observed.** 1Click's docs show generate-intent swap_transfer returning a `token_diff`. Every Trezu sample is a same-token wNEAR `transfer` to a deposit address. NEAR Intents issue #383 (open since 18 Oct, https://github.com/near/intents/issues/383) reports that confidential cross-token swaps fail on every route. So no text exists yet that proves 1Click's shape for a Trezu swap.
 - **The bulk sub-account is `<prefix>.bulkpayment.near`, not `.bulk-payment.near`.** Trezu derives `<prefix>.<BULK_PAYMENT_CONTRACT_ID>`, and that setting defaults to `bulkpayment.near`. Mainnet confirms it: `kmxv7.bulkpayment.near` `get_bootstrap_status` is Ready at block 222705041. `bulk-payment.near` does not exist at block 222705043, and `kmxv7.bulk-payment.near` does not exist at block 222705039. The hyphenated name comes only from a doc comment (`confidential_setup.rs` 300). `.bulk-payment.near` is an attack case in `hash_trezu.rs`.
 - **Trezu's mock signer.** The mock 1Click copies the request's `signerId` into `signer_id`, and Trezu sends that as `near:<dao>` (`generate_intent.rs` 21, 49-51). A text built exactly as the mock builds it is SignerNotTheDao, so HASH_TEXT_DANGEROUS, and the verifier could not run it either. The fixture uses the bare DAO, which is what 1Click writes in the signed sample.
 
 ## 3. Choices made in the code
 
-- **An empty `msg` counts.** A withdrawal with any `msg`, the empty string included, adds the `unknown_call` on the receiver. The order said "non-empty", but the verifier runs `ft_transfer_call` whenever `msg` is present (`is_call` is `msg.is_some()`, `tokens.rs` 177-181; `nep141/withdraw.rs` 141-149; `nep245/withdraw.rs` 185-203). The rule applies to both paths, because the hash path reads withdrawals through `decode::intents`.
+- **An empty `msg` counts.** A withdrawal with any `msg`, the empty string included, adds the `unknown_call` on the receiver. The plan said "non-empty", but the verifier runs `ft_transfer_call` whenever `msg` is present (`is_call` is `msg.is_some()`, `tokens.rs` 177-181; `nep141/withdraw.rs` 141-149; `nep245/withdraw.rs` 185-203). The rule applies to both paths, because the hash path reads withdrawals through `decode::intents`.
 - **The direct withdraw methods pay no storage deposit.** The `ft_withdraw` and `mt_withdraw` methods set `storage_deposit: None` (`nep141/withdraw.rs` 27-50, `nep245/withdraw.rs` 32-58). So the `storage_deposit` field is read only on an intent (signed, or inside `execute_intents` or a deposit message). On a direct method call it is ignored.
 - **`token_diff` shape.** Kaap reads exactly `intent`, `diff`, an optional string `memo` and an optional account `referral`. Neither of the last two moves anything (`token_diff.rs` 30-39, 42-104). Kaap refuses an empty diff, a zero entry (the verifier refuses both, 52-62), a sign other than one leading `-`, and more than 127 bits.
 - **`storage_deposit` shape.** The account field may be `deposit_for_account_id` or its alias `account_id` (`tokens.rs` 480-488), but not both at once.
@@ -35,11 +35,11 @@ Trezu builds only its two login texts itself. Every money text (payment, swap, b
 
 ## 4. Scoreboards
 
-Before any change (2 Nov, WSL, `CARGO_TARGET_DIR=~/kaap-target-03b`): hash_eval 42/42 on finding codes, floor and must_veto; policy_eval 129/129 and 97/97; describe_eval 356/373, 373, 373, 337/337, with 0 false fires in 599; value_eval 205/205 and 147/147. These are the order's numbers.
+Before any change (2 Nov, WSL, `CARGO_TARGET_DIR=~/kaap-target-03b`): hash_eval 42/42 on finding codes, floor and must_veto; policy_eval 129/129 and 97/97; describe_eval 356/373, 373, 373, 337/337, with 0 false fires in 599; value_eval 205/205 and 147/147. These are the baseline.
 
 After the change, `cargo test -j 2 -p kaap-core -p kaap-sealed --no-fail-fast -- --nocapture` passed: 248 tests in 36 binaries, 0 failed, 0 warnings, `hash_trezu` 14 and `value_withdraw_fields` 5 included. Every scoreboard is the same as before: hash_eval 42/42 on finding codes, floor, must_veto, veto_allowed and effects; policy_eval 129/129 and 97/97; describe_eval 356/373, 373, 373, 337/337, with 0 false fires in 599; value_eval 205/205 and 147/147. `cargo tree` for kaap-guard and kaap-registry shows kaap-verdict and no kaap-core. No record moved.
 
-This matches a scan of every record in `eval/real` and `eval/planted` (a one-off script, run 2 Nov). It found no withdrawal with `msg` or `storage_deposit`, and no `native_withdraw` or `storage_deposit` intent. The only two `token_diff`s are planted:31 (a hash mismatch) and planted:61 (a direct deposit message, read by `decode`, which this order did not change).
+This matches a scan of every record in `eval/real` and `eval/planted` (a one-off script, run 2 Nov). It found no withdrawal with `msg` or `storage_deposit`, and no `native_withdraw` or `storage_deposit` intent. The only two `token_diff`s are planted:31 (a hash mismatch) and planted:61 (a direct deposit message, read by `decode`, which this change did not touch).
 
 ## 5. Guide lines to add, one per new reading
 

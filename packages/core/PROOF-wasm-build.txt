@@ -1,11 +1,11 @@
-WO-01a proof run, 2026-10-29 04:18 UTC, inside WSL, CARGO_TARGET_DIR=/home/ram/kaap-target
+Proof run of the core library build, 2026-10-29 04:18 UTC, inside WSL, CARGO_TARGET_DIR=~/kaap-target
 rustc 1.93.0 (254b59607 2026-01-19)
 cargo 1.93.0 (083ac5135 2025-12-15)
 
-== DONE MEANS 1: bash scripts/test-all.sh
+== Check 1: bash scripts/test-all.sh
    Compiling kaap-core v0.1.0 (/mnt/d/Projects/Near Hackathan/packages/core)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.75s
-     Running unittests src/lib.rs (/home/ram/kaap-target/debug/deps/kaap_core-8ae2b93442f97222)
+     Running unittests src/lib.rs (~/kaap-target/debug/deps/kaap_core-8ae2b93442f97222)
 
 running 3 tests
 test decode::known::tests::exact_accounts_only ... ok
@@ -14,7 +14,7 @@ test tests::labels_match_sputnik ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/canonical.rs (/home/ram/kaap-target/debug/deps/canonical-564fd4768e59c6df)
+     Running tests/canonical.rs (~/kaap-target/debug/deps/canonical-564fd4768e59c6df)
 
 running 11 tests
 test arrays_outside_the_two_sets_keep_their_order ... ok
@@ -31,7 +31,7 @@ test input_over_256_kib_is_refused ... ok
 
 test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
-     Running tests/floor.rs (/home/ram/kaap-target/debug/deps/floor-4aaf654ba0a19871)
+     Running tests/floor.rs (~/kaap-target/debug/deps/floor-4aaf654ba0a19871)
 
 running 3 tests
 test codes_are_deduplicated_and_ordered_by_the_table ... ok
@@ -40,7 +40,7 @@ test twelve_floor_and_veto_cases ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/severity.rs (/home/ram/kaap-target/debug/deps/severity-ccee5f1a0e2e52c2)
+     Running tests/severity.rs (~/kaap-target/debug/deps/severity-ccee5f1a0e2e52c2)
 
 running 7 tests
 test codes_other_than_desc_contradicts_ignore_context ... ok
@@ -53,7 +53,7 @@ test desc_contradicts_is_high_without_value_or_control ... ok
 
 test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/verdict.rs (/home/ram/kaap-target/debug/deps/verdict-bb2da5e6d2bd19d1)
+     Running tests/verdict.rs (~/kaap-target/debug/deps/verdict-bb2da5e6d2bd19d1)
 
 running 5 tests
 test bytes_start_with_the_domain_prefix ... ok
@@ -64,25 +64,25 @@ test hash_is_sha256_of_the_bytes_and_every_field_counts ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/lib.rs (/home/ram/kaap-target/debug/deps/kaap_core_wasm-452119c5d4c78014)
+     Running unittests src/lib.rs (~/kaap-target/debug/deps/kaap_core_wasm-452119c5d4c78014)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/lib.rs (/home/ram/kaap-target/debug/deps/kaap_guard-177fdd1289035ab2)
+     Running unittests src/lib.rs (~/kaap-target/debug/deps/kaap_guard-177fdd1289035ab2)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/lib.rs (/home/ram/kaap-target/debug/deps/kaap_registry-0ece0cef2c3d9016)
+     Running unittests src/lib.rs (~/kaap-target/debug/deps/kaap_registry-0ece0cef2c3d9016)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/lib.rs (/home/ram/kaap-target/debug/deps/kaap_sealed-23933aa23cb83c6a)
+     Running unittests src/lib.rs (~/kaap-target/debug/deps/kaap_sealed-23933aa23cb83c6a)
 
 running 0 tests
 
@@ -120,9 +120,9 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 EXIT test-all.sh: 0
 
-== DONE MEANS 2: cargo build -p kaap-core --target wasm32-unknown-unknown
+== Check 2: cargo build -p kaap-core --target wasm32-unknown-unknown
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
 EXIT wasm32-unknown-unknown: 0
-== DONE MEANS 2: cargo build -p kaap-core --target wasm32-wasip2
+== Check 2: cargo build -p kaap-core --target wasm32-wasip2
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.19s
 EXIT wasm32-wasip2: 0

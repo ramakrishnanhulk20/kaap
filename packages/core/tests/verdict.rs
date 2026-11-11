@@ -1,6 +1,7 @@
 // Checks the verdict encoding: the domain prefix, a borsh round trip, a byte layout built by hand
 // so a reordered field or variant fails, and that every field changes the hash. It does not check
-// signatures (the sealed job and the guard do) or that a contract decodes the same bytes (WO-02a).
+// signatures (the sealed job and the guard do) or that a contract decodes the same bytes
+// (packages/contracts/tests/guard.rs does).
 
 use borsh::BorshDeserialize;
 use kaap_core::verdict::{verdict_bytes, verdict_hash, VERDICT_DOMAIN, VERDICT_VERSION};

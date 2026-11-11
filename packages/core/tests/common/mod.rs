@@ -111,11 +111,12 @@ pub fn codes(analysis: &Analysis) -> Vec<FindingCode> {
     analysis.findings.iter().map(|f| f.code).collect()
 }
 
-/// USD prices from the census token list (`tests/fixtures/tokens.json`, a byte copy of
-/// `reference/dao-census/raw/tokens.json`), keyed the way the guide writes tokens: `nep141:`
-/// dropped, every other id kept whole. A missing, zero or non-finite price is left out, so the
-/// token reads as unpriced (C2: never "0 USD"). Native NEAR is not in the list; it is priced as
-/// `wrap.near`, which wraps it one to one with the same 24 decimals.
+/// USD prices from the census token list (`tests/fixtures/tokens.json`, 1Click's
+/// `GET https://1click.chaindefuser.com/v0/tokens` as read on 20 Oct 2026), keyed the way the
+/// guide writes tokens: `nep141:` dropped, every other id kept whole. A missing, zero or
+/// non-finite price is left out, so the token reads as unpriced (C2: never "0 USD"). Native NEAR
+/// is not in the list; it is priced as `wrap.near`, which wraps it one to one with the same 24
+/// decimals.
 pub fn census_prices() -> Prices {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join("tokens.json");
     let list: Vec<Value> = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();

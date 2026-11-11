@@ -1,11 +1,11 @@
 // NEAR Intents' Omni token ids for BNB Chain, Polygon and Avalanche (changelog of 9 Nov 2026,
-// saved in reference/launch-scans/2026-11-11/raw): each new `.omdep.near` id names the same chain
-// as the HOT id it replaced, a direct withdrawal of one to its own contract leaves NEAR, and a
-// quote paying one out fires CROSS_CHAIN_OUT. The other Omni stems in 1Click's list read as the
-// chain 1Click names, except `strk`, which reads `unknown`. Not covered here: how the Omni Bridge
-// releases the funds on the other chain, stems 1Click adds after 11 Nov 2026 (they read as
-// `unknown`), and a quote signed by 1Click's production key, which `check` alone accepts
-// (hash_quotes.rs).
+// https://docs.near-intents.org/changelog/entries/2026-11-09-evm-omni-token-ids.md): each new
+// `.omdep.near` id names the same chain as the HOT id it replaced, a direct withdrawal of one to
+// its own contract leaves NEAR, and a quote paying one out fires CROSS_CHAIN_OUT. The other Omni
+// stems in 1Click's list read as the chain 1Click names, except `strk`, which reads `unknown`.
+// Not covered here: how the Omni Bridge releases the funds on the other chain, stems 1Click adds
+// after 11 Nov 2026 (they read as `unknown`), and a quote signed by 1Click's production key,
+// which `check` alone accepts (hash_quotes.rs).
 
 use base64::Engine as _;
 use kaap_core::decode::value::decode;

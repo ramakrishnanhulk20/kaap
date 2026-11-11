@@ -17,13 +17,14 @@ The 599 real records are the 300 of `eval/real` and the 299 of the private secon
 must-veto records and planted families n and o come out as the key says on `must_veto`, the risk
 floor, the description check, DESC_CONTRADICTS and PROMPT_INJECTION. The six `must_veto`
 differences on all records are planted 29 to 34, whose criticals are HASH_MISMATCH and
-HASH_TEXT_DANGEROUS; `hash::check` is a stub until WO-04.
+HASH_TEXT_DANGEROUS; `hash::check` was still a stub at this run (its own results are in
+hash-checker.md).
 
 ## Records whose description check differs (20)
 
 No record differs on DESC_CONTRADICTS or PROMPT_INJECTION. Nineteen of the twenty are `matches` in
 the key and `vague` here: the key read a claim the plain code does not read with certainty, which
-the work order says to leave to the AI.
+is left to the AI by design.
 
 | record | key | check | which is right, and why |
 |---|---|---|---|
@@ -39,16 +40,16 @@ the work order says to leave to the AI.
 | mainnet:sweat-multisig.sputnik-dao.near:14 | matches | vague | "Ship a stored blob as code for another contract": no list word for an upgrade. |
 | mainnet:sweat-multisig.sputnik-dao.near:4 | matches | vague | "Change the fallback vote policy": "vote policy" is not read as a threshold claim, because planted 06 and 07 use the same words and the key calls them `vague`. |
 | mainnet:templar.sputnik-dao.near:198 | matches | vague | The text names `ixlmdejaaa-ixlmusdc-2`, part of the receiver's name, not the account. |
-| mainnet:templar.sputnik-dao.near:206 | matches | vague | The key's agreeing effect is a `sign_request` and a delegate-action `unknown_call`, which `hash::check` produces from WO-04 on; today there is no effect to agree with. |
+| mainnet:templar.sputnik-dao.near:206 | matches | vague | The key's agreeing effect is a `sign_request` and a delegate-action `unknown_call`, which `hash::check` did not yet produce at this run, so there was no effect to agree with. |
 | mainnet:templar.sputnik-dao.near:216 | matches | vague | As templar 206. |
-| mainnet:petersalomonsendev.sputnik-dao.near:69 | matches | vague | "via v1.signer" agrees with a `sign_request` effect, which WO-04 produces. |
-| planted:62 | matches | vague | A `sign_request` with a supplied text; WO-04's record. |
-| planted:30 | hidden | vague | "Confidential request from external dApp." says nothing is hidden; the key reads it as hidden by design. WO-04's record. |
+| mainnet:petersalomonsendev.sputnik-dao.near:69 | matches | vague | "via v1.signer" agrees with a `sign_request` effect, which the hash check produces and did not yet at this run. |
+| planted:62 | matches | vague | A `sign_request` with a supplied text; a hash check record (hash-checker.md). |
+| planted:30 | hidden | vague | "Confidential request from external dApp." says nothing is hidden; the key reads it as hidden by design. A hash check record (hash-checker.md). |
 | planted:05 | matches | vague | "Enable community participation in voting.": no list word ties it to the role it adds. |
 | planted:64 | matches | vague | "Monthly bulk payroll to 25 contributors via the bulk payment contract" over an unknown `run_payout` call; "payroll" is generic (guide section 5). |
 | planted:12 | vague | matches | "Add a redundant guard for resilience." leads with "add" and a member is added. The key calls the same shape `matches` in planted:09 ("Add a backup approver for continuity."); the check treats both alike. |
 
-## Narrowed during the run (DONE MEANS 8)
+## Narrowed during the run
 
 The first full run fired DESC_CONTRADICTS on 16 real records the key calls `matches` (testing-1212
 #2 under two rules). Each rule was narrowed at its cause, not per record, and the final run fired
@@ -70,14 +71,14 @@ on none of the 599.
 
 ## Two earlier tests, and one that ruling 28 changes
 
-`tests/decoders.rs` (WO-01b) caught two errors in the first version, both fixed here: a policy
-change measured without the policy before fed the control rules (guide section 7 says fire
-nothing that needs it), and a swap text's amounts were compared, though a swap names amounts on
-both sides. One test there now fails by design: `a_kind_the_policy_engine_decodes_gets_its_own_code`
-builds its input from planted:01, so a RemoveMemberFromRole on an approver carries the text
-"Payroll run for October: 500 USDC to the contributor pool.", which ruling 28 makes a
-contradiction. The fixture, not the rule, needs to change (for example a neutral description in
-`input_with_kind`); the file is outside this order.
+`tests/decoders.rs`, the first decoder tests, caught two errors in the first version, both fixed
+here: a policy change measured without the policy before fed the control rules (guide section 7
+says fire nothing that needs it), and a swap text's amounts were compared, though a swap names
+amounts on both sides. One test there then failed by design:
+`a_kind_the_policy_engine_decodes_gets_its_own_code` builds its input from planted:01, so a
+RemoveMemberFromRole on an approver carries the text "Payroll run for October: 500 USDC to the
+contributor pool.", which ruling 28 makes a contradiction. The fixture, not the rule, needed to
+change; a later change gave `input_with_kind` a neutral description.
 
 ## Notes for guide v2.4
 

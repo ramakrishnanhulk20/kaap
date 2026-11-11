@@ -3,7 +3,7 @@
 ## The scoreboard did not move
 
 `cargo test -p kaap-core --test policy_eval -- --nocapture`, run on 2 Nov 2026 after every change
-in this order:
+described here:
 
 | measure | agree | of |
 |---|---|---|
@@ -34,8 +34,8 @@ give exactly the key's effects (`config_flags_compare_with_the_config_before`):
    in the second part is read as "could cast a VoteReject on", since "could reject alone" would
    make it a repeat of the first part. Both sides use `arming`'s own rules (`one_reject_decides`
    and `may_reject`), so these two conditions and `guard_arming` never disagree about one policy.
-2. With the account known, the guide's "any change to the Guard role" still holds (head chef
-   ruling, 2 Nov 2026). "The Guard role" is every role that names the guard account as a Group
+2. With the account known, the guide's "any change to the Guard role" still holds (ruled 2 Nov
+   2026). "The Guard role" is every role that names the guard account as a Group
    member, before or after the change, matched by name. GUARD_WEAKENED fires when the roles of any
    such name differ at all: members, permissions, own vote rules, kind, or a role of the name added
    or removed. So rules of their own at "1" on the harness guard role fire it although every reject
@@ -69,9 +69,9 @@ give exactly the key's effects (`config_flags_compare_with_the_config_before`):
 neard running first, on Sputnik 3.2 (code hash DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF):
 "4 policies, 0 disagreements", 1 passed in 169 s.
 
-On M1 with a second member in the guard role, `others_who_reject_alone` lists
-second-guard.kaap-diff on all 16 labels the guard rejects. Its one VoteReject, on a fresh
-proposal of its own, gave Rejected on 14 of them, and on bounty_done the deciding vote panicked
-with ERR_NO_BOUNTY, the harness's sign of a decided bounty_done. That is every label someone may
-file; nobody on M1 may file a Vote kind, so `vote` is checked by the formula only. On the other
-three policies the list is empty, so nothing more was sent.
+On the testnet demo DAO's policy with a second member in the guard role,
+`others_who_reject_alone` lists second-guard.kaap-diff on all 16 labels the guard rejects. Its one
+VoteReject, on a fresh proposal of its own, gave Rejected on 14 of them, and on bounty_done the
+deciding vote panicked with ERR_NO_BOUNTY, the harness's sign of a decided bounty_done. That is
+every label someone may file; nobody on the demo DAO may file a Vote kind, so `vote` is checked by
+the formula only. On the other three policies the list is empty, so nothing more was sent.

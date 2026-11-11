@@ -439,7 +439,7 @@ impl<'de> Deserialize<'de> for Fields {
 }
 
 // The drafts `enrolment_drafts` prints, handed to `analyze` the way the CLI hands them over (the
-// kind as text, the policy before as text, the guard account set) on the M1 testnet DAO's policy
+// kind as text, the policy before as text, the guard account set) on the testnet demo DAO's policy
 // before enrolment: the role draft gives no GUARD_WEAKENED, and the enroll draft one guard_enrol
 // effect with no UNKNOWN_CALL or UNKNOWN_VALUE, with no prices given. It does NOT run the wasm
 // build, and it does not cover a DAO whose policy already lets the guard reject (that still fires
@@ -453,7 +453,7 @@ mod tests {
         serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
     }
 
-    /// The NEAR Business role setup with the M1 owner and member in its places, as
+    /// The NEAR Business role setup with the demo DAO's owner and member in its places, as
     /// scripts/setup-demo-dao.mjs filed it before the guard role was added.
     fn m1_before(state: &Value) -> Value {
         let mut policy = deployment("near-business-policy.json")["policy"].clone();

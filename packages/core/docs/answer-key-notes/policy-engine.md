@@ -51,9 +51,10 @@ These records agree, but each agreement depends on a reading the guide does not 
    into Everyone or a token role counts as a replacement.
 5. GUARD_WEAKENED is keyed on the role name `guard` (the enrolment template's name), since the
    input carries no guard account. A known gap, pinned by the test
-   `known_gap_a_guard_role_under_another_name_gets_no_guard_weakened`; the fix is WO-03c's. A change
-   of the default vote policy fires it only when the guard then needs more votes on a label it can
-   reject, which is why planted:06, 07 and 46 (default lowered to 1/100) agree with the key.
+   `known_gap_a_guard_role_under_another_name_gets_no_guard_weakened`; the guard account input,
+   when supplied, closes it (guard-account-and-config.md). A change of the default vote policy
+   fires it only when the guard then needs more votes on a label it can reject, which is why
+   planted:06, 07 and 46 (default lowered to 1/100) agree with the key.
 6. `bond_or_period_changed` is true only when one of the four values really differs.
 
 ## What the Sputnik binary showed
@@ -61,12 +62,12 @@ These records agree, but each agreement depends on a reading the guide does not 
 Run with `cargo test -p kaap-core-diff -- --nocapture --test-threads=1` in a local sandbox on
 Sputnik 3.2 (code hash DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF).
 
-1. On the M1 testnet policy one guard reject gives Rejected on every label someone may file
-   except remove_member_from_role, where the binary refuses the vote (ERR_PERMISSION_DENIED). That
-   is 15 of the guard's 16 labels: nobody on M1 may file a Vote kind, so `vote` is checked by the
-   formula only.
-2. A second member in the M1 guard role leaves the guard armed. Its rule is the fixed weight "1",
-   and Sputnik's threshold is min(1, 2) = 1, so one reject still gives Rejected on all 15 labels
-   someone may file (nobody may file a Vote kind there). A second member in a guard role on the
-   default 1/2 ratio disarms it: one reject leaves every proposal InProgress. `guard_arming` agrees
-   on all 4 policies tried, 0 disagreements.
+1. On the testnet demo DAO's policy one guard reject gives Rejected on every label someone may
+   file except remove_member_from_role, where the binary refuses the vote (ERR_PERMISSION_DENIED).
+   That is 15 of the guard's 16 labels: nobody on the demo DAO may file a Vote kind, so `vote` is
+   checked by the formula only.
+2. A second member in the demo DAO's guard role leaves the guard armed. Its rule is the fixed
+   weight "1", and Sputnik's threshold is min(1, 2) = 1, so one reject still gives Rejected on all
+   15 labels someone may file (nobody may file a Vote kind there). A second member in a guard role
+   on the default 1/2 ratio disarms it: one reject leaves every proposal InProgress.
+   `guard_arming` agrees on all 4 policies tried, 0 disagreements.

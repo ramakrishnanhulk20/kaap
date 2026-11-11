@@ -1,9 +1,10 @@
-// Scores `analyze` on the answer-key records whose kind is a policy or governance kind (the WO-03b
-// scoreboard): the set of codes `policy::decode` owns, and, on the records whose label carries no
-// description, prompt or hash code, the risk floor and the veto fields. It prints the table and
-// every record that differs, then fails below the work order's bars. The effects multiset is
-// printed but not held to a bar. It does not score the codes of other modules, and it never
-// judges whether the key or the decoder is right where they differ; docs/answer-key-notes/policy-engine.md does.
+// Scores `analyze` on the answer-key records whose kind is a policy or governance kind: the set of
+// codes `policy::decode` owns, and, on the records whose label carries no description, prompt or
+// hash code, the risk floor and the veto fields. It prints the table and every record that
+// differs, then fails below its bars (97 percent on owned codes, 98 on the floor, every scored
+// `must_veto`). The effects multiset is printed but not held to a bar. It does not score the codes
+// of other modules, and it never judges whether the key or the decoder is right where they
+// differ; docs/answer-key-notes/policy-engine.md does.
 // The other tests cover the two optional inputs: GUARD_WEAKENED with and without the guard account
 // (pinning the gap of a guard role under another name when it is not known), and the ChangeConfig
 // flags with and without the config before. They do not read either input from chain.
@@ -50,7 +51,7 @@ const OWNED: [FindingCode; 9] = [
     OtherRiskyKind,
 ];
 
-/// Codes of the description check (WO-03c) and the hash check (WO-04). A label carrying one of
+/// Codes of the description check (`describe`) and the hash check (`hash`). A label carrying one of
 /// them can floor at critical for a reason this decoder does not own.
 const OTHER_MODULES: [FindingCode; 6] =
     [DescContradicts, EmptyDescription, PromptInjection, HashUnverified, HashMismatch, HashTextDangerous];
@@ -102,7 +103,7 @@ fn policy_eval() {
     let veto_allowed = agree(&|r| r.veto_scored && r.veto_allowed.is_none());
 
     println!();
-    println!("== WO-03b policy and governance records: {of} of 373, {veto_of} with no desc/hash code");
+    println!("== policy and governance records: {of} of 373, {veto_of} with no desc/hash code");
     println!("{:<44} {:>6} {:>6} {:>8}", "measure", "agree", "of", "percent");
     println!("{:<44} {codes:>6} {of:>6} {:>8}", "owned codes", percent(codes, of));
     println!("{:<44} {floor:>6} {veto_of:>6} {:>8}", "risk floor (no desc/hash code)", percent(floor, veto_of));

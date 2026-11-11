@@ -42,10 +42,10 @@ const INTENTS: &str = "intents.near";
 
 const NATIVE: &str = "near";
 
-/// A storage deposit up to 0.1 NEAR pays for a registration, which costs about 0.00125 NEAR
-/// (intent-types-and-execution.md 315-345). Above it, the rest counts as NEAR sent to the
-/// contract, so a storage deposit cannot carry value past the value findings (WO-04b ruling,
-/// 2 Nov 2026). `decode::intents` applies it to a withdrawal's own `storage_deposit`.
+/// A storage deposit up to 0.1 NEAR pays for a registration, which costs about 0.00125 NEAR (the
+/// NEAR Intents docs, `storage_deposit`). Above it, the rest counts as NEAR sent to the contract,
+/// so a storage deposit cannot carry value past the value findings (guide rulings 32 and 33, 2 Nov
+/// 2026). `decode::intents` applies it to a withdrawal's own `storage_deposit`.
 pub const STORAGE_ALLOWANCE_YOCTO: u128 = 100_000_000_000_000_000_000_000;
 
 /// One `decode::value` reading holds at most 100 actions, one of which runs the text's other

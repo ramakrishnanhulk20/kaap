@@ -1,5 +1,5 @@
-// Tests for `policy::arming::guard_arming` (C16) on the M1 testnet policy and edits of it, and on
-// the planted harness policy. Expected values come from Sputnik's formulas worked by hand
+// Tests for `policy::arming::guard_arming` (C16) on the testnet demo DAO's policy and edits of it,
+// and on the planted harness policy. Expected values come from Sputnik's formulas worked by hand
 // (policy.rs 98-106 and 380-433, proposals.rs 256-283 and 665-683); packages/core-diff runs the
 // guard cases against the real 3.2 binary. It does NOT cover a guard holding
 // delegated tokens, a DAO on a Sputnik version other than 3.2, or reading the live policy from
@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 
 const OWN_REMOVAL: &str = "remove_member_from_role";
 
-/// The M1 testnet DAO's policy, rebuilt the way scripts/setup-demo-dao.mjs `demoPolicy`
+/// The testnet demo DAO's policy, rebuilt the way scripts/setup-demo-dao.mjs `demoPolicy`
 /// builds it: the saved NEAR Business template with the owner and the demo member in its two
 /// places, plus a `guard` role holding the guard alone, VoteReject on the 16 labels other than
 /// remove_member_from_role, threshold "1" on each. Returns the policy and the guard account.
@@ -65,7 +65,7 @@ fn the_m1_policy_is_armed_on_every_label_but_its_own_removal() {
     assert_eq!(a.approval_votes_needed["transfer"], 2);
     assert_eq!(a.approval_votes_needed["call"], 2);
     assert!(a.approval_votes_needed.values().all(|v| *v >= 2), "{:?}", a.approval_votes_needed);
-    assert_eq!(a.approval_votes_needed["vote"], u128::MAX, "no M1 role may approve a Vote kind");
+    assert_eq!(a.approval_votes_needed["vote"], u128::MAX, "no demo DAO role may approve a Vote kind");
     assert!(a.race_note.starts_with("Every kind that can pass needs at least 2 approvals"), "{}", a.race_note);
 }
 
@@ -85,8 +85,8 @@ fn every_label_is_judged_exactly_once() {
 
 #[test]
 fn a_second_guard_member_disarms_only_a_ratio_guard() {
-    // M1's guard rule is the absolute "1": with two members to_weight is min(1, 2) = 1 (policy.rs
-    // 98-106), so one reject still decides and the guard stays armed. The sandbox agrees
+    // The demo DAO's guard rule is the absolute "1": with two members to_weight is min(1, 2) = 1
+    // (policy.rs 98-106), so one reject still decides and the guard stays armed. The sandbox agrees
     // (core-diff guard_arming_agrees_with_the_binary).
     let (mut policy, guard) = m1();
     role_mut(&mut policy, "guard")["kind"]["Group"].as_array_mut().unwrap().push(json!("second-guard.testnet"));
@@ -104,12 +104,13 @@ fn a_second_guard_member_disarms_only_a_ratio_guard() {
 
 #[test]
 fn others_who_reject_alone_lists_a_second_guard_member() {
-    // On M1 the owner and the demo member reject only through Approver and Admin, which need 2 of
-    // 2, so nobody but the guard decides with one reject.
+    // On the demo DAO the owner and the demo member reject only through Approver and Admin, which
+    // need 2 of 2, so nobody but the guard decides with one reject.
     let (mut policy, guard) = m1();
     assert!(guard_arming(&policy, &guard).others_who_reject_alone.is_empty());
 
-    // A second member of the M1 guard role meets the same fixed "1", on every label the guard does.
+    // A second member of the demo DAO's guard role meets the same fixed "1", on every label the
+    // guard does.
     role_mut(&mut policy, "guard")["kind"]["Group"].as_array_mut().unwrap().push(json!("second-guard.testnet"));
     let a = guard_arming(&policy, &guard);
     let expected: BTreeMap<String, Vec<String>> =

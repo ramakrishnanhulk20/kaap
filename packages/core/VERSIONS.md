@@ -1,6 +1,6 @@
 # kaap-core dependency versions
 
-Checked on 29 Oct 2026 (04:02 UTC) against the crates.io API (`max_stable_version` for each crate). Every version below is the latest stable release that day, pinned exactly with `=` once, in `[workspace.dependencies]` of the root `Cargo.toml`, and inherited by `packages/core/Cargo.toml`. The toolchain is Rust 1.93.0 (`rust-toolchain.toml`), the one the M0 contracts built with, so each crate's declared minimum Rust version was checked against it.
+Checked on 29 Oct 2026 (04:02 UTC) against the crates.io API (`max_stable_version` for each crate). Every version below is the latest stable release that day, pinned exactly with `=` once, in `[workspace.dependencies]` of the root `Cargo.toml`, and inherited by `packages/core/Cargo.toml`. The toolchain is Rust 1.93.0 (`rust-toolchain.toml`), the one the first sandbox contracts built with, so each crate's declared minimum Rust version was checked against it.
 
 | Crate | Pinned | Published | Minimum Rust | Why we use it |
 |---|---|---|---|---|
@@ -14,4 +14,4 @@ Checked on 29 Oct 2026 (04:02 UTC) against the crates.io API (`max_stable_versio
 
 num-bigint was chosen over uint (0.10.2, 2026-10-02): amounts are attacker-written decimal strings, and an arbitrary-precision integer cannot overflow on one, while uint's fixed 256-bit types can. crates.io lists num-bigint 0.4.8 as the most recently published version; it is a backport to the older line, and 0.5.1 is the newest stable.
 
-The M0 sandbox tests pinned sha2 0.10.9 and base64 0.22.1 because near-api resolves those; that is a separate test crate and does not bind kaap-core.
+The first sandbox tests pinned sha2 0.10.9 and base64 0.22.1 because near-api resolves those; that is a separate test crate and does not bind kaap-core.

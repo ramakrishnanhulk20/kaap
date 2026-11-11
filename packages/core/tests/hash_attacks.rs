@@ -107,7 +107,7 @@ fn no_text_is_unknown_never_low_and_never_a_veto_alone() {
     let analysis = analyze(&input);
     assert_eq!(analysis.risk_floor, Severity::High, "C8: UNKNOWN counts as high, never low");
     assert!(analysis.findings.contains(&Finding { code: HashUnverified, severity: Severity::Unknown }));
-    assert!(!analysis.must_veto && !analysis.veto_allowed, "Ram's rule: an unverifiable hash alone never vetoes");
+    assert!(!analysis.must_veto && !analysis.veto_allowed, "guide section 4: an unverifiable hash alone never vetoes");
 }
 
 #[test]

@@ -1,11 +1,12 @@
-# WO-03d: Kaap reads its own enrolment, and one place for two verdict fields
+# Kaap reads its own enrolment, and one place for two verdict fields
 
 ## What the two enrolment drafts read as now
 
 `kaap_core_wasm::api::enrolment_drafts` for kaap-guard-1029061211.testnet, handed to `analyze` as
-the CLI hands them over (guard account set, the M1 DAO's policy before enrolment, no prices):
+the CLI hands them over (guard account set, the testnet demo DAO's policy before enrolment, no
+prices):
 
-| draft | before this order | now |
+| draft | before this change | now |
 |---|---|---|
 | add the guard role | GUARD_WEAKENED (high) | no finding, floor low |
 | `enroll` on the guard | UNKNOWN_CALL and UNKNOWN_VALUE (high), ATTACHED_DEPOSIT | one `guard_enrol` effect, no finding, floor low |
@@ -30,7 +31,7 @@ on the printed JSON before and after).
    or token role that may VoteReject gives the guard reject rights before enrolment, so its
    enrolment is not "only rights it did not have" and GUARD_WEAKENED fires.
 4. **No policy before still fires.** Without the policy before, the guard's roles are not known,
-   so a role named `guard` keeps firing GUARD_WEAKENED, as before this order.
+   so a role named `guard` keeps firing GUARD_WEAKENED, as before this change.
 5. **`guard_enrol` is read only in the template's shape (accepted).** The receiver is exactly
    `ProposalInput::guard_account`, the method exactly `enroll`, the arguments `{}` or empty (empty
    arguments are no arguments, ruling 2), and the deposit at most 0.01 NEAR, the template's own

@@ -83,7 +83,7 @@ fn within_edits(a: &[u8], b: &[u8], max: usize) -> bool {
 }
 
 /// The one table of exact accounts. `v1.signer-prod.testnet` is the testnet Chain Signatures
-/// contract the M1 slice signs against.
+/// contract the testnet demo DAO signs against.
 const EXACT_ACCOUNTS: [(&str, Known); 8] = [
     ("intents.near", Known::Intents),
     ("wrap.near", Known::Wrap),

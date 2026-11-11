@@ -1,11 +1,12 @@
-// Scores the description check (the WO-03c scoreboard) on all 373 answer-key records: the
-// description check, the presence of DESC_CONTRADICTS and of PROMPT_INJECTION, and `must_veto`
-// on every record whose label holds no hash code (those belong to the hash checker). It prints
-// every record that differs with the reasons the check gave, and fails below the work order's
-// bars. A second test runs every real record, the private second set included when it is
-// present, and fails if DESC_CONTRADICTS fires where the label is not `contradicts`. It does not
-// score effects, other modules' codes or `veto_allowed`, and it never judges whether the key or
-// the check is right where they differ; docs/answer-key-notes/description-check.md does that.
+// Scores the description check on all 373 answer-key records: the description check, the
+// presence of DESC_CONTRADICTS and of PROMPT_INJECTION, and `must_veto` on every record whose
+// label holds no hash code (those belong to the hash checker). It prints every record that
+// differs with the reasons the check gave, and fails below its bars (93 percent on the
+// description check, 97 on each code, every scored `must_veto`). A second test runs every real
+// record, the private second set included when it is present, and fails if DESC_CONTRADICTS
+// fires where the label is not `contradicts`. It does not score effects, other modules' codes or
+// `veto_allowed`, and it never judges whether the key or the check is right where they differ;
+// docs/answer-key-notes/description-check.md does that.
 
 mod common;
 
@@ -111,7 +112,7 @@ fn describe_eval() {
     let veto = veto_rows.iter().filter(|r| r.key_veto == r.veto).count();
 
     println!();
-    println!("== WO-03c description check: {of} records");
+    println!("== description check: {of} records");
     println!("{:<40} {:>6} {:>6} {:>8}", "measure", "agree", "of", "percent");
     println!("{:<40} {desc:>6} {of:>6} {:>8}", "description_check", percent(desc, of));
     println!("{:<40} {dc:>6} {of:>6} {:>8}", "DESC_CONTRADICTS present", percent(dc, of));

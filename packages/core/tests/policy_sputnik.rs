@@ -1,9 +1,10 @@
 // Table tests for the port of Sputnik's policy rules (`kaap_core::policy::sputnik`). Every expected
 // value comes from the Sputnik 3.2 source (its own unit tests in policy.rs and lib.rs, or the
-// formula read by hand, line cited) or from the M0 sandbox runs on the real binary
-// (scratchpad/m0/README.md). It does NOT cover agreement with the binary on real DAO policies
-// (packages/core-diff runs that in a sandbox), token-weighted voting against a live delegation, or
-// the policy effects and findings built on top of these rules (tests/policy_eval.rs).
+// formula read by hand, line cited) or from the first sandbox runs on the real binary (20 Oct
+// 2026, a test crate not published here; the test names are cited below). It does NOT cover
+// agreement with the binary on real DAO policies (packages/core-diff runs that in a sandbox),
+// token-weighted voting against a live delegation, or the policy effects and findings built on
+// top of these rules (tests/policy_eval.rs).
 
 use std::collections::BTreeSet;
 
@@ -38,7 +39,7 @@ fn with_roles(roles: Value) -> Policy {
     parse(&v)
 }
 
-/// The M0 sandbox DAO (scratchpad/m0/README.md): council [alice] with "*:*" and a guard role
+/// The DAO of the first sandbox runs: council [alice] with "*:*" and a guard role
 /// [guard] holding VoteReject on the 16 labels other than remove_member_from_role.
 fn m0_policy() -> Policy {
     let guard: Vec<String> =
@@ -81,7 +82,8 @@ fn threshold_formula_cases() {
 
 #[test]
 fn one_member_council_executes_on_the_first_vote() {
-    // lib.rs test_basics (one council member approves alone) and M0 alice_alone_approves_first.
+    // lib.rs test_basics (one council member approves alone) and the first sandbox runs'
+    // alice_alone_approves_first.
     assert_eq!(votes_needed(&parse(&default_policy(&["a.near"])), "council", "transfer"), 1);
     assert_eq!(votes_needed(&m0_policy(), "council", "transfer"), 1);
     // lib.rs test_vote_twice: with two members one approval is not enough.
@@ -90,7 +92,8 @@ fn one_member_council_executes_on_the_first_vote() {
 
 #[test]
 fn guard_rejects_alone_and_can_do_nothing_else() {
-    // M0 guard_reject_kills_transfer, guard_cannot_approve, guard_cannot_block_its_removal.
+    // The first sandbox runs' guard_reject_kills_transfer, guard_cannot_approve and
+    // guard_cannot_block_its_removal.
     let p = m0_policy();
     assert_eq!(can_execute_action(&p, "guard.sandbox", "transfer", Action::VoteReject), (vec!["guard".to_string()], true));
     assert_eq!(votes_needed(&p, "guard", "transfer"), 1);
@@ -366,7 +369,7 @@ fn every_kind_has_exactly_one_label() {
 
 #[test]
 fn labels_of_kinds_as_get_proposal_returns_them() {
-    // Moved from lib.rs (WO-01a), now read through the strict kind reader.
+    // Moved from lib.rs (`tests::labels_match_sputnik`), now read through the strict kind reader.
     assert_eq!(to_policy_label(br#"{"RemoveMemberFromRole":{"member_id":"a.near","role":"Guard"}}"#), "remove_member_from_role");
     assert_eq!(to_policy_label(br#"{"SetStakingContract":{"staking_id":"s.near"}}"#), "set_vote_token");
     assert_eq!(to_policy_label(br#""Vote""#), "vote");

@@ -34,8 +34,7 @@ const NEP413_VECTORS: [Nep413Vector; 2] = [
         signature: "ed25519:4i9oAekwJP2JU1eCHF133CVyiAyysJXvFNGjcgaKvPv5Sd8ELPf3NicKny9wXRAupLQ9Us4ZZk2umjJLJjepzVYK",
     },
     // https://docs.near-intents.org/integration/verifier-contract/signing-intents, the NEP-413
-    // example, saved 20 Oct 2026 at reference/tech/intents/docs/
-    // integration__verifier-contract__signing-intents.md lines 46 to 56.
+    // example, as the page read on 20 Oct 2026.
     Nep413Vector {
         source: "NEAR Intents docs, signing intents",
         message: r#"{"deadline":"2025-05-21T10:34:04.254392Z","intents":[{"intent":"transfer","receiver_id":"bob.near","tokens":{"nep141:usdc.near":"10"}}],"signer_id":"alice.near"}"#,

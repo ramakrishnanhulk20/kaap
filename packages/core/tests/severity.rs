@@ -1,6 +1,6 @@
 // Checks the section 4 severity table and the DESC_CONTRADICTS value-or-control rule on
 // hand-built effects. It does not check that any decoder produces those effects, and it does not
-// check the labelled answer key; the evaluation runner (WO-01b) does both.
+// check the labelled answer key; the evaluation runner (tests/eval.rs) does both.
 
 use kaap_core::severity::severity;
 use kaap_core::*;
