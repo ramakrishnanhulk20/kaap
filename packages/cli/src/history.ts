@@ -95,7 +95,8 @@ export type UsdOf = (token: string, raw: unknown) => number | null;
 /** USD of `raw` base units of `token` (the guide's id; "" is native NEAR), or null when unpriced. */
 export function usdOf(prices: Prices): UsdOf {
   return (token, raw) => {
-    const entry = prices.usd_by_token[token === '' ? 'near' : token];
+    const key = token === '' ? 'near' : token;
+    const entry = Object.hasOwn(prices.usd_by_token, key) ? prices.usd_by_token[key] : undefined;
     if (!entry || (typeof raw !== 'string' && typeof raw !== 'number')) return null;
     try {
       return (Number(BigInt(raw)) / 10 ** entry[0]) * entry[1];

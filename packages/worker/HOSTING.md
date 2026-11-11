@@ -3,7 +3,7 @@
 The worker is the part of Kaap that never sleeps. It watches every enrolled treasury, asks the sealed
 program to judge each new proposal, records the verdict and sends the guard its veto. If it stops,
 the guard stops too, because the guard can only veto what the worker hands it. The hackathon's
-rules (https://nearhackathon.com/HACKATHON.md, Q-012) ask hosted demos to stay up until 18 Nov
+rules (https://nearhackathon.com/HACKATHON.md) ask hosted demos to stay up until 18 Nov
 2026, ideally 25 Nov 2026, so whatever we pick has to run unattended from the day it starts until
 at least 25 Nov.
 

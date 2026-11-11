@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { Core } from '../src/core.js';
-import { historyBefore, policyBefore, type Stored } from '../src/history.js';
+import { historyBefore, policyBefore, usdOf, type Stored } from '../src/history.js';
 
 const policy = (member: string) => ({
   roles: [{ name: 'council', kind: { Group: [member] }, permissions: ['*:*'], vote_policy: {} }],
@@ -68,6 +68,11 @@ test('the policy before is named with its source, or unknown with the reason', a
 
   const gap = policyBefore(core, read(pay), now, { proposals: [pay], complete: false });
   assert.deepEqual([gap.known, gap.source], [false, "unknown: the DAO's earlier proposals could not all be read"]);
+});
+
+test('a token id that names an Object.prototype member is unpriced, not NaN', () => {
+  const usd = usdOf({ usd_by_token: { near: [24, 4] } });
+  assert.deepEqual([usd('', '1000000000000000000000000'), usd('constructor', '1'), usd('toString', '1')], [4, null, null]);
 });
 
 test('the payment history counts approved payments submitted earlier, by the census rule', () => {
