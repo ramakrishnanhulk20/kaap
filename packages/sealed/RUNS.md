@@ -47,8 +47,8 @@ mainnet would be about $0.009.
 
 Where the time goes: the job itself takes about 1.4 s inside the worker (ten chain reads, five
 from each provider, about 0.1 to 0.5 s each). The rest of the on-chain time is OutLayer picking up
-the request and resolving it, the same 13 to 15 blocks the early OutLayer spikes measured. Every
-run here was a cached one: the first run of this version (run 1 of the three runs below) was
+the request and resolving it: 13 to 15 blocks on each of these ten runs. Every run here was a
+cached one: the first run of this version (run 1 of the three runs below) was
 "Freshly compiled" and took 18 blocks (10.6 s on chain, 14.8 s wall clock).
 
 ## Three runs, one key
@@ -152,7 +152,7 @@ own: the numbers above are from earlier builds.
 | Attestations, all six runs | `wasm_hash` and `executed_wasm_sha256` both the hash above, `caller_account_id` the worker. Those fields were read; the Intel quotes were not checked here |
 
 No run named `secrets_ref`, so no NEAR AI key reached any of them and `ai_status` is unavailable
-on purpose. The key's lock still names build `73409203...`, so this build has not asked the model.
+on purpose. The key's lock named build `73409203...` that day, so none of these runs asked the model.
 
 ### The worker runs free
 
@@ -349,13 +349,100 @@ transaction gas 0.0048875. The filing, 0.0002925 NEAR of gas, is not counted.
   signature. It took 31,005,118 instructions against about 7,600,000 for a ciphertext that does not
   open, because the job reads the proposal before it can compare the text's hash with it.
 
+## The build with eval mode
+
+Run on 11 Nov 2026 between 09:28 and 09:34 UTC, from WSL, on one machine, under Node 24.22.2. This
+section is on its own: the numbers above are from earlier builds and an earlier demo treasury.
+
+| Thing | Value |
+| --- | --- |
+| Version (wasm sha256) | `da2c285350551e2367594121856e29cdfe6bc134f56f7c3ce4372584c7a4c666`, 1,675,100 bytes |
+| Hosted at | the secret gist, commit `320a36d3`. The publish script built the wasm again, got the same sha256, and checked that the served bytes had it before it registered anything |
+| Registered by | [add_version Cvo1WSGy...](https://testnet.nearblocks.io/txns/Cvo1WSGy3T4RPProXexUee5budUS5rvcB2d51A2SFKhg) at 09:28:26 UTC, set active |
+| Still listed | `bf7bb4f8...` and `e1192b28...`, no longer active. `list_versions` names all three builds |
+| Demo treasury | `kaap-dao-1111072928.testnet`, guard `kaap-guard-1111072803.testnet` |
+| Caller, all eight runs | `kaap-worker-1029053612.testnet`, no `attached_usd` |
+
+No run named `secrets_ref`, because the NEAR AI key's lock still names build `e1192b28...`, read on
+chain the same hour. So no key reached any of them and `ai_status` is unavailable on purpose.
+
+### The worker runs free
+
+| Thing | Value |
+| --- | --- |
+| Transaction | [2Rwf2EWk...](https://testnet.nearblocks.io/txns/2Rwf2EWk4coqJddUJ7XAkDMeSd7G6hntD5QGA44qH4r3) at 09:29:14 UTC |
+| Proposal judged | `kaap-dao-1111072928.testnet` #3, guard `kaap-guard-1111072803.testnet`, read at block 277196784 |
+| Verdict | status ok, risk critical, floor critical, findings `[DESC_CONTRADICTS, UNKNOWN_VALUE]`, `ai_status` unavailable, passed `check-output.mjs` |
+| Verdict key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN`, the same key as on every earlier build |
+| Worker time | 5,374 ms, the first run of this build ("Freshly compiled", 972 ms compile) |
+| Instructions | 16,830,316 of the 10,000,000,000 allowed |
+| Request to result | 22 blocks, 12,284 ms on chain, 17,307 ms wall clock |
+| Paid | 0.00243 testnet NEAR: OutLayer's charge 0.00163, transaction gas 0.00079 |
+
+`outlayer-verify tx 2Rwf2EWk4coqJddUJ7XAkDMeSd7G6hntD5QGA44qH4r3 --network testnet --api
+https://testnet-api.outlayer.ai` said PROVEN, exit 0: Intel TCB UpToDate, the enclave measurement
+listed as approved by `worker.outlayer.testnet`, wasm `da2c2853...`, caller the worker, attached
+payment 0. Its evidence bundle was saved for re-checking offline.
+
+### The sealed text channel
+
+`node scripts/text-roundtrip.mjs`: exit 0, `RESULT: pass`. The demo member filed proposal #5 on
+`kaap-dao-1111072928.testnet`
+([AVSK7x12...](https://testnet.nearblocks.io/txns/AVSK7x1284KwEDomELBkMW7uPbwNDsxm2TErLtSo3wXT)),
+a sign request whose hash points to a text made up for the run. It is left open.
+
+| Step | Transaction | Output bytes | Blocks | On chain ms | Worker ms | Paid, NEAR |
+| --- | --- | --- | --- | --- | --- | --- |
+| Ask for the key | [2bGR8z9C...](https://testnet.nearblocks.io/txns/2bGR8z9CWX9U4FPU3nMbfg5pE8q5rpzEnnAQqMj3qXqq) | 270 | 18 | 9,195 | 3,181 | 0.0020993 |
+| Judge with the sealed text | [86V53Mmh...](https://testnet.nearblocks.io/txns/86V53Mmh2kpztWqFsV3tbjxXCQAFtYUxjxVcWehyPBSW) | 673 | 29 | 16,470 | 4,687 | 0.0022957 |
+| Attack: tampered ciphertext | [HnALc3wX...](https://testnet.nearblocks.io/txns/HnALc3wX4wFG3fX9WA25zQ9rfqoTkjLtxqrUEcMs1mLc) | 73 | 30 | 17,538 | 2,897 | 0.0021117 |
+| Attack: a thief's reply key | [9KfdtcT8...](https://testnet.nearblocks.io/txns/9KfdtcT8f7mWrCRcbhnfYF3xbgK9mNT2rvrKfxdQbuCm) | 73 | 36 | 21,910 | 2,842 | 0.0021059 |
+| Attack: a ciphertext for another key | [FeLdv6dm...](https://testnet.nearblocks.io/txns/FeLdv6dmT3i6mFP5kyeEP74kM44gaYS6dnRTGUQKRor7) | 73 | 19 | 11,536 | 4,121 | 0.0022337 |
+| Attack: a text that matches no payload | [ikDh9kEN...](https://testnet.nearblocks.io/txns/ikDh9kENiFrbhKEiWinTL7y8rChbg733no3urCwkrB9) | 57 | 24 | 14,066 | 4,904 | 0.0023124 |
+
+Paid over the six runs: 0.0131589 testnet NEAR, of which OutLayer's charge is 0.0082632 and
+transaction gas 0.0048957. The filing, 0.0002829 NEAR of gas, is not counted.
+
+- The job printed text key `09bc21bb...2f6a`, the key `deployments/testnet.json` records from build
+  `bf7bb4f8...`: this build kept it, as it kept the verdict key.
+- The verdict came back risk critical, floor critical, findings `[HASH_TEXT_DANGEROUS]`, `ai_status`
+  unavailable, checked by `check-output.mjs`. Its sealed explanation opened with the member's key to
+  `AI unavailable (ai_key_missing).` and stayed shut for another key.
+- The three ciphertext attacks each got exactly
+  `{"reason":"text_ciphertext could not be opened","status":"refused","v":1}`, with no signature.
+- The text that matches no payload got exactly
+  `{"reason":"text_does_not_match","status":"refused","v":1}`, with no signature, after 30,978,544
+  instructions against about 7,640,000 for a ciphertext that does not open.
+
+### The first eval run on chain
+
+One eval input, sent once by the worker with the same limits, gas and deposit as the runs above.
+
+| Thing | Value |
+| --- | --- |
+| Transaction | [91HSBVbm...](https://testnet.nearblocks.io/txns/91HSBVbm4CdmhQM1TRrDXtEcMMPbEDBF3ZXF6uXVhKGQ) at 09:33 UTC |
+| Input | answer-key record `mainnet:aaapeter.sputnik-dao.near:2`, the first in file order that fits untouched, built by kaap-core exactly as `node scripts/ai-eval.mjs --dry-run` builds it: 23,334 bytes, sha256 `69669760...8f1c` |
+| Output | `{"ai_reason":"ai_key_missing","ai_risk":null,"ai_status":"unavailable","completion_tokens":null,"explanation_sha256":null,"findings":["NEW_RECIPIENT"],"finish_reason":null,"floor":"medium","model_id":null,"prompt_tokens":null,"reasoning_tokens":null,"risk":"medium","status":"eval","v":1}`, 288 bytes |
+| Worker time | 3,287 ms |
+| Instructions | 104,257,850 of the 10,000,000,000 allowed |
+| Request to result | 19 blocks, 11,538 ms on chain, 18,046 ms wall clock |
+| Paid | 0.00245 testnet NEAR: OutLayer's charge 0.00133, transaction gas 0.00112, about 0.00033 more gas than the judge runs above, whose input is under 700 bytes |
+
+- No `signature`, `verdict` or `public_key` field, and every key the eval script reads is present.
+- The output is byte for byte what the local wasmtime build printed for the same input with no AI
+  key, where the clock came from a recorded block instead of a live one.
+
 ## What these runs do not cover
 
 - One proposal, one location, one 8-minute window, runs one after another. No load, nothing
   concurrent, nothing on mainnet.
-- The NEAR AI call inside OutLayer: one keyed run only, on one proposal, signed through the test
-  script and not yet through the worker's own path. Every other run here had no key and never
-  asked the model. A refused chat call was exercised only in the local wasmtime build.
+- The NEAR AI call inside OutLayer: two keyed runs, both of proposal #9 on
+  `kaap-dao-1029064008.testnet` and both signed through the test script, not yet through the
+  worker's own path. The first is the 5 Nov run above, on build `73409203...`. The second,
+  [D3g7QnVt...](https://testnet.nearblocks.io/txns/D3g7QnVtAdSAg6SsfH7CHRFBfrayMG4Y1v3ncCbmHC7H) on
+  11 Nov, ran on the combined build `e1192b28...`, came back `ai_status` verified and took 24.3 s of
+  worker time against the 60 s limit. Every other run here had no key and never asked the model. A
+  refused chat call was exercised only in the local wasmtime build.
 - Three checks none of these runs made: replaying RTMR3 from its event log, comparing MRCONFIGID
   against `app_compose`, and an allowlist of approved model builds. The code makes the first two
   now (README, "When an AI answer counts as verified"), but they have not run live with a key, and
@@ -371,8 +458,9 @@ transaction gas 0.0048875. The filing, 0.0002925 NEAR of gas, is not counted.
   from the run's (`parse_input` in `src/input.rs`, kept on purpose) and this project runs on
   testnet, so a mainnet read cannot be proven from here. Prices and history stay proven on recorded
   real pages until a mainnet project exists.
-- The combined build and the checked build asking the model. Their runs had no key, so the AI step,
-  the checks around it and a sealed text reaching the model have not run live on either build.
+- The checked build and the build with eval mode asking the model. Their runs had no key, so the AI
+  step, the checks around it, a sealed text reaching the model and an eval run with the model's
+  scores have not run live on either build. The one eval run on chain is one record, with no key.
 - Paid runs: one payer, one proposal, five calls one after another. That a paid run writes no
   public evidence is proven by the tests only. No withdrawal was tried on either door.
 - Why OutLayer refuses a removed build: its answer is the error text above, not the

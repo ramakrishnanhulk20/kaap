@@ -10,9 +10,9 @@ Kaap's guard contract votes only on verdicts signed by that key.
 | --- | --- |
 | OutLayer project | `kaap-worker-1029053612.testnet/kaap-sealed` on `outlayer.testnet`, uuid `p00000000000000a9` |
 | Worker account (the only free caller) | `kaap-worker-1029053612.testnet` |
-| Build (wasm sha256) | `bf7bb4f86fe7b1531946d8e5b5b7bab39d3e98a3a97ecab00dd9f0e4c4d34f58`, 1,583,153 bytes, wasm32-wasip2, active since 11 Nov 2026. The build before it, `e1192b28...0527`, is still listed |
-| Hosted at | secret gist `5ea40ed7c5610efcd50d69af2ae8abe2`, commit `9f0c5cc2`: [raw URL pinned to the commit](https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/9f0c5cc287a9605fa7f7ba55a50eea8ef86d9cda/kaap-sealed-bf7bb4f8.wasm) |
-| Registered by | [add_version](https://testnet.nearblocks.io/txns/8CdP5kjLhvxDSwWJFiWPzUgiiuzEDvud8rXMg7xSGrr3), in the project from [create_project](https://testnet.nearblocks.io/txns/FHy3utGUWWwPtPMGz8ALXh9NLR5G4Mo2h1QTsEDGtuMu) |
+| Build (wasm sha256) | `da2c285350551e2367594121856e29cdfe6bc134f56f7c3ce4372584c7a4c666`, 1,675,100 bytes, wasm32-wasip2, active since 11 Nov 2026. The two builds before it, `bf7bb4f8...4f58` and `e1192b28...0527`, are still listed |
+| Hosted at | secret gist `5ea40ed7c5610efcd50d69af2ae8abe2`, commit `320a36d3`: [raw URL pinned to the commit](https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/320a36d3ae941b60731a83a77ffa2b1b474d90c2/kaap-sealed-da2c2853.wasm) |
+| Registered by | [add_version](https://testnet.nearblocks.io/txns/Cvo1WSGy3T4RPProXexUee5budUS5rvcB2d51A2SFKhg), in the project from [create_project](https://testnet.nearblocks.io/txns/FHy3utGUWWwPtPMGz8ALXh9NLR5G4Mo2h1QTsEDGtuMu) |
 | Verdict public key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN` |
 
 Testnet FastFS (`test.fastfs.io`) answered HTTP 502 on the publishing day, so the build is served
@@ -288,7 +288,7 @@ the guard reads them. So does the evidence record, which holds hashes and sizes,
 
 ## Eval mode
 
-Not yet in a published build: it ships with the next one. A third input scores a proposal handed in
+Live since build `da2c2853` (11 Nov 2026). A third input scores a proposal handed in
 whole, so the AI can be measured on the answer key without a DAO on chain:
 
 ```
@@ -412,7 +412,7 @@ bash packages/sealed/build.sh
 
 It remaps local paths out of the binary (`--remap-path-prefix`), strips symbols, refuses to finish
 if a home or checkout path is still inside, and prints the sha256. Two builds in separate target
-directories gave `bf7bb4f8...4f58` on 11 Nov 2026.
+directories gave `da2c2853...c666` on 11 Nov 2026.
 
 ## Run it
 

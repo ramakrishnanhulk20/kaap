@@ -39,8 +39,17 @@
       "tx": "8CdP5kjLhvxDSwWJFiWPzUgiiuzEDvud8rXMg7xSGrr3",
       "at": "2026-11-11T06:25:14Z",
       "retired": false
+    },
+    {
+      "sha256": "da2c285350551e2367594121856e29cdfe6bc134f56f7c3ce4372584c7a4c666",
+      "bytes": 1675100,
+      "url": "https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/320a36d3ae941b60731a83a77ffa2b1b474d90c2/kaap-sealed-da2c2853.wasm",
+      "registered_by": "add_version",
+      "tx": "Cvo1WSGy3T4RPProXexUee5budUS5rvcB2d51A2SFKhg",
+      "at": "2026-11-11T09:28:26Z",
+      "retired": false
     }
   ],
   "uuid": "p00000000000000a9",
-  "active_version": "bf7bb4f86fe7b1531946d8e5b5b7bab39d3e98a3a97ecab00dd9f0e4c4d34f58"
+  "active_version": "da2c285350551e2367594121856e29cdfe6bc134f56f7c3ce4372584c7a4c666"
 }
