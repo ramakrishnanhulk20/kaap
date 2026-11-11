@@ -1,0 +1,80 @@
+{
+  "roles": [
+    {
+      "name": "council",
+      "kind": {
+        "Group": [
+          "alice.sandbox",
+          "bob.sandbox"
+        ]
+      },
+      "permissions": [
+        "*:AddProposal",
+        "*:VoteApprove",
+        "*:VoteReject",
+        "*:VoteRemove",
+        "*:Finalize"
+      ],
+      "vote_policy": {}
+    },
+    {
+      "name": "guard",
+      "kind": {
+        "Group": [
+          "guard.sandbox"
+        ]
+      },
+      "permissions": [
+        "config:VoteReject",
+        "policy:VoteReject",
+        "add_member_to_role:VoteReject",
+        "call:VoteReject",
+        "upgrade_self:VoteReject",
+        "upgrade_remote:VoteReject",
+        "transfer:VoteReject",
+        "set_vote_token:VoteReject",
+        "add_bounty:VoteReject",
+        "bounty_done:VoteReject",
+        "vote:VoteReject",
+        "factory_info_update:VoteReject",
+        "policy_add_or_update_role:VoteReject",
+        "policy_remove_role:VoteReject",
+        "policy_update_default_vote_policy:VoteReject",
+        "policy_update_parameters:VoteReject"
+      ],
+      "vote_policy": {}
+    },
+    {
+      "name": "contributors",
+      "kind": {
+        "Group": [
+          "carol.sandbox"
+        ]
+      },
+      "permissions": [
+        "*:AddProposal"
+      ],
+      "vote_policy": {}
+    },
+    {
+      "name": "all",
+      "kind": "Everyone",
+      "permissions": [
+        "*:AddProposal"
+      ],
+      "vote_policy": {}
+    }
+  ],
+  "default_vote_policy": {
+    "weight_kind": "RoleWeight",
+    "quorum": "0",
+    "threshold": [
+      1,
+      2
+    ]
+  },
+  "proposal_bond": "1000000000000000000000000",
+  "proposal_period": "604800000000000",
+  "bounty_bond": "1000000000000000000000000",
+  "bounty_forgiveness_period": "86400000000000"
+}
