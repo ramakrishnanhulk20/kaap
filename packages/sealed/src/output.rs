@@ -5,7 +5,7 @@ use kaap_core::{AiStatus, Analysis, FindingCode, Severity};
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::ai::{AiOutcome, Check};
+use crate::ai::{finish_word, AiOutcome, Check};
 use crate::attest::evidence::CompletionRecord;
 use crate::payment::Refusal;
 use crate::verdict::{combine_risk, severity_of, sha256};
@@ -13,6 +13,12 @@ use crate::verdict::{combine_risk, severity_of, sha256};
 /// The documented limit on what `request_execution` returns on chain. Testnet returned 2,000
 /// bytes whole on 26 Oct; mainnet is unmeasured, so 900 stays the cap.
 pub const MAX_OUTPUT_BYTES: usize = 900;
+
+/// The largest token count an eval output prints; a larger one prints as null. A run sends at most
+/// about 12,000 prompt tokens and asks for at most 1,424 completion tokens, so a larger count is not
+/// a real one, and the eval script costs a null count at its worst case. Five digits are what keep
+/// every eval output under `MAX_OUTPUT_BYTES`.
+pub const MAX_PRINTED_TOKENS: u64 = 99_999;
 
 #[derive(Serialize)]
 struct Plain {
@@ -69,24 +75,33 @@ struct EvalScores<'a> {
     ai_status: AiStatus,
     ai_reason: Option<&'static str>,
     ai_risk: Option<Severity>,
+    answer_cleaned: Option<bool>,
     model_id: Option<&'static str>,
     explanation_sha256: Option<String>,
     finish_reason: Option<&'a str>,
     prompt_tokens: Option<u64>,
     completion_tokens: Option<u64>,
     reasoning_tokens: Option<u64>,
+    thinking_budget: u32,
 }
 
 /// What an eval run prints: `{"v":1,"status":"eval",...}` with kaap-core's floor and findings, the
 /// risk a verdict would carry (`verdict::combine_risk`, so an answer that is not verified raises it
 /// to high at most), the AI's status, the code of why it is not verified or not used, the AI's own
-/// risk, the model that answered, the hex sha256 of the model's explanation, and the completion's
-/// finish reason and token counts as `CompletionRecord` kept them. Every key is always present,
-/// null when it does not apply. Never a signature, verdict bytes, a public key or the explanation
-/// itself: the scores carry no mark of Kaap's verdict key, and the text stays out of the chain.
-/// Fails when the line would pass `MAX_OUTPUT_BYTES`, which every finding at once still does not
-/// unless a token count reaches 10^15.
-pub fn eval_scores(analysis: &Analysis, ai: &AiOutcome, completion: Option<&CompletionRecord>) -> Result<String, &'static str> {
+/// risk, whether the reader had to clean the answer to accept it (`AiAnswer::cleaned`), the model
+/// that answered, the hex sha256 of the model's explanation, the completion's finish reason
+/// (`ai::finish_word`, applied again here) and token counts up to `MAX_PRINTED_TOKENS`, and
+/// the reasoning budget the run asked for. Every key is always present, null when it does not apply.
+/// Never a signature, verdict bytes, a public key or the explanation itself: the scores carry no
+/// mark of Kaap's verdict key, and the text stays out of the chain. Fails when the line would pass
+/// `MAX_OUTPUT_BYTES`, which those two limits leave unreachable: every finding at once, the longest
+/// reason, a 16-letter finish reason, five-digit counts and the largest budget come to 899 bytes.
+pub fn eval_scores(
+    analysis: &Analysis,
+    ai: &AiOutcome,
+    completion: Option<&CompletionRecord>,
+    thinking_budget: u32,
+) -> Result<String, &'static str> {
     let (ai_status, ai_reason, answer, model_id) = match ai {
         AiOutcome::Answered { answer, model_id, check: Check::Verified { .. } } => (AiStatus::Verified, None, Some(answer), Some(*model_id)),
         AiOutcome::Answered { answer, model_id, check: Check::Unverified(why) } => (AiStatus::Unverified, Some(why.code()), Some(answer), Some(*model_id)),
@@ -102,18 +117,24 @@ pub fn eval_scores(analysis: &Analysis, ai: &AiOutcome, completion: Option<&Comp
         ai_status,
         ai_reason,
         ai_risk: answer.map(|a| severity_of(a.risk)),
+        answer_cleaned: answer.map(|a| a.cleaned),
         model_id,
         explanation_sha256: answer.map(|a| hex::encode(sha256(a.explanation.as_bytes()))),
-        finish_reason: completion.and_then(|c| c.finish_reason.as_deref()),
-        prompt_tokens: completion.and_then(|c| c.prompt_tokens),
-        completion_tokens: completion.and_then(|c| c.completion_tokens),
-        reasoning_tokens: completion.and_then(|c| c.reasoning_tokens),
+        finish_reason: completion.and_then(|c| c.finish_reason.as_deref()).map(finish_word),
+        prompt_tokens: printed(completion.and_then(|c| c.prompt_tokens)),
+        completion_tokens: printed(completion.and_then(|c| c.completion_tokens)),
+        reasoning_tokens: printed(completion.and_then(|c| c.reasoning_tokens)),
+        thinking_budget,
     };
     let out = sorted_json(&scores).map_err(|_| "the output could not be written")?;
     if out.len() > MAX_OUTPUT_BYTES {
         return Err("the eval output does not fit in 900 bytes");
     }
     Ok(out)
+}
+
+fn printed(tokens: Option<u64>) -> Option<u64> {
+    tokens.filter(|&n| n <= MAX_PRINTED_TOKENS)
 }
 
 fn plain(status: &'static str, reason: &'static str) -> String {

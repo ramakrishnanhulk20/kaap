@@ -378,6 +378,9 @@ fn an_absent_deployment_log_is_recorded_absent_and_downgrades_nothing() {
     }
 }
 
+/// An edit to the model entry of the stand-in report.
+type ModelEdit = fn(&mut Value);
+
 /// The checks run inside the preflight: a whole answer through the stand-in world, whose model
 /// entry carries the 11 Nov software record, verifies and records it; the same answer with that
 /// record broken comes back Unverified with the reason, never Verified.
@@ -396,7 +399,7 @@ fn a_broken_software_record_makes_the_whole_answer_unverified() {
     assert_eq!(r["model_quotes"][0]["compose_hash"], COMPOSE_HASH);
     assert_eq!(r["model_quotes"][0]["deployment"], "absent");
 
-    let cases: [(fn(&mut Value), Unverified); 4] = [
+    let cases: [(ModelEdit, Unverified); 4] = [
         (|m| m["event_log"] = json!("[]"), Unverified::EventLogMissing),
         (|m| m["event_log"].as_array_mut().unwrap().push(runtime_event("compose-hash", &[0x66; 32])), Unverified::RtmrReplayMismatch),
         (|m| m["info"]["tcb_info"]["app_compose"] = json!("{}"), Unverified::ComposeMismatch),

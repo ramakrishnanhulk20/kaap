@@ -212,7 +212,7 @@ fn a_valid_text_carrying_add_public_key_is_dangerous() {
     let message = format!(r#"{{"signer_id":"{DAO}","deadline":"2026-12-01T00:00:00Z","intents":[{{"intent":"add_public_key","public_key":"ed25519:EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"}}]}}"#);
     let input = honest(&message, "intents.near", DAO, Some(BLOCK_NS));
     assert_eq!(hash_codes(&input), vec![HashTextDangerous]);
-    assert_eq!(sign_effect(&input).0, true);
+    assert!(sign_effect(&input).0);
     let (effects, codes) = check(&input);
     assert!(codes.contains(&IntentsKeyChange));
     assert!(effects.contains(&Effect::IntentsKeyChange {

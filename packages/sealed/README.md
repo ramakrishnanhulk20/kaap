@@ -127,9 +127,32 @@ NEAR AI's own sealed hardware (`providerType` vllm, `ownedBy` nearai, attestatio
 verifiable, ready), sent with `x-no-aliasing: true`. Its reasoning is capped at 512 tokens with
 `thinking_token_budget` (NEAR AI's docs of 27 Oct 2026: turning it off moves it into the answer).
 The model sees a fixed system prompt and the facts as one quoted JSON object with every field
-capped (the description at 2,000 bytes). Its answer must be exactly
-`{"risk":"low|medium|high|critical","explanation":"<at most 280 bytes of plain ASCII, no links, no
-markup>"}`. Anything else, or no key, makes the AI unavailable and the plain-code verdict stands.
+capped (the description at 2,000 bytes). It is told to answer
+`{"risk":"low|medium|high|critical","explanation":"..."}` with an explanation of at most 200
+characters of plain ASCII, no links and no markup. The answer is read forgivingly in form and never
+in substance, and each refusal has its own code:
+
+- Whitespace around the answer, and one code fence around the whole of it (a first line of three
+  backticks, optionally followed by `json`, and a last line of three backticks), are taken off.
+  Any other text before or after the object stays, so the answer is refused (`answer_not_json`).
+- What is left must be one JSON value (`answer_not_json`), and that value one object with exactly
+  the string fields `risk` and `explanation`, nothing extra, missing or repeated
+  (`answer_wrong_fields`).
+- `risk` must be exactly one of the four words (`unknown_risk_word`). It is never guessed or
+  repaired.
+- The explanation is cleaned in form. Curly quotes, en and em dashes, the minus sign and the
+  ellipsis become their ASCII forms; a non-breaking space, a tab or a line break becomes a space.
+  Then a link, `://` or `www.` in any case, is refused (`explanation_has_link`), before anything
+  is dropped. A colon followed by anything but a space gets a space after it. Every other
+  non-ASCII character becomes `?`, so a dropped letter leaves a mark (a lookalike of
+  `alice.testnet` with a Cyrillic first letter reads `?lice.testnet`, never another real name), and
+  every other ASCII character outside plain text becomes a space. Runs of spaces become one, and the ends are trimmed. Nothing left is
+  refused (`explanation_empty`).
+- An explanation over 280 bytes is cut at its last word boundary, never refused. The result must
+  pass the same plain-text check as before (`explanation_not_plain_text`, which the cleaning now
+  leaves unreachable).
+
+Anything else, or no key, makes the AI unavailable and the plain-code verdict stands.
 
 The key reaches a run only when the caller names its secret row in `request_execution`
 (`secrets_ref: {"profile": "near-ai", "account_id": <the row's owner>}`; the worker sends it when
@@ -300,18 +323,31 @@ reader, and must be exactly what serde writes for what it read, so an unknown or
 any depth is refused (`input is not a kaap-core ProposalInput as serde writes it`). The whole input
 is at most 32 KiB. The payment gate is the judge run's: the worker is free and anyone else pays.
 
+The wrapper may also carry `"thinking_budget"`, a whole number from 64 to 1024, which replaces the
+model's usual reasoning budget of 512 tokens for that one run (`max_tokens` stays the budget plus
+400). Any other value, `null`, a fraction or a string included, is refused (`thinking_budget must
+be a whole number from 64 to 1024`). A judge input has no such field: one that carries it is
+refused as any unknown field is. This field and the two output keys `answer_cleaned` and
+`thinking_budget` are newer than build `da2c2853`, which refuses the field as unknown.
+
 Every fact judged comes from the input. The one chain read is the final block, from both providers
 by the judge run's rule, for the clock; it is not printed. kaap-core analyses the input, and the
 model is asked about it exactly as for a public verdict. Then it prints, keys sorted, every key always
 present and null when it does not apply:
 
 ```
-{"ai_reason":"no_clock","ai_risk":"critical","ai_status":"unverified","completion_tokens":120,"explanation_sha256":"<hex>","findings":["NEW_RECIPIENT"],"finish_reason":"stop","floor":"medium","model_id":"z-ai/glm-5.3-flash","prompt_tokens":900,"reasoning_tokens":40,"risk":"high","status":"eval","v":1}
+{"ai_reason":"no_clock","ai_risk":"critical","ai_status":"unverified","answer_cleaned":false,"completion_tokens":120,"explanation_sha256":"<hex>","findings":["NEW_RECIPIENT"],"finish_reason":"stop","floor":"medium","model_id":"z-ai/glm-5.3-flash","prompt_tokens":900,"reasoning_tokens":40,"risk":"high","status":"eval","thinking_budget":512,"v":1}
 ```
 
 `risk` is what a verdict would carry: the higher of the floor and the AI's own `ai_risk`, an answer
 that is not verified counting as high at most. `explanation_sha256` is the sha256 of the model's own
-explanation, which is not printed. There is no signature, no verdict and no public key, nothing is
+explanation, as the reader kept it, which is not printed. `answer_cleaned` is true when the reader
+had to take a code fence off or change the explanation's text to accept the answer, and null with no
+answer; it is not part of any verdict. `thinking_budget` is the budget the run used.
+`finish_reason` is the completion's own word only when it is 1 to 16 characters of `a-z` and `_`,
+and `other` for anything else, here and in the evidence record. A token count over 99,999, which no
+real run reaches, prints as null. With those two limits every eval output fits the 900-byte cap,
+every finding at once included. There is no signature, no verdict and no public key, nothing is
 written to public storage and the text key is never touched, so an eval leaves no mark under Kaap's
 verdict key, whoever paid for it. The clock is a judge run's: `NEAR_BLOCK_TIMESTAMP` beside a final
 block both providers agree on. Without one, the answer is unverified (`no_clock`) and the scores are
@@ -322,7 +358,8 @@ kaap-core (`evalInput` in packages/core-wasm, the scoreboards' own `input_of`, w
 list) and prints how many fit. A record over 32 KiB gets its price table cut to the tokens its own
 analysis names (`evalInputTrimmed`), and only when kaap-core's whole analysis is the same with both
 tables; its row says `prices_trimmed: true`. Without `--dry-run` the script runs them on testnet once
-each, with spending caps, and `--report` scores the results.
+each, with spending caps, and `--report` scores the results. `--thinking-budget <n>` sends that
+budget with every record, and every row records `thinking_budget` and `answer_cleaned`.
 
 ## Outside calls
 

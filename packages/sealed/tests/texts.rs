@@ -523,7 +523,7 @@ fn words(bytes: usize) -> String {
 
 /// One answer under every check a model's answer can come back with.
 fn answered(answer: &str) -> Vec<AiOutcome> {
-    let answer = AiAnswer { risk: AiRisk::Critical, explanation: answer.to_string() };
+    let answer = AiAnswer { risk: AiRisk::Critical, explanation: answer.to_string(), cleaned: false };
     let with = |check| AiOutcome::Answered { answer: answer.clone(), model_id: MODEL_ID, check };
     let mut all = vec![with(Check::Verified { tcb_status: "OutOfDate".to_string() })];
     all.extend(Unverified::ALL.map(|why| with(Check::Unverified(why))));

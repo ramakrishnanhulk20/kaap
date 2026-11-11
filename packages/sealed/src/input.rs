@@ -8,6 +8,7 @@ use serde::Deserialize;
 use serde_json::value::RawValue;
 use serde_json::Value;
 
+use crate::ai::{MAX_EVAL_THINKING_BUDGET, MIN_EVAL_THINKING_BUDGET};
 use crate::texts::is_usable_key;
 
 /// A public input is about 200 bytes. A sealed text takes the rest: 32 KiB is what OutLayer stores
@@ -53,6 +54,16 @@ struct RawEval<'a> {
     network: String,
     #[serde(borrow)]
     input: &'a RawValue,
+    /// Read as any JSON value, `null` included, so that every value but a whole number in range
+    /// gets the one reason that names the field.
+    #[serde(default, deserialize_with = "present")]
+    thinking_budget: Option<Value>,
+}
+
+/// A field that is there, whatever its value: `Some(Value::Null)` for an explicit `null`, which
+/// plain `Option` would read as absent.
+fn present<'de, D: serde::Deserializer<'de>>(field: D) -> Result<Option<Value>, D::Error> {
+    Value::deserialize(field).map(Some)
 }
 
 /// What a run is asked to do.
@@ -66,12 +77,14 @@ pub enum Request {
     Eval(Box<EvalInput>),
 }
 
-/// An eval request after every check: the run's network, and the proposal exactly as kaap-core
-/// will judge it. Nothing in it was read from the chain.
+/// An eval request after every check: the run's network, the proposal exactly as kaap-core will
+/// judge it, and the model's reasoning budget for this run when the input set one. Nothing in it
+/// was read from the chain.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EvalInput {
     pub network: Network,
     pub proposal: ProposalInput,
+    pub thinking_budget: Option<u32>,
 }
 
 /// A text as it arrived: ciphertext only.
@@ -113,6 +126,7 @@ pub enum InputError {
     BadReplyKey,
     NotTheEvalShape,
     NotAProposalInput,
+    ThinkingBudgetOutOfRange,
 }
 
 impl InputError {
@@ -134,6 +148,7 @@ impl InputError {
             InputError::BadReplyKey => "reply_key is not 32 bytes of hex holding a usable X25519 public key",
             InputError::NotTheEvalShape => "an eval input is not {v,op,network,input}",
             InputError::NotAProposalInput => "input is not a kaap-core ProposalInput as serde writes it",
+            InputError::ThinkingBudgetOutOfRange => "thinking_budget must be a whole number from 64 to 1024",
         }
     }
 }
@@ -182,6 +197,11 @@ fn names_eval(raw: &[u8]) -> bool {
 /// does for the size, the version and the run's network. Only the run's network is checked here;
 /// the proposal's own network is a fact kaap-core judges, as the answer key's mainnet and sandbox
 /// records carry it. There is no text channel: the wrapper has no field for one.
+///
+/// The wrapper may also carry `"thinking_budget"`, a whole number from `MIN_EVAL_THINKING_BUDGET`
+/// to `MAX_EVAL_THINKING_BUDGET`, for this run's reasoning budget; any other value, `null`, a
+/// fraction or a string included, is refused (`ThinkingBudgetOutOfRange`). A judge input has no
+/// such field, so one that carries it is refused as any unknown field is.
 pub fn parse_eval(raw: &[u8], run_network: Option<&str>) -> Result<EvalInput, InputError> {
     if raw.len() > MAX_INPUT_BYTES {
         return Err(InputError::TooLarge);
@@ -203,6 +223,16 @@ pub fn parse_eval(raw: &[u8], run_network: Option<&str>) -> Result<EvalInput, In
         Some(run) if run != wrapper.network => return Err(InputError::NetworkNotThisRun),
         Some(_) => {}
     }
+    let thinking_budget = wrapper
+        .thinking_budget
+        .map(|value| {
+            value
+                .as_u64()
+                .and_then(|n| u32::try_from(n).ok())
+                .filter(|n| (MIN_EVAL_THINKING_BUDGET..=MAX_EVAL_THINKING_BUDGET).contains(n))
+                .ok_or(InputError::ThinkingBudgetOutOfRange)
+        })
+        .transpose()?;
     let text = wrapper.input.get();
     let proposal: ProposalInput = serde_json::from_str(text).map_err(|_| InputError::NotAProposalInput)?;
     let as_sent: Value = serde_json::from_str(text).map_err(|_| InputError::NotAProposalInput)?;
@@ -210,7 +240,7 @@ pub fn parse_eval(raw: &[u8], run_network: Option<&str>) -> Result<EvalInput, In
     if as_sent != as_read {
         return Err(InputError::NotAProposalInput);
     }
-    Ok(EvalInput { network, proposal })
+    Ok(EvalInput { network, proposal, thinking_budget })
 }
 
 /// Parses and checks the raw stdin bytes.

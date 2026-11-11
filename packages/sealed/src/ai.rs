@@ -2,9 +2,10 @@
 //!
 //! The model is asked only when the catalog says it runs in NEAR AI's own sealed hardware with
 //! attestation support, under its canonical id and with aliasing off. Its answer must be exactly
-//! `{"risk":...,"explanation":...}` with a known risk word and a short plain-text explanation;
-//! anything else makes the AI unavailable and the plain-code verdict stands. An answer that passes
-//! is Verified only when every check in `attest` passes, and Unverified otherwise.
+//! `{"risk":...,"explanation":...}`, alone or inside one code fence, with a known risk word; the
+//! explanation is cleaned in form (typographic characters, spacing, length) and must then be plain
+//! text. Anything else makes the AI unavailable and the plain-code verdict stands. An answer that
+//! passes is Verified only when every check in `attest` passes, and Unverified otherwise.
 
 use serde::Deserialize;
 
@@ -24,6 +25,8 @@ pub const MODEL_ID_QUERY: &str = "z-ai%2Fglm-5.3-flash";
 pub const PROVIDER_TYPE: &str = "vllm";
 pub const OWNER: &str = "nearai";
 
+/// The longest public explanation a verdict keeps. The model is told 200 characters, so the cut at
+/// a word that a longer one gets is rare.
 pub const MAX_EXPLANATION_BYTES: usize = 280;
 /// The limit the model is told when only a member reads its explanation, one fixed number so the
 /// prompt stays one fixed text. Nothing is cut at it: the output's real room decides, run by run, in
@@ -54,6 +57,9 @@ pub enum AiRisk {
 pub struct AiAnswer {
     pub risk: AiRisk,
     pub explanation: String,
+    /// True when the reader had to take the answer out of a code fence or change the explanation's
+    /// text to accept it. Measured by eval runs only; it is not part of the verdict.
+    pub cleaned: bool,
 }
 
 /// Why an answer, a catalog entry or a call was not used. Fixed words only, for the same reason
@@ -73,10 +79,14 @@ pub enum Refusal {
     ResponseUnreadable,
     NotOneFinishedChoice,
     AnswerTooLong,
-    AnswerNotTheSchema,
+    /// The message, out of its code fence if it had one, is not one JSON value.
+    AnswerNotJson,
+    /// JSON, but not one object with exactly the string fields `risk` and `explanation`.
+    AnswerWrongFields,
     UnknownRiskWord,
     ExplanationEmpty,
-    ExplanationTooLong,
+    ExplanationHasLink,
+    /// Kept as the last gate after cleaning, which leaves nothing it refuses.
     ExplanationNotPlainText,
     Deadline,
     /// A prompt only members may read, and the checks before it did not pass (C12).
@@ -84,7 +94,7 @@ pub enum Refusal {
 }
 
 impl Refusal {
-    pub const ALL: [Refusal; 17] = [
+    pub const ALL: [Refusal; 18] = [
         Refusal::AiKeyMissing,
         Refusal::KeyNotAHeaderValue,
         Refusal::FactsTooLarge,
@@ -95,10 +105,11 @@ impl Refusal {
         Refusal::ResponseUnreadable,
         Refusal::NotOneFinishedChoice,
         Refusal::AnswerTooLong,
-        Refusal::AnswerNotTheSchema,
+        Refusal::AnswerNotJson,
+        Refusal::AnswerWrongFields,
         Refusal::UnknownRiskWord,
         Refusal::ExplanationEmpty,
-        Refusal::ExplanationTooLong,
+        Refusal::ExplanationHasLink,
         Refusal::ExplanationNotPlainText,
         Refusal::Deadline,
         Refusal::SealedHardwareNotProven,
@@ -118,10 +129,11 @@ impl Refusal {
             ResponseUnreadable => "AI unavailable: the NEAR AI response could not be read.",
             NotOneFinishedChoice => "AI unavailable: the answer was cut off or not a single choice.",
             AnswerTooLong => "AI unavailable: the answer was too long.",
-            AnswerNotTheSchema => "AI unavailable: the answer was not the required JSON.",
+            AnswerNotJson => "AI unavailable: the answer was not JSON.",
+            AnswerWrongFields => "AI unavailable: the answer was not exactly a risk and an explanation.",
             UnknownRiskWord => "AI unavailable: the answer used an unknown risk word.",
             ExplanationEmpty => "AI unavailable: the answer had no explanation.",
-            ExplanationTooLong => "AI unavailable: the explanation was over 280 bytes.",
+            ExplanationHasLink => "AI unavailable: the explanation held a link.",
             ExplanationNotPlainText => "AI unavailable: the explanation was not plain text.",
             Deadline => "AI unavailable: NEAR AI did not answer in time.",
             SealedHardwareNotProven => "AI unavailable: the model's sealed hardware was not proven, so the text was not sent.",
@@ -142,10 +154,11 @@ impl Refusal {
             ResponseUnreadable => "response_unreadable",
             NotOneFinishedChoice => "not_one_finished_choice",
             AnswerTooLong => "answer_too_long",
-            AnswerNotTheSchema => "answer_not_the_schema",
+            AnswerNotJson => "answer_not_json",
+            AnswerWrongFields => "answer_wrong_fields",
             UnknownRiskWord => "unknown_risk_word",
             ExplanationEmpty => "explanation_empty",
-            ExplanationTooLong => "explanation_too_long",
+            ExplanationHasLink => "explanation_has_link",
             ExplanationNotPlainText => "explanation_not_plain_text",
             Deadline => "deadline",
             SealedHardwareNotProven => "sealed_hardware_not_proven",
@@ -160,17 +173,26 @@ struct RawAnswer {
     explanation: String,
 }
 
-/// Parses the model's message content into an answer.
+/// Parses the model's message content into an answer, forgiving in form and never in substance.
 ///
-/// Refuses: content over `MAX_ANSWER_BYTES`; anything but one JSON object with exactly the keys
-/// `risk` and `explanation` as strings (a code fence, extra or duplicate keys, other types); a
-/// risk other than `low`, `medium`, `high` or `critical` exactly; an empty explanation, one over
-/// `MAX_EXPLANATION_BYTES`, or one `is_plain_text` refuses.
+/// Refuses content over `MAX_ANSWER_BYTES` (`AnswerTooLong`). Whitespace around the content is
+/// ignored, and so is one code fence around the whole of it (a first line of three backticks,
+/// optionally followed by `json`, and a last line of three backticks); any other text before or
+/// after the object stays. What is left must be one JSON value (`AnswerNotJson`), and that value
+/// one object with exactly the string fields `risk` and `explanation`, nothing extra, missing or
+/// repeated (`AnswerWrongFields`). The risk must be `low`, `medium`, `high` or `critical` exactly
+/// (`UnknownRiskWord`): it is never guessed or repaired. The explanation is cleaned by
+/// `clean_explanation` (`ExplanationHasLink` when it holds a link), cut at its last word boundary
+/// within `MAX_EXPLANATION_BYTES`, refused when nothing is left (`ExplanationEmpty`), and must then
+/// pass `is_plain_text` (`ExplanationNotPlainText`, which the cleaning leaves unreachable).
+/// `cleaned` says whether the fence or the explanation's text had to change.
 pub fn parse_answer(content: &str) -> Result<AiAnswer, Refusal> {
     if content.len() > MAX_ANSWER_BYTES {
         return Err(Refusal::AnswerTooLong);
     }
-    let raw: RawAnswer = serde_json::from_str(content).map_err(|_| Refusal::AnswerNotTheSchema)?;
+    let trimmed = content.trim();
+    let fenced = unfenced(trimmed);
+    let raw = read_fields(fenced.unwrap_or(trimmed))?;
     let risk = match raw.risk.as_str() {
         "low" => AiRisk::Low,
         "medium" => AiRisk::Medium,
@@ -178,16 +200,92 @@ pub fn parse_answer(content: &str) -> Result<AiAnswer, Refusal> {
         "critical" => AiRisk::Critical,
         _ => return Err(Refusal::UnknownRiskWord),
     };
-    if raw.explanation.is_empty() {
+    let explanation = crate::prompt::cut_at_word(&clean_explanation(&raw.explanation)?, MAX_EXPLANATION_BYTES);
+    if explanation.is_empty() {
         return Err(Refusal::ExplanationEmpty);
     }
-    if raw.explanation.len() > MAX_EXPLANATION_BYTES {
-        return Err(Refusal::ExplanationTooLong);
-    }
-    if !is_plain_text(&raw.explanation) {
+    if !is_plain_text(&explanation) {
         return Err(Refusal::ExplanationNotPlainText);
     }
-    Ok(AiAnswer { risk, explanation: raw.explanation })
+    let cleaned = fenced.is_some() || explanation != raw.explanation;
+    Ok(AiAnswer { risk, explanation, cleaned })
+}
+
+/// The inside of one code fence that wraps the whole of `text`, trimmed, or `None` when `text` is
+/// not exactly that. Only the two fence lines are taken away, so text outside them stays and is
+/// refused with the rest.
+fn unfenced(text: &str) -> Option<&str> {
+    let (open, rest) = text.split_once('\n')?;
+    let (inside, close) = rest.rsplit_once('\n')?;
+    (matches!(open.trim_end(), "```" | "```json") && close.trim() == "```").then(|| inside.trim())
+}
+
+/// The two fields, telling text that is not JSON apart from JSON of another shape. serde's derived
+/// reader refuses extra and repeated keys, which a generic JSON value would take silently, but it
+/// also reads a two-item array as the struct, so the value must open as an object.
+fn read_fields(text: &str) -> Result<RawAnswer, Refusal> {
+    match serde_json::from_str::<RawAnswer>(text) {
+        Ok(raw) if text.trim_start().starts_with('{') => Ok(raw),
+        _ => match serde_json::from_str::<serde::de::IgnoredAny>(text) {
+            Ok(_) => Err(Refusal::AnswerWrongFields),
+            Err(_) => Err(Refusal::AnswerNotJson),
+        },
+    }
+}
+
+/// The ASCII a model means by a typographic character it often writes, or `None` for any other
+/// character. Line breaks and tabs are spacing too.
+fn ascii_form(c: char) -> Option<&'static str> {
+    Some(match c {
+        '\u{2018}' | '\u{2019}' => "'",
+        '\u{201c}' | '\u{201d}' => "\"",
+        '\u{2013}' | '\u{2014}' | '\u{2212}' => "-",
+        '\u{2026}' => "...",
+        '\u{a0}' | '\t' | '\r' | '\n' => " ",
+        _ => return None,
+    })
+}
+
+/// The explanation cleaned in form, in this order: `ascii_form` for each character; refused as
+/// `ExplanationHasLink` when the result holds `://` or `www.` in any case, checked before anything
+/// is dropped so that dropping can never hide one; a space after every colon that is followed by
+/// something else; every other non-ASCII character becomes `?`, so that a dropped letter leaves a
+/// mark and a lookalike name never reads as a different real one; every ASCII character
+/// `is_plain_text` would refuse on its own becomes a space; runs of spaces become one; trimmed.
+/// What comes out is made only of characters `is_plain_text` allows, and every colon in it is
+/// followed by a space or ends it, so `is_plain_text` accepts it.
+fn clean_explanation(text: &str) -> Result<String, Refusal> {
+    let mut mapped = String::with_capacity(text.len());
+    for c in text.chars() {
+        match ascii_form(c) {
+            Some(ascii) => mapped.push_str(ascii),
+            None => mapped.push(c),
+        }
+    }
+    let lower = mapped.to_ascii_lowercase();
+    if lower.contains("://") || lower.contains("www.") {
+        return Err(Refusal::ExplanationHasLink);
+    }
+    let mut spaced = String::with_capacity(mapped.len());
+    let mut chars = mapped.chars().peekable();
+    while let Some(c) = chars.next() {
+        spaced.push(c);
+        if c == ':' && chars.peek().is_some_and(|&next| next != ' ') {
+            spaced.push(' ');
+        }
+    }
+    let kept = spaced.chars().map(|c| match c {
+        c if !c.is_ascii() => '?',
+        c if is_plain_text(c.encode_utf8(&mut [0; 4])) => c,
+        _ => ' ',
+    });
+    let mut collapsed = String::with_capacity(spaced.len());
+    for c in kept {
+        if !(c == ' ' && collapsed.ends_with(' ')) {
+            collapsed.push(c);
+        }
+    }
+    Ok(collapsed.trim().to_string())
 }
 
 /// True when `text` is plain prose that a web page, a Telegram message or an email can show as
@@ -282,12 +380,17 @@ pub const THINKING_TOKEN_BUDGET: u32 = 512;
 /// The answer itself. The same run's answer took about 66 of these 400 tokens, and one run is thin,
 /// so scripts/ai-eval.mjs measures this too.
 pub const MAX_ANSWER_TOKENS: u32 = 400;
+/// The reasoning budgets an eval run may ask for in place of `THINKING_TOKEN_BUDGET`, so the answer
+/// key can show what the budget does to the answers. A judge run always uses the constant.
+pub const MIN_EVAL_THINKING_BUDGET: u32 = 64;
+pub const MAX_EVAL_THINKING_BUDGET: u32 = 1_024;
 
 /// The one chat request: non-streamed (a streamed answer is signed by the gateway, not the
-/// model), temperature 0, reasoning capped at `THINKING_TOKEN_BUDGET`, room for the reasoning
-/// plus `MAX_ANSWER_TOKENS`, JSON mode. A Members prompt alone adds `MAX_MEMBER_EXPLANATION_BYTES`
-/// to the system prompt. These are the exact bytes sent and hashed.
-pub fn chat_request_body(model_id: &str, user_message: &str, audience: Audience) -> Vec<u8> {
+/// model), temperature 0, reasoning capped at `thinking_budget` (`THINKING_TOKEN_BUDGET` on every
+/// judge run), room for the reasoning plus `MAX_ANSWER_TOKENS`, JSON mode. A Members prompt alone
+/// adds `MAX_MEMBER_EXPLANATION_BYTES` to the system prompt. These are the exact bytes sent and
+/// hashed.
+pub fn chat_request_body(model_id: &str, user_message: &str, audience: Audience, thinking_budget: u32) -> Vec<u8> {
     let system = match audience {
         Audience::Public => crate::prompt::SYSTEM_PROMPT.to_string(),
         Audience::Members => crate::prompt::member_system_prompt(),
@@ -300,8 +403,8 @@ pub fn chat_request_body(model_id: &str, user_message: &str, audience: Audience)
         ],
         "stream": false,
         "temperature": 0,
-        "max_tokens": THINKING_TOKEN_BUDGET + MAX_ANSWER_TOKENS,
-        "thinking_token_budget": THINKING_TOKEN_BUDGET,
+        "max_tokens": thinking_budget + MAX_ANSWER_TOKENS,
+        "thinking_token_budget": thinking_budget,
         "response_format": { "type": "json_object" },
     })
     .to_string()
@@ -343,10 +446,23 @@ pub struct Completion {
     pub id: String,
     pub object: String,
     pub model: String,
+    /// Passed through `finish_word`, so it is never more than a short fixed-alphabet word.
     pub finish_reason: Option<String>,
     /// The message text, when it was a single string.
     pub content: Option<String>,
     pub usage: Usage,
+}
+
+/// `reason` when it is 1 to 16 characters of `a-z` and `_`, as the OpenAI-style finish reasons
+/// (`stop`, `length`, `tool_calls`, `content_filter`) all are, and `other` for anything else, so
+/// text from outside the job never reaches an output or an evidence record through this field.
+pub fn finish_word(reason: &str) -> &str {
+    let word = (1..=16).contains(&reason.len()) && reason.bytes().all(|b| b.is_ascii_lowercase() || b == b'_');
+    if word {
+        reason
+    } else {
+        "other"
+    }
 }
 
 /// Reads a chat completion. Refuses a body that is not the documented response shape
@@ -367,7 +483,7 @@ pub fn read_completion(body: &[u8]) -> Result<Completion, Refusal> {
         id: response.id,
         object: response.object,
         model: response.model,
-        finish_reason: choice.finish_reason.clone(),
+        finish_reason: choice.finish_reason.as_deref().map(|r| finish_word(r).to_string()),
         content: match &choice.message.content {
             Some(serde_json::Value::String(text)) => Some(text.clone()),
             _ => None,
@@ -381,12 +497,13 @@ pub fn read_completion(body: &[u8]) -> Result<Completion, Refusal> {
 }
 
 /// The answer in a completion: it finished with `stop` (`NotOneFinishedChoice` when cut off),
-/// its content is a single string (`AnswerNotTheSchema`), and `parse_answer` accepts it.
+/// its content is a single string (`AnswerNotJson` when it is none, or a list of parts), and
+/// `parse_answer` accepts it.
 pub fn answer_of(completion: &Completion) -> Result<AiAnswer, Refusal> {
     if completion.finish_reason.as_deref() != Some("stop") {
         return Err(Refusal::NotOneFinishedChoice);
     }
-    parse_answer(completion.content.as_deref().ok_or(Refusal::AnswerNotTheSchema)?)
+    parse_answer(completion.content.as_deref().ok_or(Refusal::AnswerNotJson)?)
 }
 
 /// `read_completion` and `answer_of` together.
@@ -461,19 +578,36 @@ pub fn consult(
     deadline: Deadline,
     trust: &Trust,
 ) -> (AiOutcome, Evidence) {
+    consult_with_budget(http, key, facts, audience, THINKING_TOKEN_BUDGET, deadline, trust)
+}
+
+/// `consult` with the model's reasoning capped at `thinking_budget` instead of
+/// `THINKING_TOKEN_BUDGET`. Only an eval run passes another budget, one `input::parse_eval` held
+/// to `MIN_EVAL_THINKING_BUDGET..=MAX_EVAL_THINKING_BUDGET`.
+pub fn consult_with_budget(
+    http: &mut dyn Http,
+    key: Option<&str>,
+    facts: Option<&str>,
+    audience: Audience,
+    thinking_budget: u32,
+    deadline: Deadline,
+    trust: &Trust,
+) -> (AiOutcome, Evidence) {
     let mut evidence = Evidence::new();
-    let outcome = match ask(http, key, facts, audience, deadline, trust, &mut evidence) {
+    let outcome = match ask(http, key, facts, audience, thinking_budget, deadline, trust, &mut evidence) {
         Ok((answer, check)) => AiOutcome::Answered { answer, model_id: MODEL_ID, check },
         Err(why) => AiOutcome::Unavailable(why),
     };
     (outcome, evidence)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn ask(
     http: &mut dyn Http,
     key: Option<&str>,
     facts: Option<&str>,
     audience: Audience,
+    thinking_budget: u32,
     deadline: Deadline,
     trust: &Trust,
     evidence: &mut Evidence,
@@ -516,7 +650,7 @@ fn ask(
         return Err(Refusal::Deadline);
     }
     let authorization = format!("Bearer {key}");
-    let body = chat_request_body(MODEL_ID, facts, audience);
+    let body = chat_request_body(MODEL_ID, facts, audience, thinking_budget);
     let chat = http
         .send(&Request {
             method: Method::Post,

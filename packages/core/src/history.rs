@@ -74,7 +74,7 @@ fn is_digits(text: &str) -> bool {
 }
 
 fn is_whole(value: &Value) -> bool {
-    value.as_f64().is_some_and(|n| n >= 0.0 && n <= MAX_SAFE_INTEGER && n.fract() == 0.0)
+    value.as_f64().is_some_and(|n| (0.0..=MAX_SAFE_INTEGER).contains(&n) && n.fract() == 0.0)
 }
 
 /// The shape the CLI's `storedSchema` asks of each proposal.
@@ -292,7 +292,7 @@ mod tests {
             spoiled("last_actions_log", json!([{ "block_height": "x" }])),
         ];
         for p in unreadable {
-            let history = history_before(&[p.clone()], 11, &prices());
+            let history = history_before(std::slice::from_ref(&p), 11, &prices());
             assert_eq!(history.approved_payments_before, 0, "{p}");
         }
         assert_eq!(history_before(&[good], 11, &prices()).approved_payments_before, 1);

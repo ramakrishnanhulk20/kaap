@@ -15,6 +15,9 @@
 //   --set <labels.jsonl> (repeatable) runs another set instead of eval/real and eval/planted.
 //   --out <file> defaults to <the set's folder>/ai-runs/<UTC date>.jsonl and must lie inside that
 //     folder, so the results of a private set stay beside it and out of every public file.
+//   --thinking-budget <64-1024> sends `thinking_budget` with every input, so the model reasons
+//     within that many tokens instead of the job's 512. Without it the input is as before. Every
+//     row records the budget and whether the job had to clean the answer (`answer_cleaned`).
 //
 // Each input is built by kaap-core itself: packages/core-wasm's evalInput runs the scoreboards' own
 // `input_of` on the record with the census price list (packages/core/tests/fixtures/tokens.json),
@@ -77,11 +80,16 @@ const LIMITS = { max_instructions: 10_000_000_000, max_memory_mb: 128, max_execu
 // of a call's method name and arguments costs on top of the attached gas.
 const MIN_GAS_PRICE = 100_000_000n;
 const ARG_BYTE_GAS = 2n * 2_235_934n;
+// packages/sealed/src/ai.rs: the reasoning budget a run uses unless the input sets one, the range
+// an eval input may set, and the answer's own tokens on top of it.
+const THINKING_TOKEN_BUDGET = 512;
+const MIN_THINKING_BUDGET = 64;
+const MAX_THINKING_BUDGET = 1024;
+const MAX_ANSWER_TOKENS = 400n;
 // A record whose answer reported no token counts is counted as if it used the most it could: every
 // byte of the system prompt and the 8 KiB facts cap as a token (packages/sealed/src/prompt.rs,
-// rounded up from about 9,600), and the whole max_tokens of 912 (ai.rs, 512 + 400).
+// rounded up from about 9,600), and the whole max_tokens, the budget plus 400 (912 at 512).
 const WORST_PROMPT_TOKENS = 12_000n;
-const WORST_COMPLETION_TOKENS = 912n;
 
 const SEVERITY = /^(low|medium|high|critical)$/;
 const WORD = /^[a-z_]{1,40}$/;
@@ -89,11 +97,11 @@ const WORD = /^[a-z_]{1,40}$/;
 class Stop extends Error {}
 
 function usage(why) {
-  throw new Stop(`${why}\nusage: node scripts/ai-eval.mjs [--dry-run | --report] [--set <labels.jsonl>]... [--out <file>] [--max-usd <dollars>] [--max-near <NEAR>] [--in-flight 1-4]`);
+  throw new Stop(`${why}\nusage: node scripts/ai-eval.mjs [--dry-run | --report] [--set <labels.jsonl>]... [--out <file>] [--max-usd <dollars>] [--max-near <NEAR>] [--in-flight 1-4] [--thinking-budget 64-1024]`);
 }
 
 function options(argv) {
-  const o = { mode: 'live', sets: [], out: null, maxUsd: DEFAULT_MAX_USD, maxNear: DEFAULT_MAX_NEAR, inFlight: MAX_IN_FLIGHT };
+  const o = { mode: 'live', sets: [], out: null, maxUsd: DEFAULT_MAX_USD, maxNear: DEFAULT_MAX_NEAR, inFlight: MAX_IN_FLIGHT, thinkingBudget: null };
   for (let i = 0; i < argv.length; i++) {
     const value = () => argv[++i] ?? usage(`${argv[i - 1]} needs a value`);
     switch (argv[i]) {
@@ -104,11 +112,18 @@ function options(argv) {
       case '--max-usd': o.maxUsd = value(); break;
       case '--max-near': o.maxNear = value(); break;
       case '--in-flight': o.inFlight = Number(value()); break;
+      case '--thinking-budget': o.thinkingBudget = value(); break;
       default: usage(`unknown option ${argv[i]}`);
     }
   }
   if (o.sets.length === 0) o.sets = DEFAULT_SET.map((p) => join(REPO, p));
   if (!Number.isInteger(o.inFlight) || o.inFlight < 1 || o.inFlight > MAX_IN_FLIGHT) usage(`--in-flight must be 1 to ${MAX_IN_FLIGHT}`);
+  if (o.thinkingBudget !== null) {
+    const n = /^[1-9]\d{1,3}$/.test(o.thinkingBudget) ? Number(o.thinkingBudget) : NaN;
+    if (!(n >= MIN_THINKING_BUDGET && n <= MAX_THINKING_BUDGET)) usage(`--thinking-budget must be a whole number from ${MIN_THINKING_BUDGET} to ${MAX_THINKING_BUDGET}`);
+    o.thinkingBudget = n;
+  }
+  o.budget = o.thinkingBudget ?? THINKING_TOKEN_BUDGET;
   o.maxUsdNano = decimal(o.maxUsd, 9, '--max-usd');
   o.maxNearYocto = decimal(o.maxNear, 24, '--max-near');
   const home = commonFolder(o.sets);
@@ -182,10 +197,12 @@ async function loadCore() {
  *  the job refuses one that differs from what serde writes, so it is never parsed and rewritten.
  *  Only a record over the limit gets kaap-core's cut price table (`evalInputTrimmed`, which refuses
  *  the cut unless the whole analysis is the same with both tables); `bytes` stays the full size
- *  when even that does not fit or the cut is refused, and the record is skipped. */
-function buildInputs(core, records) {
+ *  when even that does not fit or the cut is refused, and the record is skipped. `thinkingBudget`,
+ *  when set, goes into the wrapper beside the network. */
+function buildInputs(core, records, thinkingBudget) {
   const tokens = readFileSync(TOKENS, 'utf8');
-  const wrap = (input) => `{"v":1,"op":"eval","network":"${RUN_NETWORK}","input":${input}}`;
+  const budget = thinkingBudget === null ? '' : `,"thinking_budget":${thinkingBudget}`;
+  const wrap = (input) => `{"v":1,"op":"eval","network":"${RUN_NETWORK}"${budget},"input":${input}}`;
   for (const r of records) {
     r.trimmed = false;
     try {
@@ -258,9 +275,11 @@ function readOutput(text) {
   }
   if (out === null || typeof out !== 'object' || out.v !== 1) return null;
   if (out.status === 'eval') {
-    const keys = ['ai_reason', 'ai_risk', 'ai_status', 'completion_tokens', 'explanation_sha256', 'findings', 'finish_reason', 'floor', 'model_id', 'prompt_tokens', 'reasoning_tokens', 'risk', 'status', 'v'];
+    const keys = ['ai_reason', 'ai_risk', 'ai_status', 'answer_cleaned', 'completion_tokens', 'explanation_sha256', 'findings', 'finish_reason', 'floor', 'model_id', 'prompt_tokens', 'reasoning_tokens', 'risk', 'status', 'thinking_budget', 'v'];
     const ok =
       Object.keys(out).sort().join() === keys.join() &&
+      (out.answer_cleaned === null || typeof out.answer_cleaned === 'boolean') &&
+      Number.isSafeInteger(out.thinking_budget) && out.thinking_budget >= MIN_THINKING_BUDGET && out.thinking_budget <= MAX_THINKING_BUDGET &&
       SEVERITY.test(out.floor) && SEVERITY.test(out.risk) && maybe(SEVERITY)(out.ai_risk) &&
       Array.isArray(out.findings) && out.findings.length <= 32 && out.findings.every((c) => typeof c === 'string' && /^[A-Z_]{3,40}$/.test(c)) &&
       /^(verified|unverified|unavailable)$/.test(out.ai_status) && maybe(WORD)(out.ai_reason) && maybe(WORD)(out.finish_reason) &&
@@ -361,7 +380,7 @@ async function live(o, records) {
   const done = readLines(o.out);
   const pending = readLines(pendingFile);
 
-  const worstUsd = () => WORST_PROMPT_TOKENS * prices.input + WORST_COMPLETION_TOKENS * prices.output;
+  const worstUsd = () => WORST_PROMPT_TOKENS * prices.input + (BigInt(o.budget) + MAX_ANSWER_TOKENS) * prices.output;
   const costOf = (row) => ({ nearYocto: BigInt(row.near_yocto ?? '0'), usdNano: row.usd_nano === null ? (row.status === 'eval' ? worstUsd() : 0n) : BigInt(row.usd_nano) });
   let spentNear = 0n;
   let spentUsd = 0n;
@@ -383,6 +402,7 @@ async function live(o, records) {
   console.log(`project ${builds.project_id}, active build ${builds.active_version}, caller ${builds.account}, secret near-ai of ${owner}`);
   console.log(`set ${o.sets.map(shown).join(', ')} (${records.length} records); results ${shown(o.out)}; journal ${shown(pendingFile)}`);
   console.log(`caps ${o.maxUsd} USD and ${o.maxNear} NEAR; ${MODEL_ID} at ${prices.input} and ${prices.output} nano-USD per input and output token; gas price ${price}`);
+  console.log(`thinking budget ${o.budget} tokens${o.thinkingBudget === null ? " (the job's own, not sent)" : ' (sent with every input)'}`);
   console.log(`already done ${done.size}, already spent ${near(spentNear)} NEAR and ${usd(spentUsd)} USD`);
 
   const write = (row) => {
@@ -396,7 +416,7 @@ async function live(o, records) {
     const charged = /^\d+$/.test(String(completed?.payment_charged ?? '')) ? BigInt(completed.payment_charged) : 0n;
     const nearYocto = chain.burnt(outcome) + charged;
     const workerMs = completed?.resources_used?.time_ms;
-    const base = { id: r.id, input_bytes: r.bytes, prices_trimmed: r.trimmed, tx: hash, near_yocto: nearYocto.toString(), wall_ms: wallMs, worker_ms: Number.isSafeInteger(workerMs) ? workerMs : null };
+    const base = { id: r.id, input_bytes: r.bytes, prices_trimmed: r.trimmed, thinking_budget: o.budget, answer_cleaned: null, tx: hash, near_yocto: nearYocto.toString(), wall_ms: wallMs, worker_ms: Number.isSafeInteger(workerMs) ? workerMs : null };
     if (outcome.status?.Failure) return { ...base, status: 'tx_failed', usd_nano: null };
     const value = outcome.status?.SuccessValue;
     const out = value === undefined ? null : readOutput(Buffer.from(value, 'base64').toString('utf8'));
@@ -404,6 +424,7 @@ async function live(o, records) {
     if (out === null) return { ...base, status: 'unreadable_output', usd_nano: null };
     if (out.status !== 'eval') return { ...base, status: out.status, reason: out.reason, usd_nano: null };
     if (out.model_id !== null && out.model_id !== MODEL_ID) throw new Stop(`${r.id} was answered by ${out.model_id}, not ${MODEL_ID}, whose price this run counts`);
+    if (out.thinking_budget !== o.budget) throw new Stop(`${r.id} ran with a thinking budget of ${out.thinking_budget}, not the ${o.budget} this run measures`);
     const counted = out.prompt_tokens !== null && out.completion_tokens !== null;
     const usdNano = counted ? BigInt(out.prompt_tokens) * prices.input + BigInt(out.completion_tokens) * prices.output : null;
     const { v, status, ...scores } = out;
@@ -534,7 +555,7 @@ try {
     process.exit(0);
   }
   const core = await loadCore();
-  buildInputs(core, records);
+  buildInputs(core, records, o.thinkingBudget);
   if (o.mode === 'dry-run') {
     dryRun(o, records);
     process.exit(0);

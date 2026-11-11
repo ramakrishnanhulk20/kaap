@@ -30,8 +30,9 @@ pub const INTEL_TCB_INFO: Endpoint = Endpoint { authority: "api.trustedservices.
 pub const INTEL_QE_IDENTITY: Endpoint =
     Endpoint { authority: "api.trustedservices.intel.com", path: "/tdx/certification/v4/qe/identity" };
 pub const INTEL_ROOT_CRL: Endpoint = Endpoint { authority: "certificates.trustedservices.intel.com", path: "/IntelSGXRootCA.der" };
-/// Intel Trust Authority's signing keys, fetched on every run: the current certificate expires on
-/// 2026-11-19, so a pinned key would stop working that day.
+/// Intel Trust Authority's signing keys, fetched on every run and picked by the token's key id
+/// (`attest::ita`), so no key is pinned and Intel rotating its signing certificate, as it already
+/// has once, needs no new build.
 pub const INTEL_ITA_KEYS: Endpoint = Endpoint { authority: "portal.trustauthority.intel.com", path: "/certs" };
 
 pub const NVIDIA_NRAS: Endpoint = Endpoint { authority: "nras.attestation.nvidia.com", path: "/v3/attest/gpu" };

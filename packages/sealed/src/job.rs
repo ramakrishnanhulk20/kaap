@@ -8,7 +8,7 @@
 use kaap_core::history::history_before;
 use kaap_core::{analyze, verdict_hash, AiStatus, Analysis, FindingCode, Network, Verdict};
 
-use crate::ai::{consult, AiOutcome, Audience, Check};
+use crate::ai::{consult, consult_with_budget, AiOutcome, Audience, Check, THINKING_TOKEN_BUDGET};
 use crate::attest::evidence::key_for;
 use crate::attest::tdx::QuoteCheck;
 use crate::attest::{trusted_now, Evidence, EvidenceSink, Trust, Unverified};
@@ -102,7 +102,9 @@ pub fn run(raw: &[u8], env: RunEnv<'_>, ai_key: Option<&str>, connect: impl FnOn
 ///
 /// The clock is a judge run's: `NEAR_BLOCK_TIMESTAMP`, taken as a time only beside a final block
 /// both providers agree on (`attest::trusted_now`). With no such block the answer is unverified
-/// (`no_clock`) and the scores are still printed. `ai_status` reports what the checks reached.
+/// (`no_clock`) and the scores are still printed. `ai_status` reports what the checks reached. The
+/// model reasons within the input's `thinking_budget`, or `THINKING_TOKEN_BUDGET` without one, and
+/// the scores print the budget used.
 pub fn eval_run(input: EvalInput, ai_key: Option<&str>, connect: impl FnOnce(Network, Deadline) -> Connections) -> String {
     let read_deadline = Deadline::after_ms(READ_BUDGET_MS);
     let job_deadline = Deadline::after_ms(JOB_BUDGET_MS);
@@ -114,8 +116,10 @@ pub fn eval_run(input: EvalInput, ai_key: Option<&str>, connect: impl FnOnce(Net
     let analysis = analyze(&input.proposal);
     let facts = user_message(&input.proposal, &analysis);
     let trust = Trust { nonce, now, quote };
-    let (outcome, record) = consult(http.as_mut(), ai_key, facts.as_deref(), Audience::Public, job_deadline, &trust);
-    eval_scores(&analysis, &outcome, record.completion.as_ref()).unwrap_or_else(failed)
+    let thinking_budget = input.thinking_budget.unwrap_or(THINKING_TOKEN_BUDGET);
+    let (outcome, record) =
+        consult_with_budget(http.as_mut(), ai_key, facts.as_deref(), Audience::Public, thinking_budget, job_deadline, &trust);
+    eval_scores(&analysis, &outcome, record.completion.as_ref(), thinking_budget).unwrap_or_else(failed)
 }
 
 /// The final block both providers agree on, by `reads::read_chain`'s own block rule: the HTTPS

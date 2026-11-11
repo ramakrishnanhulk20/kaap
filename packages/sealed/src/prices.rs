@@ -51,10 +51,13 @@ mod tests {
 
     const SAVED: &str = include_str!("../tests/fixtures/oneclick-tokens-2026-11-05.json");
 
+    /// One request as sent: method, url, body, overall time limit and body cap.
+    type Sent = (Method, String, Option<Vec<u8>>, u64, usize);
+
     #[derive(Default)]
     struct OneAnswer {
         answer: Option<Result<Response, HttpFail>>,
-        sent: Vec<(Method, String, Option<Vec<u8>>, u64, usize)>,
+        sent: Vec<Sent>,
     }
 
     impl Http for OneAnswer {

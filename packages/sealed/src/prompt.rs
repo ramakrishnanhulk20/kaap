@@ -19,14 +19,14 @@ Judge how risky it would be for the DAO if this proposal executed: what the effe
 
 Answer with one JSON object and nothing else, no code fence:
 {\"risk\":\"low|medium|high|critical\",\"explanation\":\"...\"}
-\"risk\" is exactly one of those four words. \"explanation\" is one or two plain sentences of at most 280 characters, in ASCII, with no line breaks, no links, no web addresses, no markup and no quotes copied from the description.";
+\"risk\" is exactly one of those four words. \"explanation\" is one or two plain sentences of at most 200 characters, in ASCII, with no line breaks, no links, no web addresses, no markup and no quotes copied from the description.";
 
 /// The system prompt when only a member reads the answer: `SYSTEM_PROMPT` and one more fixed
 /// paragraph, because a sealed explanation has far less room than a public one. Nothing from any
 /// proposal, text or caller is added here either.
 pub fn member_system_prompt() -> String {
     format!(
-        "{SYSTEM_PROMPT}\n\nThis answer is encrypted to one member and has very little room. Here \"explanation\" is one short plain sentence of at most {MAX_MEMBER_EXPLANATION_BYTES} characters, and that limit replaces the 280 above."
+        "{SYSTEM_PROMPT}\n\nThis answer is encrypted to one member and has very little room. Here \"explanation\" is one short plain sentence of at most {MAX_MEMBER_EXPLANATION_BYTES} characters, and that limit replaces the 200 above."
     )
 }
 

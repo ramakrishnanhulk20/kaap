@@ -96,9 +96,10 @@ fn failures_and_refused_answers_are_unavailable() {
         (failed(Err(HttpFail::TooLarge)), Refusal::CallFailed),
         (failed(Ok(Response::new(401, br#"{"error":{"message":"bad key"}}"#.to_vec()))), Refusal::CallFailed),
         (failed(Ok(Response::new(200, b"<html>gateway error</html>".to_vec()))), Refusal::ResponseUnreadable),
-        (chat("not json"), Refusal::AnswerNotTheSchema),
+        (chat("not json"), Refusal::AnswerNotJson),
+        (chat(r#"{"risk":"low","explanation":"x","extra":1}"#), Refusal::AnswerWrongFields),
         (chat(r#"{"risk":"none","explanation":"x"}"#), Refusal::UnknownRiskWord),
-        (chat(r#"{"risk":"low","explanation":"see https://x.example"}"#), Refusal::ExplanationNotPlainText),
+        (chat(r#"{"risk":"low","explanation":"see https://x.example"}"#), Refusal::ExplanationHasLink),
     ];
     for (mut world, want) in cases {
         assert_eq!(ask(&mut world, Some(KEY), Some("FACTS"), soon()), AiOutcome::Unavailable(want));
@@ -166,7 +167,8 @@ fn nothing_is_cut_at_the_limit_the_model_is_told() {
 
     let mut over = World::new();
     over.chat["choices"][0]["message"]["content"] = serde_json::json!(format!(r#"{{"risk":"high","explanation":"{text}x"}}"#));
-    assert_eq!(ask_for_members(&mut over, &trust()), AiOutcome::Unavailable(Refusal::ExplanationTooLong), "280 still holds");
+    let AiOutcome::Answered { answer, .. } = ask_for_members(&mut over, &trust()) else { panic!("refused") };
+    assert!(answer.explanation.len() < MAX_EXPLANATION_BYTES && text.starts_with(&answer.explanation), "280 still holds, cut at a word: {:?}", answer.explanation);
 }
 
 #[test]

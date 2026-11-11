@@ -1,6 +1,8 @@
 //! Eval mode: a ProposalInput handed in whole is judged by kaap-core and the model, and the job
 //! prints the scores without a signature or an evidence write, reading only the final block for its
-//! clock. Also pins every judge run with no `op` to the bytes it printed before eval mode existed.
+//! clock, with the model's reasoning budget the input may set. Also pins every judge run with no
+//! `op` to the bytes it printed before eval mode existed, and every request a keyed run sends to
+//! the bytes it sent before the prompt's explanation limit went from 280 to 200 characters.
 //! Not covered here: a live model answer (`scripts/ai-eval.mjs` runs the answer key on testnet),
 //! OutLayer setting the run's variables, and whether the inputs the script builds match the
 //! scoreboards (`packages/core-wasm/tests`).
@@ -13,14 +15,17 @@ use std::rc::Rc;
 use common::world::{nonce, quote_binding_the_model, World, KEY, NOW};
 use common::*;
 use kaap_core::{analyze, AiStatus, Analysis, DescCheck, Finding, FindingCode, History, Network, Prices, ProposalInput, Severity};
-use kaap_sealed::ai::{AiAnswer, AiOutcome, AiRisk, Check, MODEL_ID};
+use kaap_sealed::ai::{
+    chat_request_body, AiAnswer, AiOutcome, AiRisk, Audience, Check, MAX_ANSWER_TOKENS, MAX_EVAL_THINKING_BUDGET, MIN_EVAL_THINKING_BUDGET,
+    MODEL_ID, THINKING_TOKEN_BUDGET,
+};
 use kaap_sealed::attest::evidence::CompletionRecord;
 use kaap_sealed::attest::Unverified;
 use kaap_sealed::fixture::FixtureHttp;
 use kaap_sealed::input::{InputError, MAX_INPUT_BYTES};
 use kaap_sealed::job::{run, Connections, RunEnv};
 use kaap_sealed::net::{Deadline, Http, DRPC_TESTNET, HOST_STAND_IN_TESTNET};
-use kaap_sealed::output::{eval_scores, MAX_OUTPUT_BYTES};
+use kaap_sealed::output::{eval_scores, MAX_OUTPUT_BYTES, MAX_PRINTED_TOKENS};
 use kaap_sealed::payment::PayEnv;
 use kaap_sealed::rpc::{At, AccountView, BlockView, Provider, ReadFail, RpcProvider, ViewResult};
 use kaap_sealed::verdict::{SignFail, VerdictSigner};
@@ -110,7 +115,11 @@ fn judge_runs() -> Vec<(String, String)> {
 }
 
 /// Taken on 11 Nov 2026 at commit 04a26ae with only this file added, before any eval code existed.
-/// The three no-key outputs equal `tests/texts.rs`'s own capture.
+/// The three no-key outputs equal `tests/texts.rs`'s own capture. The two keyed evidence records
+/// were taken again later that day, when the prompt's explanation limit went from 280 to 200
+/// characters: each holds the chat request's hash and the model's signature over it, the only
+/// fields that changed, and the request itself differs only in that number
+/// (`a_keyed_run_sends_what_it_sent_before_but_for_the_prompts_one_number`).
 const CAPTURE: [(&str, &str); 19] = [
     ("transfer-ft.json worker, no key output", "11b43ca0b4b379fd442cadf48c23594ff56c665f9b98dc4b5be4f57fe8bf78ac"),
     ("transfer-ft.json worker, no key evidence 0", "4df13dd379a4d7242a0861498b79ef8aac0aaee9dd01bc4681b193ac74a7e655"),
@@ -122,10 +131,10 @@ const CAPTURE: [(&str, &str); 19] = [
     ("vote.json worker, no key evidence 0", "c30668350aa08d2faa2d87314e44d76f6f0369cd64535b4d3d4a6b993873e4cb"),
     ("vote.json paid, no key output", "848a4a546cfc4f10482210d6caa7950b9886ed1a22be91d4e8b302112c77c6eb"),
     ("verified worker output", "51c5f610b104e9f222b8a8cadb393cdff0ba1e36001fc4f7d2ce41561e99844f"),
-    ("verified worker evidence 0", "2e81b12f97df548ccff7a0a8aca9698859af0292e3a9344f65a8d82b98a44457"),
+    ("verified worker evidence 0", "29635be873399b375ed920cc8a2240ee8d9d488aa2230e6b7db85cc7cebdcc98"),
     ("verified paid output", "12f71a635cddbbe215028db1735c2dbe7c5311919de9feb5a2e31bf805432fbc"),
     ("no clock worker output", "cb84e7a9d664e0796e66ce4957bc54a080fe49563ba78fa38250ec94d5cf4076"),
-    ("no clock worker evidence 0", "cc55b723b309d5570d3a61e25937ce9aebf4b622ed145a10688ec2c10fd5a025"),
+    ("no clock worker evidence 0", "f11ce04cfa4f1b6620af773bc070778b4aca17dadf93b6c119ffd43fd3be026a"),
     ("unpaid stranger output", "0ccc30f30e2b91ace922fa0d2287a778ff2471730c74f6afbcd3d9141703cae8"),
     ("held output", "6f50c469d880cb8fdd503d947d329a88dd49119e27d61c4775de2896993c8365"),
     ("refused 0 output", "b342023c81806c293f17feec0f590b78dd821f2708917e2ecdc43c71942e2903"),
@@ -296,8 +305,8 @@ fn scores(out: &str) -> Value {
     assert_eq!(
         keys,
         [
-            "ai_reason", "ai_risk", "ai_status", "completion_tokens", "explanation_sha256", "findings", "finish_reason", "floor", "model_id",
-            "prompt_tokens", "reasoning_tokens", "risk", "status", "v"
+            "ai_reason", "ai_risk", "ai_status", "answer_cleaned", "completion_tokens", "explanation_sha256", "findings", "finish_reason",
+            "floor", "model_id", "prompt_tokens", "reasoning_tokens", "risk", "status", "thinking_budget", "v"
         ],
         "{out}"
     );
@@ -329,6 +338,7 @@ fn an_eval_run_reads_only_the_block_and_can_reach_a_verified_answer() {
         assert!(!out.contains(&block), "the block is not printed: {block}");
     }
     assert_eq!((v["finish_reason"].as_str(), v["prompt_tokens"].as_u64(), v["completion_tokens"].as_u64(), v["reasoning_tokens"].as_u64()), (Some("stop"), Some(900), Some(120), Some(40)));
+    assert_eq!((v["answer_cleaned"].as_bool(), v["thinking_budget"].as_u64()), (Some(false), Some(u64::from(THINKING_TOKEN_BUDGET))));
     touched.assert_only_the_block_and_the_ai();
     let urls = touched.urls();
     assert!(urls.iter().any(|u| u.starts_with("cloud-api.near.ai/v1/attestation/report?")), "the checks ran: {urls:?}");
@@ -337,7 +347,7 @@ fn an_eval_run_reads_only_the_block_and_can_reach_a_verified_answer() {
     let touched = Touched::new();
     let v = scores(&run(eval_input("testnet", &proposal_json()).as_bytes(), worker_env(Some("testnet")), None, touched.connect(World::new())));
     assert_eq!((v["ai_status"].as_str(), v["ai_reason"].as_str()), (Some("unavailable"), Some("ai_key_missing")));
-    for key in ["ai_risk", "model_id", "explanation_sha256", "finish_reason", "prompt_tokens", "completion_tokens", "reasoning_tokens"] {
+    for key in ["ai_risk", "answer_cleaned", "model_id", "explanation_sha256", "finish_reason", "prompt_tokens", "completion_tokens", "reasoning_tokens"] {
         assert!(v[key].is_null(), "{key}");
     }
     assert_eq!(v["risk"], v["floor"]);
@@ -415,8 +425,10 @@ fn an_unknown_field_and_an_oversized_input_are_refused() {
     assert_eq!(scores(&run(padded(room).as_bytes(), worker_env(Some("testnet")), None, touched.connect(World::new())))["status"], "eval", "exactly at the cap is read");
 }
 
-/// Every finding at once, the longest reason, a 32-letter finish reason and token counts of 15
-/// digits still fit; counts of 10^15 tokens or more could pass the cap and are refused as failed.
+/// Every finding at once, the longest reason and the largest reasoning budget fit with any finish
+/// reason and any token counts: the longest that can print, a 16-letter finish reason and
+/// five-digit counts, is 899 bytes. A 32-letter finish reason prints as `other` and a count over
+/// `MAX_PRINTED_TOKENS` as null, whether the record came from a completion or was built by hand.
 #[test]
 fn every_finding_and_the_longest_reason_fit_in_one_output() {
     let analysis = Analysis {
@@ -428,18 +440,119 @@ fn every_finding_and_the_longest_reason_fit_in_one_output() {
         veto_allowed: true,
     };
     let longest = Unverified::ALL.iter().copied().max_by_key(|u| u.code().len()).unwrap();
-    let answer = AiAnswer { risk: AiRisk::Critical, explanation: "x".repeat(280) };
+    let answer = AiAnswer { risk: AiRisk::Critical, explanation: "x".repeat(280), cleaned: false };
     let ai = AiOutcome::Answered { answer, model_id: MODEL_ID, check: Check::Unverified(longest) };
-    let counted = |tokens: u64| CompletionRecord {
+    let counted = |tokens: u64, finish: usize| CompletionRecord {
         chat_id: None,
-        finish_reason: Some("z".repeat(32)),
+        finish_reason: Some("z".repeat(finish)),
         prompt_tokens: Some(tokens),
         completion_tokens: Some(tokens),
         reasoning_tokens: Some(tokens),
         content_bytes: 0,
     };
-    let out = eval_scores(&analysis, &ai, Some(&counted(999_999_999_999_999))).unwrap();
-    assert!(out.len() <= MAX_OUTPUT_BYTES, "{} bytes", out.len());
-    assert_eq!(scores(&out)["findings"].as_array().unwrap().len(), FindingCode::ALL.len());
-    assert_eq!(eval_scores(&analysis, &ai, Some(&counted(u64::MAX))), Err("the eval output does not fit in 900 bytes"));
+    let longest_printed = eval_scores(&analysis, &ai, Some(&counted(MAX_PRINTED_TOKENS, 16)), MAX_EVAL_THINKING_BUDGET).unwrap();
+    assert_eq!(longest_printed.len(), 899);
+    assert_eq!(scores(&longest_printed)["findings"].as_array().unwrap().len(), FindingCode::ALL.len());
+
+    let usage = json!({ "prompt_tokens": u64::MAX, "completion_tokens": u64::MAX, "completion_tokens_details": { "reasoning_tokens": u64::MAX } });
+    let chat = json!({ "id": "chatcmpl-1", "object": "chat.completion", "model": MODEL_ID, "usage": usage,
+        "choices": [{ "finish_reason": "z".repeat(32), "message": { "role": "assistant", "content": "x" } }] });
+    let read = CompletionRecord::new(&kaap_sealed::ai::read_completion(chat.to_string().as_bytes()).unwrap());
+    for (name, record) in [("from a completion", read), ("built by hand", counted(u64::MAX, 32)), ("15 digits", counted(999_999_999_999_999, 32))] {
+        let out = eval_scores(&analysis, &ai, Some(&record), MAX_EVAL_THINKING_BUDGET).unwrap_or_else(|why| panic!("{name}: {why}"));
+        let v = scores(&out);
+        assert!(out.len() < longest_printed.len(), "{name}: {} bytes", out.len());
+        assert_eq!(v["finish_reason"], "other", "{name}");
+        for key in ["prompt_tokens", "completion_tokens", "reasoning_tokens"] {
+            assert!(v[key].is_null(), "{name}: {key}");
+        }
+    }
+    let v = scores(&eval_scores(&analysis, &ai, Some(&counted(MAX_PRINTED_TOKENS + 1, 4)), MAX_EVAL_THINKING_BUDGET).unwrap());
+    assert!(v["prompt_tokens"].is_null() && v["finish_reason"] == "zzzz");
+}
+
+fn eval_with_budget(budget: &str) -> String {
+    format!(r#"{{"v":1,"op":"eval","network":"testnet","thinking_budget":{budget},"input":{}}}"#, proposal_json())
+}
+
+/// The chat request body an eval run on `raw` sent, and the scores it printed.
+fn chat_sent(raw: &str) -> (Vec<u8>, Value) {
+    let touched = Touched::new();
+    let out = run(raw.as_bytes(), worker_env(Some("testnet")), Some(KEY), touched.connect(World::new()));
+    let sent = touched.urls.borrow();
+    let body = sent.iter().find(|(url, _)| url == "cloud-api.near.ai/v1/chat/completions").map(|(_, body)| body.clone());
+    (body.unwrap_or_else(|| panic!("no chat request: {out}")), scores(&out))
+}
+
+#[test]
+fn an_eval_run_may_set_the_thinking_budget_and_a_judge_run_may_not() {
+    for budget in [64, 512, 1024] {
+        let (body, v) = chat_sent(&eval_with_budget(&budget.to_string()));
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!((body["thinking_token_budget"].as_u64(), body["max_tokens"].as_u64()), (Some(budget), Some(budget + u64::from(MAX_ANSWER_TOKENS))));
+        assert_eq!((v["thinking_budget"].as_u64(), v["ai_status"].as_str()), (Some(budget), Some("verified")), "{budget}");
+    }
+    let (absent, v) = chat_sent(&eval_input("testnet", &proposal_json()));
+    assert_eq!(absent, chat_sent(&eval_with_budget(&THINKING_TOKEN_BUDGET.to_string())).0, "no field is the constant, byte for byte");
+    assert_eq!(v["thinking_budget"].as_u64(), Some(u64::from(THINKING_TOKEN_BUDGET)));
+
+    let why = InputError::ThinkingBudgetOutOfRange;
+    assert!(why.reason().contains(&format!("from {MIN_EVAL_THINKING_BUDGET} to {MAX_EVAL_THINKING_BUDGET}")), "{}", why.reason());
+    for bad in ["63", "1025", "64.5", "512.0", "1e3", "\"512\"", "null", "-64", "0", "4294967360", "[512]", "true"] {
+        refused_as(&eval_with_budget(bad), Some("testnet"), why);
+    }
+    let twice = eval_with_budget("512").replacen(r#""network""#, r#""thinking_budget":512,"network""#, 1);
+    refused_as(&twice, Some("testnet"), InputError::NotTheEvalShape);
+
+    let fx = fixture("vote.json");
+    let raw = judge_input(fx["dao"].as_str().unwrap(), fx["proposal_id"].as_u64().unwrap(), r#","thinking_budget":512"#);
+    refused_as(&raw, Some("testnet"), InputError::NotTheInputShape);
+}
+
+/// Every request in `sent`, url then body, each followed by a line break, hashed in order, with the
+/// prompt's explanation limit put back to the 280 characters it said before. The one chat request
+/// must carry the new limit exactly once.
+fn requests_as_before(sent: &Records) -> String {
+    let (new, old) = ("at most 200 characters", "at most 280 characters");
+    let mut all = Vec::new();
+    let mut changed = 0;
+    for (url, body) in sent.borrow().iter() {
+        let body = String::from_utf8(body.clone()).unwrap();
+        changed += body.matches(new).count();
+        assert!(!body.contains(old), "{url}");
+        all.extend_from_slice(format!("{url}\n{}\n", body.replace(new, old)).as_bytes());
+    }
+    assert_eq!(changed, 1, "the one number is in the one chat request");
+    sha(&all)
+}
+
+/// Taken on 11 Nov 2026 at 10f9fb2, before any change to the reader or the prompt: every request of
+/// the keyed judge run (`verified worker` above, 12 requests) and of a keyed eval run with no
+/// `thinking_budget` (12 requests), hashed as `requests_as_before` does, and the members' chat
+/// body, whose second number, the public limit it replaces, also went from 280 to 200.
+const KEYED_JUDGE_REQUESTS: &str = "6202685f17ac1ad07e7a486989cac0426bb1d1619baff97cbe9800dc09dfa80e";
+const KEYED_EVAL_REQUESTS: &str = "86992b39584cd51351f1be48fb8330292c2dba148f4b6898399baabc316afb3f";
+const MEMBERS_CHAT_BODY: &str = "d2ca02f31784a2f888c30040cc2b4e6822bfea97bcc7ed3fcb588aa696d51485";
+
+#[test]
+fn a_keyed_run_sends_what_it_sent_before_but_for_the_prompts_one_number() {
+    let sent = Records::default();
+    let clock = Some((NOW * 1_000_000_000).to_string());
+    let raw = judge_input("r7thmvr8maey.sputnikv2.testnet", 10, "");
+    let (out, _) = judge(&clocked_fixture(), &raw, worker_env(Some("testnet")).pay, Noted(World::new(), sent.clone()), clock, Some(KEY));
+    assert_eq!(open(&out).0.ai_status, AiStatus::Verified);
+    assert_eq!(requests_as_before(&sent), KEYED_JUDGE_REQUESTS, "a keyed judge run");
+
+    let touched = Touched::new();
+    let out = run(eval_input("testnet", &proposal_json()).as_bytes(), worker_env(Some("testnet")), Some(KEY), touched.connect(World::new()));
+    assert_eq!(scores(&out)["ai_status"], "verified");
+    assert_eq!(requests_as_before(&touched.urls), KEYED_EVAL_REQUESTS, "a keyed eval run with no thinking_budget");
+
+    let members = String::from_utf8(chat_request_body(MODEL_ID, "FACTS", Audience::Members, THINKING_TOKEN_BUDGET)).unwrap();
+    let before = [("at most 200 characters", "at most 280 characters"), ("replaces the 200 above", "replaces the 280 above")];
+    let members = before.iter().fold(members, |text, (new, old)| {
+        assert_eq!(text.matches(new).count(), 1, "{new}");
+        text.replace(new, old)
+    });
+    assert_eq!(sha(members.as_bytes()), MEMBERS_CHAT_BODY, "the members' prompt differs only in the two places that name the public limit");
 }

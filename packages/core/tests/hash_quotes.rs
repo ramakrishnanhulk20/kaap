@@ -71,9 +71,12 @@ fn only_the_pinned_key_counts() {
     }
 }
 
+/// An edit to a signed quote response.
+type QuoteEdit = fn(&mut Value);
+
 #[test]
 fn any_edit_to_a_signed_field_breaks_the_signature() {
-    let edits: [(&str, fn(&mut Value)); 7] = [
+    let edits: [(&str, QuoteEdit); 7] = [
         ("deposit address", |v| v["quote"]["depositAddress"] = json!("bc1q0000000000000000000000000000000000000000")),
         ("amount in", |v| v["quote"]["amountIn"] = json!("10001")),
         ("recipient", |v| v["quoteRequest"]["recipient"] = json!("0x0000000000000000000000000000000000000001")),
