@@ -30,7 +30,7 @@ The owner can do two things and nothing else: replace the accepted key with `set
 There is no upgrade method, and the deploy script deletes the account's only full-access key right after `new`. Anyone can check that the account has no keys and that its code hash matches this build:
 
 ```
-near account list-keys kaap-guard-1029061211.testnet network-config testnet now
+near account list-keys kaap-guard-1111072803.testnet network-config testnet now
 ```
 
 A new version is a new contract. A DAO moves to it with one ordinary proposal that changes its Guard role.
@@ -39,12 +39,18 @@ A new version is a new contract. A DAO moves to it with one ordinary proposal th
 
 | | |
 |---|---|
-| Account | `kaap-guard-1029061211.testnet` |
-| Code hash | `77fyhhxdRnHzb8efe9HBYL8C3KcUpEbbRjLvrNyqoxbP` (sha256 `5adbadb5282e0cf43ab9347d73249ce092be06fd7120aa6294a8bee5797dec76`) |
+| Account | `kaap-guard-1111072803.testnet`, deployed 11 Nov 2026 |
+| Code hash | `DrjaN1zVz4cxvvxbxhM6rVZsqy8SrBunmMbyeqbsr4R4` (sha256 `bf09d7bbb48f312eb4043bd7b585f3b02bbe9d8b7d5bc0bf31fec9319c663767`) |
+| Built from | commit `413a74aa91256a8c8603d1f84df33fde64abbcd3`, by the deploy script's `cargo near build non-reproducible-wasm --locked`; a second build in another target folder gave the same sha256 |
+| Owner | `kaap-owner-1029061211.testnet` |
 | Accepted key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN`, the sealed program's key (project `kaap-worker-1029053612.testnet/kaap-sealed`; attested run https://testnet-api.outlayer.ai/attestations/by-tx/7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC) |
-| Explorer | https://testnet.nearblocks.io/address/kaap-guard-1029061211.testnet |
+| Deploy and init | https://testnet.nearblocks.io/txns/DEta1bNNm4gRYLqhZJ2HfwDnVtz294dgyEyLfiQVzsK1 |
+| Key deleted | https://testnet.nearblocks.io/txns/6qEFvNiz5Guw1w2XaA6cS36kkRVhAJbPTtijgPEcTssM, 0 access keys left |
+| Explorer | https://testnet.nearblocks.io/address/kaap-guard-1111072803.testnet |
 
-Every id and hash is also in `deployments/testnet.json`. Deploy again with `KAAP_ACCEPTED_KEY=ed25519:<key> bash scripts/WO-02a-deploy-testnet.sh`.
+Every id and hash is also in `deployments/testnet.json`. Deploy again with `KAAP_ACCEPTED_KEY=ed25519:<key> KAAP_GUARD_OWNER=<owner> bash scripts/WO-02a-deploy-testnet.sh`.
+
+The first guard, `kaap-guard-1029061211.testnet` (code hash `77fyhhxdRnHzb8efe9HBYL8C3KcUpEbbRjLvrNyqoxbP`), was deployed on 29 Oct 2026 from commit `8818af0`, before the verdict format moved into `packages/verdict`. It is still on chain with no keys, and its record is kept in `deployments/testnet-2026-10-29.json`.
 
 ## Enrolling a DAO
 

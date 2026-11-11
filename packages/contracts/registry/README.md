@@ -33,10 +33,15 @@ Each record comes back with the signed bytes and the signature, so a reader can 
 
 | | |
 |---|---|
-| Account | `kaap-registry-1029061211.testnet` |
-| Code hash | `65Y2p3NqwjE8z8oXdzvRPjDWux2SXmHrxxzAhpqwPdqY` (sha256 `4b73d851018e8e955b1037b4fa397380eb2638698f8eaea734eb1f9fa787539f`) |
+| Account | `kaap-registry-1111072803.testnet`, deployed 11 Nov 2026 |
+| Code hash | `3Kro1EgWDYAawFx8RHUwVGTKmJvp9bAUeRL65cwGAoZz` (sha256 `228c21366ffdaf58f31a6e3550fd9898bc9ae65d1182f7a9e84d2df3c07fb2c9`) |
+| Built from | commit `413a74aa91256a8c8603d1f84df33fde64abbcd3`, by the deploy script's `cargo near build non-reproducible-wasm --locked`; a second build in another target folder gave the same sha256 |
 | Accepted key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN`, the sealed program's key (details in `deployments/testnet.json`) |
-| Explorer | https://testnet.nearblocks.io/address/kaap-registry-1029061211.testnet |
+| Deploy and init | https://testnet.nearblocks.io/txns/53xJksmZUhokY6rVNzXNcnadxAUEaN1RWPkdhJwMwiT7 |
+| Key deleted | https://testnet.nearblocks.io/txns/GxMNoCaecyMRfF5k1dqtsxB4uCydKz8fUpzBkMm9gUF1, 0 access keys left |
+| Explorer | https://testnet.nearblocks.io/address/kaap-registry-1111072803.testnet |
+
+The first registry, `kaap-registry-1029061211.testnet` (code hash `65Y2p3NqwjE8z8oXdzvRPjDWux2SXmHrxxzAhpqwPdqY`), was deployed on 29 Oct 2026 from commit `8818af0`. It is still on chain with no keys and its verdicts stay readable. Every id from that deployment is kept in `deployments/testnet-2026-10-29.json`.
 
 Deploy a registry alone with `KAAP_DEPLOY=registry KAAP_ACCEPTED_KEY=ed25519:<key> bash scripts/WO-02a-deploy-testnet.sh`.
 
