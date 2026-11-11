@@ -46,6 +46,8 @@ const SPUTNIK_WASM = join(REPO, 'packages', 'contracts', 'tests', 'wasm', 'sputn
 export const SPUTNIK_CODE_HASH = 'DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF';
 const SPUTNIK_SHA256 = 'bf6f951ee5e45968e3367fa857bebf8bc80badec183998c2239c487237e0d7f6';
 const TEMPLATE = 'the NEAR Business template';
+// Names no real treasury: the role setup is borrowed, the treasury is ours.
+const DAO_PURPOSE = 'Kaap demo treasury';
 // Member places in the saved template. The guard owner takes the first, the demo member the second.
 const SLOTS = ['<member 1>', '<member 2>'];
 export const GUARD_ROLE = 'guard';
@@ -377,7 +379,7 @@ async function main() {
   const expected = demoPolicy(saved.policy, owner, member, guard);
 
   if ((await accountState(daoId)).code_hash === NO_CODE) {
-    const config = { name: daoId.split('.')[0], purpose: "Kaap M1 demo treasury with the role setup of a live NEAR Business treasury", metadata: '' };
+    const config = { name: daoId.split('.')[0], purpose: DAO_PURPOSE, metadata: '' };
     const deployer = accountFor(daoId);
     // Deploy and init in one transaction, so the code can never sit on chain uninitialised.
     const { hash, failure } = await send(deployer, daoId, [
@@ -393,16 +395,19 @@ async function main() {
   if (codeHash !== SPUTNIK_CODE_HASH) throw new Error(`${daoId} runs ${codeHash}, not Sputnik 3.2 ${SPUTNIK_CODE_HASH}`);
   const onChain = await viewFinal(daoId, 'get_policy');
   if (policyForm(onChain) !== policyForm(expected)) throw new Error(`${daoId} get_policy() differs from the policy built from ${TEMPLATE}`);
+  const { purpose } = await viewFinal(daoId, 'get_config');
+  if (purpose !== DAO_PURPOSE) throw new Error(`${daoId} get_config() purpose is "${purpose}", not "${DAO_PURPOSE}"`);
   Object.assign(dao, {
     code_hash: codeHash,
     code_sha256: SPUTNIK_SHA256,
+    purpose,
     policy_from: { source: saved.source, saved_in: 'deployments/near-business-policy.json' },
     members: Object.fromEntries(expected.roles.map((r) => [r.name, r.kind.Group])),
     approver_vote: 'transfer and call need 2 of 2 Approvers, so one approval never executes a proposal',
     guard_role: `${GUARD_ROLE}: [${guard}], VoteReject on ${GUARD_REJECT_LABELS.length} labels (all but remove_member_from_role), threshold 1`,
   });
   saveState(state);
-  console.log(`checked ${daoId}: code hash ${codeHash}, policy equals the NEAR Business shape with our members and the guard role`);
+  console.log(`checked ${daoId}: code hash ${codeHash}, purpose "${purpose}", policy equals the NEAR Business shape with our members and the guard role`);
 
   if (!(await viewFinal(guard, 'is_enrolled', { dao: daoId }))) {
     dao.enrolment ??= {};
