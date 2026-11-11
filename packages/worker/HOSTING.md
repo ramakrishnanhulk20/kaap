@@ -88,7 +88,8 @@ balance check above, so nobody has to remember to ask whether the guard is still
 
 ## Serving /status safely on the e2-micro
 
-The worker's small web face (`GET /status`, `POST /subscribe`) listens on `127.0.0.1:8787` only,
+The worker's small web face (`GET /status`, `GET /text-key`, `POST /subscribe`, `POST /texts`)
+listens on `127.0.0.1:8787` only,
 which is what `KAAP_HTTP_HOST` and `KAAP_HTTP_PORT` default to. Keep it that way on the VM. The
 public reaches it through Caddy, an HTTPS server on the same VM that gets and renews its own
 certificate:
