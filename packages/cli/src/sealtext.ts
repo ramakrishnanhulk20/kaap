@@ -174,7 +174,7 @@ function checkTextHash(text: Text, payloads: string[], request: SealTextRequest)
 
 const severity = z.enum(['low', 'medium', 'high', 'critical', 'unknown']);
 
-/** WO-06d's 200 answer to POST /texts, and nothing else. */
+/** The worker's 200 answer to POST /texts (packages/worker/HOSTING.md), and nothing else. */
 const judgedSchema = z.strictObject({
   status: z.literal('judged'),
   run_tx: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{43,44}$/),
@@ -294,7 +294,8 @@ async function ask(transport: Transport, request: SealTextRequest, ciphertext: s
   return parsed.data;
 }
 
-/** One plain sentence for every answer in WO-06d, matched on the status and its fixed word together. */
+/** One plain sentence for every answer the worker's POST /texts gives, matched on the status and
+ *  its fixed word together. */
 function refusal(response: HttpResponse, request: SealTextRequest): WorkerRefused {
   let word: string | null = null;
   let reason: string | null = null;

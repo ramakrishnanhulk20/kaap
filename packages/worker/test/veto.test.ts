@@ -1,8 +1,9 @@
-// The veto decision: the worker's mirror of the guard's ERR_NOT_VETOABLE rule (WO-02a2, with its
-// ai_status rule), the last check against live state on both providers (C4, C22), and the veto
-// itself: the kind sent exactly as read (C5), veto_result read after the callback, a refusal
-// raised, and a veto and a record checked at once never both passing a NEAR cap with room for one
-// (C29). Not covered: the guard's own checks, which its sandbox tests and M1 prove on chain.
+// The veto decision: the worker's mirror of the guard's ERR_NOT_VETOABLE rule (with its ai_status
+// rule), the last check against live state on both providers (C4, C22), and the veto itself: the
+// kind sent exactly as read (C5), veto_result read after the callback, a refusal raised, and a
+// veto and a record checked at once never both passing a NEAR cap with room for one (C29). Not
+// covered: the guard's own checks, which its sandbox tests and the testnet proof in PROOF.md show
+// on chain.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -17,9 +18,9 @@ import { DAO, FakeChain, GUARD, NETWORK, REGISTRY, T0, bothSet, bridge, events, 
 const vetoable = (over: Parameters<typeof verdictFields>[1]) => bridge.decodeVerdict(Buffer.from(bridge.encodeVerdict(verdictFields(2, over)), 'base64')).vetoable;
 
 test('the mirror of the guard rule: critical risk on a high or critical floor backed by a high finding', () => {
-  // Each row is a case from the guard's own tests (WO-02a and WO-02a2).
+  // Each row is a case from the guard's own tests (packages/contracts/guard/src/tests.rs).
   const cases: Array<[string, Parameters<typeof verdictFields>[1], boolean]> = [
-    ['M1: a description that contradicts a payment, AI unavailable', { risk: 'critical', floor: 'critical', findings: ['DESC_CONTRADICTS', 'UNKNOWN_VALUE'], ai_status: 'unavailable' }, true],
+    ['the 29 Oct attack: a description that contradicts a payment, AI unavailable', { risk: 'critical', floor: 'critical', findings: ['DESC_CONTRADICTS', 'UNKNOWN_VALUE'], ai_status: 'unavailable' }, true],
     ['an honest payment: high on a high floor', { risk: 'high', floor: 'high', findings: ['UNKNOWN_VALUE'], ai_status: 'unavailable' }, false],
     ['an AI-only critical on a medium floor', { risk: 'critical', floor: 'medium', findings: ['NEW_RECIPIENT'], ai_status: 'verified' }, false],
     ['critical on a high floor with the AI unverified', { risk: 'critical', floor: 'high', findings: ['UNKNOWN_VALUE'], ai_status: 'unverified' }, false],

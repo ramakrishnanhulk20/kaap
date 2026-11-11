@@ -5,8 +5,8 @@
 // live provider without reaching an archive; a block the live providers dropped read from the
 // archive, with older ones sent straight there and a height with no block never doing that; and the
 // order of the nodes with KAAP_ARCHIVAL_RPC set, whose gaps the public archives fill. It does not
-// cover the real nodes (DONE MEANS 2 of WO-07b6 runs live) or what verify prints from these reads
-// (verify.test.ts).
+// cover the real nodes, which only a live `kaap verify` run reaches (PROOF.md records one), or what
+// verify prints from these reads (verify.test.ts).
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

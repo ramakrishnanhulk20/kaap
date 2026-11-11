@@ -1,11 +1,13 @@
-// `kaap arming` and `kaap enroll` against recorded testnet runs: the M1 DAO (enrolled, NEAR Business
-// roles with two members and Kaap's guard role) and a DAO made through sputnikv2.testnet with the
-// NEAR Business roles and one member in each, the shape most NEAR Business treasuries have, not yet
-// enrolled, both recorded under the 29 Oct deployment and read through the real chain of records (the
-// M1 DAO is enrolled with the 29 Oct guard, so that record is used; the other with none, so today's),
-// and the 11 Nov demo DAO, enrolled with today's guard. Edited copies of the M1 recording show the guard losing a kind, a second account in the
-// guard role (still armed, with a warning), and a Sputnik 2 DAO being refused. It does not file or vote on any draft (the CLI never does), and it
-// does not cover a DAO whose guard holds delegated tokens.
+// `kaap arming` and `kaap enroll` against recorded testnet runs: the 29 Oct DAO of the first
+// testnet proof (enrolled, NEAR Business roles with two members and Kaap's guard role) and a DAO
+// made through sputnikv2.testnet with the NEAR Business roles and one member in each, the shape
+// most NEAR Business treasuries have, not yet enrolled, both recorded under the 29 Oct deployment
+// and read through the real chain of records (the 29 Oct DAO is enrolled with the 29 Oct guard, so
+// that record is used; the other with none, so today's), and the 11 Nov demo DAO, enrolled with
+// today's guard. Edited copies of these recordings show the guard losing a kind, a second account
+// in the guard role (still armed, with a warning), and a Sputnik 2 DAO being refused. It does not
+// file or vote on any draft (the CLI never does), and it does not cover a DAO whose guard holds
+// delegated tokens.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -47,7 +49,7 @@ function editPolicy(change: (policy: { roles: { name: string; kind: { Group?: st
 
 const guardRole = (p: { roles: { name: string; kind: { Group?: string[] }; permissions: string[] }[] }) => p.roles.find((r) => r.name === 'guard');
 
-test('arming: the M1 DAO is armed on every kind but its own removal, with no extra rights (C16)', async () => {
+test('arming: the 29 Oct DAO is armed on every kind but its own removal, with no extra rights (C16)', async () => {
   const { code, out } = await run('arming-m1');
   assert.equal(code, 0, out);
   assert.match(out, /^Kaap on testnet: deployment record deployments\/testnet-2026-10-29\.json \(an earlier deployment, not the current deployments\/testnet\.json, deployed 2026-10-29T06:12:11Z\): guard kaap-guard-1029061211\.testnet, registry kaap-registry-1029061211\.testnet$/m);
@@ -71,9 +73,10 @@ test('arming: a guard role without transfer:VoteReject is not armed', async () =
 });
 
 test('arming: a second member of the guard role leaves the guard armed and is warned about as able to veto alone', async () => {
-  // The M1 recording with kaap-intruder.testnet added to the guard role on both providers. Under the
-  // template's threshold of one vote, kaap-core's guard_arming still finds the guard deciding every
-  // template kind (C16, one source), and names the second account in others_who_reject_alone.
+  // The 29 Oct recording with kaap-intruder.testnet added to the guard role on both providers.
+  // Under the template's threshold of one vote, kaap-core's guard_arming still finds the guard
+  // deciding every template kind (C16, one source), and names the second account in
+  // others_who_reject_alone.
   const { code, out } = await run('arming-m1', editPolicy((p) => {
     guardRole(p)?.kind.Group?.push('kaap-intruder.testnet');
   }));
@@ -143,7 +146,7 @@ test('enroll: a NEAR Business treasury gets two drafts, the role filed by Admin 
   assert.match(out, new RegExp(`^when they have passed, check it on chain: kaap arming ${NB_DAO} --network testnet$`, 'm'));
 });
 
-test('enroll: the M1 DAO has nothing to file', async () => {
+test('enroll: the 29 Oct DAO has nothing to file', async () => {
   const { code, out } = await run('enroll-m1');
   assert.equal(code, 0, out);
   assert.match(out, /^nothing to file: the DAO is enrolled and its policy already matches Kaap's template\n\nnow:\n {2}armed: yes\./m);

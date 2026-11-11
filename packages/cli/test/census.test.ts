@@ -1,7 +1,7 @@
 // `kaap census` against a recorded mainnet run of --sample 5: the six headline lines, the request
-// rate, and what it never reads. It does not prove the numbers of a full scan (DONE MEANS 2 runs
-// --sample 50 live, and a full run takes about a quarter of an hour), and it does not re-derive
-// each number by a second method.
+// rate, and what it never reads. It does not prove the numbers of a full scan (only a live run
+// does, and a full run takes about a quarter of an hour), and it does not re-derive each number by
+// a second method.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

@@ -107,8 +107,9 @@ export function usdOf(prices: Prices): UsdOf {
 
 const record = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 
-/** The census payment rule (`scratchpad/eval-e1/common.mjs` paymentOf): the payment's USD (null
- *  when any part is unpriced) and its receivers, or null when the proposal is not a payment. */
+/** The census payment rule, as eval/real/SAMPLING.md describes it under `history`: the payment's
+ *  USD (null when any part is unpriced) and its receivers, or null when the proposal is not a
+ *  payment. */
 export function paymentOf(p: Stored, usd: UsdOf): { usd: number | null; receivers: string[] } | null {
   const k = variant(p.kind);
   const body = record(record(p.kind)[k]);

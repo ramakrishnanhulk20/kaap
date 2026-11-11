@@ -1,7 +1,8 @@
 // Subscriptions (C26, C27): a one-time token from the CLI, used from the chat itself, works once
 // and expires; /stop ends every subscription of the chat, and so does removing the bot; chat ids
 // and tokens never reach a log line in full; the poll offset survives a restart. Not covered: the
-// CLI command that asks for the token (WO-07b) and Telegram's own delivery of /start.
+// CLI command that asks for the token (`kaap subscribe`, tested in packages/cli) and Telegram's
+// own delivery of /start.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

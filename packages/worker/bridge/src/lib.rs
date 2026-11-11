@@ -135,9 +135,9 @@ fn safe(n: u64) -> Result<u64, &'static str> {
     }
 }
 
-/// The guard's veto rule, line for line from kaap-guard's `is_vetoable` (WO-02a2): critical risk,
-/// a high or critical floor, at least one finding other than HASH_UNVERIFIED that is high or
-/// critical at its `min_severity`, and, when the floor is only high, a Verified AI answer.
+/// The guard's veto rule, line for line from kaap-guard's `is_vetoable`: critical risk, a high or
+/// critical floor, at least one finding other than HASH_UNVERIFIED that is high or critical at its
+/// `min_severity`, and, when the floor is only high, a Verified AI answer.
 fn is_vetoable(verdict: &Verdict) -> bool {
     let floor_high = matches!(verdict.floor, Severity::High | Severity::Critical);
     let backed_by_proof = verdict.findings.iter().any(|&code| {

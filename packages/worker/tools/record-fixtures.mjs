@@ -14,13 +14,16 @@ const RPC = 'https://rpc.testnet.fastnear.com';
 const DAO = 'kaap-dao-1029064008.testnet';
 
 const TXS = {
-  // M1 run 1: the sealed job's signed verdict on attack proposal #2 (PROOF.md).
+  // The 29 Oct testnet proof, run 1: the sealed job's signed verdict on attack proposal #2
+  // (PROOF.md).
   'run-ok': ['7vT7uwgwggGUc3CpNgLApgyjFS4s65KTfZTbMF2enx6T', 'kaap-worker-1029053612.testnet'],
-  // WO-02b DONE MEANS 3: the job held because its two providers were made to disagree.
+  // A testnet run of the sealed job that held because its two providers were made to disagree.
   'run-held': ['ACQcwBVxwAKDQZSf7p8oi8ZWTotrLVNAhb89vp4wWFfW', 'kaap-worker-1029053612.testnet'],
-  // 26 Oct spike, request 5598: OutLayer never answered and the yield timed out after 204 blocks.
+  // The early OutLayer trial, 26 Oct, request 5598: OutLayer never answered and the yield timed
+  // out after 204 blocks.
   'run-no-answer': ['9o9Nstg26v4QC4hPk7aJMixyEZjQtcimA1AWhPuGrZib', 'kaap-ol-spike-10200854.testnet'],
-  // M1 run 1: the record of #2's verdict, the guard's vote on #2, and its refusal of #3's.
+  // The 29 Oct testnet proof, run 1: the record of #2's verdict, the guard's vote on #2, and its
+  // refusal of #3's.
   'record-ok': ['F6HUKKH9tdnwu2FhKqK3vGpokMHZcNaKGSp5DPUL94QQ', 'kaap-worker-1029053612.testnet'],
   'veto-ok': ['GGCGBiiHRpBPcEfqUgxAnQCAYyFJGZHGVver3mhCNdGq', 'kaap-worker-1029053612.testnet'],
   'veto-refused': ['6DScqQ3g7NqGcnpNsa2tYF6u5J5Z59T81reCRberwvrd', 'kaap-worker-1029053612.testnet'],

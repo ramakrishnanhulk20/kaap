@@ -1,13 +1,13 @@
 // `kaap seal-text` against a stand-in chain and a stand-in worker that opens the text with the
 // sealed program's key and seals an explanation back: the encryption against the round-trip
 // script's own code on fixed inputs, the judged answer printed with its explanation opened, every
-// refusal before anything reaches the worker (no text key, a key the guard's key did not sign, a text that does not
-// hash to the payload, a text too long for the run's input), every answer WO-06d's worker gives,
-// with its model id when judged, and two privacy claims, each checked on
-// the bytes: the request holds no plaintext, and nothing is written to a file while the command
-// runs. It does not cover the real worker or OutLayer (DONE MEANS 3 of WO-07b5 runs live), the
-// sealed program's own opening in Rust (scripts/text-roundtrip.mjs --local checks Node
-// against it), or a NEP-461 text that opens (none is planted yet).
+// refusal before anything reaches the worker (no text key, a key the guard's key did not sign, a
+// text that does not hash to the payload, a text too long for the run's input), every answer the
+// worker's POST /texts gives, with its model id when judged, and two privacy claims, each checked
+// on the bytes: the request holds no plaintext, and nothing is written to a file while the command
+// runs. It does not cover the real worker or OutLayer (only a live testnet run reaches them), the
+// sealed program's own opening in Rust (scripts/text-roundtrip.mjs --local checks Node against
+// it), or a NEP-461 text that opens (none is planted yet).
 
 import assert from 'node:assert/strict';
 import { createCipheriv, createDecipheriv, createPrivateKey, createPublicKey, diffieHellman, hkdfSync, sign } from 'node:crypto';

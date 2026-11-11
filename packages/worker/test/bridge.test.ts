@@ -1,7 +1,8 @@
-// The kaap-core bridge agrees with the sealed job: on live testnet data recorded from the M1 DAO,
-// every hash the bridge computes equals the one the sealed job signed, and the ported readers
-// give the sealed job's own test answers. Not covered: kinds the sealed job has never signed a
-// verdict for; for those a disagreement fails closed (the veto is held, never sent).
+// The kaap-core bridge agrees with the sealed job: on live testnet data recorded from the DAO of
+// the first testnet proof (29 Oct), every hash the bridge computes equals the one the sealed job
+// signed, and the ported readers give the sealed job's own test answers. Not covered: kinds the
+// sealed job has never signed a verdict for; for those a disagreement fails closed (the veto is
+// held, never sent).
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -16,7 +17,7 @@ const m1 = () => {
   return { b64: out.verdict, v: bridge.decodeVerdict(Buffer.from(out.verdict, 'base64')) };
 };
 
-test("the M1 verdict's kind, policy and receivers hashes recompute from the chain through the bridge", () => {
+test("the 29 Oct attack verdict's kind, policy and receivers hashes recompute from the chain through the bridge", () => {
   const { v } = m1();
   const p2 = bridge.readProposal(enc(daoReads.get_proposal_2));
   assert.equal(p2.id, 2);

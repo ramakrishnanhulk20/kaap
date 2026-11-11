@@ -1,6 +1,6 @@
 // The counter watch (C21, C22): new ids are taken up only once both providers show them at final,
 // disagreement holds them and alerts after the hold window, and every id in a gap is judged.
-// Not covered: real provider latency and refusals, which DONE MEANS 2 meets on testnet.
+// Not covered: real provider latency and refusals, which only a live testnet run meets.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';

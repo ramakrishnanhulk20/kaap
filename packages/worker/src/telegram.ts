@@ -1,4 +1,4 @@
-// The Telegram Bot API, Kaap's one alert channel (DECISIONS, 20 Oct). A message goes out as
+// The Telegram Bot API, Kaap's one alert channel (decided 20 Oct 2026). A message goes out as
 // plain text with no parse mode and no entities (C24), so Telegram reads no markup in it, and
 // with link previews off, so Telegram never fetches anything a message names.
 //

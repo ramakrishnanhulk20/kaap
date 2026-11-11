@@ -27,8 +27,8 @@ export const CASES: Record<string, string[]> = {
   'arming-nb': ['arming', 'kaap-nb-1102140303.sputnikv2.testnet'],
   // Its second proposal, the enrolment call `kaap enroll` drafted, filed as printed.
   'check-nb-enrol': ['check', 'kaap-nb-1102140303.sputnikv2.testnet', '1'],
-  // The 11 Nov deployment's demo DAO (WO-02d): proposal 3, which its guard rejected that day, and
-  // the guard's arming on it.
+  // The 11 Nov deployment's demo DAO: proposal 3, which its guard rejected that day, and the
+  // guard's arming on it.
   'verify-1111-3': ['verify', 'kaap-dao-1111072928.testnet', '3', '--network', 'testnet'],
   'arming-1111': ['arming', 'kaap-dao-1111072928.testnet'],
 };

@@ -1,8 +1,9 @@
 // The sealed run: recorded testnet outcomes parsed (a signed verdict, a hold, OutLayer never
 // answering), the no-answer run treated as a failed run and retried exactly once, and retries that
 // re-send the same signed bytes instead of paying twice (6e). Not covered: OutLayer's own
-// behaviour beyond the three recorded outcomes, the live send path, which DONE MEANS 2 runs, and
-// whether OutLayer really hands the job the key a run names (the first keyed testnet run shows it).
+// behaviour beyond the three recorded outcomes, the live send path, which only a live testnet run
+// exercises, and whether OutLayer really hands the job the key a run names (the first keyed
+// testnet run shows it).
 
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -32,7 +33,7 @@ function setup(opts: { acceptedKey?: string; now?: number; guard?: string; secre
   return { chain, store, health, judge, key, lines: () => lines };
 }
 
-test('the recorded M1 run reads as the verdict the sealed job signed, under its real key', () => {
+test('the recorded 29 Oct attack run reads as the verdict the sealed job signed, under its real key', () => {
   const o = fixture<TxOutcome>('run-ok');
   // A moment after the run, before the verdict's ten minutes ran out.
   const s = setup({ acceptedKey: SEALED_KEY, now: Date.parse('2026-10-29T07:12:00Z'), guard: 'kaap-guard-1029061211.testnet' });

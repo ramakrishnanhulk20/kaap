@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // A local stand-in for one RPC provider. It passes each JSON-RPC request through to a real
 // provider and returns that provider's answer, until it is stopped. Stopping it is how the live
-// run shows what the worker does when one of its two providers goes quiet (WO-06b DONE MEANS 2:
-// "guard degraded" on GET /status within 30 seconds).
+// run shows what the worker does when one of its two providers goes quiet: "guard degraded" on
+// GET /status within 30 seconds.
 //
 // It speaks HTTPS because the worker accepts only https providers, so it needs a certificate for
 // the name the worker is given, and the worker must trust it (NODE_EXTRA_CA_CERTS). Testnet only.

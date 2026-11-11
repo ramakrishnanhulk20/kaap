@@ -5,7 +5,7 @@
 // 1Click's list answered HTTP 521, so the priced cases serve the census's own 1Click list instead.
 // The testnet fixtures were recorded under the 29 Oct deployment and read through the real chain of
 // records: Kaap's guard is the one the DAO is enrolled with, else today's.
-// It does not cover the live providers changing after the recording (DONE MEANS 2 runs live), the
+// It does not cover the live providers changing after the recording (only a live run sees it), the
 // AI step or the guard, which run only in the sealed program, or a policy rebuilt from a full
 // ChangePolicy (history.test.ts does).
 
@@ -25,8 +25,9 @@ import { answering, fakeClock, load, type MissingView, replay, REPO_ROOT, UNKNOW
 const ADVISORY = "advisory: plain-code check only; the AI and the guard run in Kaap's sealed program";
 
 /** The testnet recordings predate `check` asking which guard a DAO is enrolled with, so they hold
- *  no `is_enrolled` answer. These are the ones both providers gave live on 11 Nov: the M1 DAO is
- *  enrolled with the 29 Oct guard, the NEAR Business test DAO with no Kaap guard. */
+ *  no `is_enrolled` answer. These are the ones both providers gave live on 11 Nov: the DAO of the
+ *  first testnet proof is enrolled with the 29 Oct guard, the NEAR Business test DAO with no Kaap
+ *  guard. */
 const ENROLMENTS: MissingView[] = [
   ...UNKNOWN_TODAY,
   { account: 'kaap-guard-1029061211.testnet', method: 'is_enrolled', args: { dao: 'kaap-dao-1029064008.testnet' }, value: true },

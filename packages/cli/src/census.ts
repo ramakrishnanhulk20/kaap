@@ -1,5 +1,5 @@
 // `kaap census [--sample N]`: reruns the DAO census headline numbers from the live mainnet chain
-// (a port of the 20 Oct scan in scratchpad/dao-census), at most 5 requests a second. With --sample
+// (a port of the census scan first run on 20 Oct 2026), at most 5 requests a second. With --sample
 // it scans N DAOs chosen by the sha256 of their names, so every run of the same N scans the same
 // DAOs, and the counts are of that sample, not scaled up.
 //

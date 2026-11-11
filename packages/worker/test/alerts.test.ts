@@ -2,7 +2,7 @@
 // form per DAO and per proposer while a critical verdict goes at once, batched messages are capped
 // per chat, a send Telegram refused is retried or ends the chat's subscriptions, and a restart
 // drops the health changes an earlier process left queued. Not covered: how a Telegram client
-// draws the text, which only a real chat shows (DONE MEANS 2).
+// draws the text, which only a real chat shows (checked live on testnet, 2 Nov 2026).
 
 import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';

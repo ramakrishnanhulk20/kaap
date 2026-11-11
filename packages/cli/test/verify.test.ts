@@ -1,25 +1,26 @@
-// `kaap verify` against recorded runs on the M1 testnet DAO's proposals 2 (the disguised payment the
-// guard rejected on 29 Oct) and 9 (the same attack, judged by the second published build on 3 Nov),
-// found through the real chain of deployment records (today's registry holds no verdict for them,
-// so the 29 Oct record it names is used, and said so) with the live providers answering for those
-// blocks as they did on 11 Nov, and on the 11 Nov demo DAO's proposal 3 under today's record, its fresh run
-// read from a live provider and only the key's run from an archive. On the M1 recording: the first
-// archive refusing every request (a pass through the second), every archive refusing (the checks
-// that need one unread, none failed, exit 6), KAAP_ARCHIVAL_RPC asked before the public ones, and
-// OutLayer's API dropping a connection (asked again) or never answering (its checks unread).
-// Then every check passing, then the same answers with a flipped signature bit, a wrong wasm hash and a
-// wrong caller in OutLayer's attestation, a tampered receivers hash, a receiver whose code differs
-// at the verdict's block, and the live providers disagreeing on a receiver's code now, each failing
-// its check and the command; OutLayer's record changed against its TDX quote, its quote rewritten
-// to the Legacy hash, and a record whose quote is rewritten to match it but whose fields or time
-// disagree with the chain, each failing the binding check; a receiver redeployed since the verdict,
-// which warns; no verdict for a proposal; what the command reads; the accounts the receivers hash
-// covers, on the sealed job's own cases; a verdict from another decoder warning without failing;
-// and the verdict reader and the ed25519 check on their own. It does not cover Intel's signature on
-// the TDX quote or OutLayer's approval of its measurements (the CLI does not check them and says
-// so), a receivers hash over a called contract recorded live (the M1 payment is native NEAR, so it
-// covers the DAO alone), the live chain changing after the recording (DONE MEANS runs live), or a
-// verdict with an AI answer (none is recorded on testnet yet).
+// `kaap verify` against recorded runs on the 29 Oct testnet DAO's proposals 2 (the disguised
+// payment the guard rejected on 29 Oct) and 9 (the same attack, judged by the second published
+// build on 3 Nov), found through the real chain of deployment records (today's registry holds no
+// verdict for them, so the 29 Oct record it names is used, and said so) with the live providers
+// answering for those blocks as they did on 11 Nov, and on the 11 Nov demo DAO's proposal 3 under
+// today's record, its fresh run read from a live provider and only the key's run from an archive.
+// On the 29 Oct recording: the first archive refusing every request (a pass through the second),
+// every archive refusing (the checks that need one unread, none failed, exit 6), KAAP_ARCHIVAL_RPC
+// asked before the public ones, and OutLayer's API dropping a connection (asked again) or never
+// answering (its checks unread). Then every check passing, then the same answers with a flipped
+// signature bit, a wrong wasm hash and a wrong caller in OutLayer's attestation, a tampered
+// receivers hash, a receiver whose code differs at the verdict's block, and the live providers
+// disagreeing on a receiver's code now, each failing its check and the command; OutLayer's record
+// changed against its TDX quote, its quote rewritten to the Legacy hash, and a record whose quote
+// is rewritten to match it but whose fields or time disagree with the chain, each failing the
+// binding check; a receiver redeployed since the verdict, which warns; no verdict for a proposal;
+// what the command reads; the accounts the receivers hash covers, on the sealed job's own cases; a
+// verdict from another decoder warning without failing; and the verdict reader and the ed25519
+// check on their own. It does not cover Intel's signature on the TDX quote or OutLayer's approval
+// of its measurements (the CLI does not check them and says so), a receivers hash over a called
+// contract recorded live (the 29 Oct payment is native NEAR, so it covers the DAO alone), the live
+// chain changing after the recording (only a live run sees it), or a verdict with an AI answer
+// (none is recorded on testnet yet).
 
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -37,7 +38,8 @@ import { answering, fakeClock, load, replay, REPO_ROOT, UNKNOWN_TODAY, withoutAl
 const GUARD_KEY = 'ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN';
 const [ARCHIVE = '', SECOND_ARCHIVE = ''] = NETWORKS.testnet.archives;
 const LIVE = new Set([NETWORKS.testnet.primary, NETWORKS.testnet.secondary]);
-/** How each line that rests on the M1 recordings names the archival node they were recorded from. */
+/** How each line that rests on the 29 Oct recordings names the archival node they were recorded
+ *  from. */
 const FROM_ARCHIVE = ' (chain read from archival-rpc.testnet.fastnear.com)';
 
 /** The recording holds the blocks a passing run read. A run that keeps looking reads the rest of
@@ -56,7 +58,7 @@ function wholeWindow(t: Transport): Transport {
   };
 }
 
-/** The M1 recordings hold only the live providers' answers at the final block. For the 29 Oct
+/** The 29 Oct recordings hold only the live providers' answers at the final block. For the 29 Oct
  *  blocks, chunks and runs they no longer keep, each answers as both did on 11 Nov. */
 function pruned(t: Transport): Transport {
   return async (r) => {
@@ -148,11 +150,11 @@ const line = (out: string, has: RegExp) => out.split('\n').map((l) => l.trim()).
 
 const BINDING = /^(pass|fail) {2}the run: OutLayer's record /;
 
-/** The line naming the record the M1 verdicts are checked against, before the checks. */
+/** The line naming the record the 29 Oct DAO's verdicts are checked against, before the checks. */
 const OCT_29_RECORD =
   /^Kaap on testnet: deployment record deployments\/testnet-2026-10-29\.json \(an earlier deployment, not the current deployments\/testnet\.json, deployed 2026-10-29T06:12:11Z\): guard kaap-guard-1029061211\.testnet, registry kaap-registry-1029061211\.testnet, sealed program kaap-worker-1029053612\.testnet\/kaap-sealed called by kaap-worker-1029053612\.testnet; used because kaap-registry-1111072803\.testnet holds no verdict for this proposal\n(?:.*\n)*checks\n/m;
 
-test('the M1 attack verdict passes every check, down to the attested run that printed the guard key', async () => {
+test('the 29 Oct attack verdict passes every check, down to the attested run that printed the guard key', async () => {
   const { code, out } = await run();
   assert.equal(code, 0, out);
   assert.match(out, /^kaap verify kaap-dao-1029064008\.testnet #2 on testnet$/m);
@@ -199,7 +201,7 @@ test('the 11 Nov demo verdict passes every check on today\'s record, reading its
   assert.match(archived[0]?.body ?? '', /7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC/);
 });
 
-test('the M1 verdict on proposal 9, from the second published build, passes every check with its run bound to its quote', async () => {
+test('the verdict on proposal 9 of the 29 Oct DAO, from the second published build, passes every check with its run bound to its quote', async () => {
   const { code, out } = await run(undefined, undefined, 'verify-m1-9.json');
   assert.equal(code, 0, out);
   assert.match(out, /^kaap verify kaap-dao-1029064008\.testnet #9 on testnet$/m);
@@ -333,8 +335,8 @@ test('the two live providers disagreeing on a receiver\'s code now fails receive
 });
 
 test('the receivers hash covers the accounts the sealed job reads, and gives its bytes', async () => {
-  // The cases of packages/core/src/receipt.rs `called_accounts`, and the pair list WO-03d pinned
-  // against `kaap_sealed::reads::receivers_hash`, handed over unsorted.
+  // The cases of packages/core/src/receipt.rs `called_accounts`, and the pair list pinned against
+  // `kaap_sealed::reads::receivers_hash`, handed over unsorted.
   const core = await Core.load();
   const dao = 'd.sputnikv2.testnet';
   const cases: [string, string[] | null][] = [

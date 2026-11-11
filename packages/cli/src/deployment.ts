@@ -81,7 +81,8 @@ export interface Deployment {
   builds: ReadonlySet<string>;
 }
 
-/** The worker's record of one `{"v":1,"op":"pubkey"}` run (WO-06d). */
+/** The worker's record of one `{"v":1,"op":"pubkey"}` run: the `text_key` object that
+ *  packages/worker/HOSTING.md describes. */
 const textKeySchema = z.strictObject({
   key: z.string().regex(/^[0-9a-fA-F]{64}$/),
   signature: z.string().regex(/^[A-Za-z0-9+/]{86}==$/),

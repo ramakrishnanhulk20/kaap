@@ -1,4 +1,4 @@
-// A member's sealed text (WO-06d): GET /text-key serves the stored key, POST /texts answers every
+// A member's sealed text: GET /text-key serves the stored key, POST /texts answers every
 // fault with a fixed word and echoes nothing, a judged text goes down the same veto path as any
 // verdict without the answer waiting for the veto, a text waits for a judgement of its proposal
 // already running, the rate limit counts each client address, texts have a daily cap of their own

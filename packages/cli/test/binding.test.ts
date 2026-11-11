@@ -22,7 +22,8 @@ function ours(fixture: string, tx: string): Served {
   return JSON.parse(exchange.text) as Served;
 }
 
-/** reference/tech/outlayer-verify/src/crates/verify-core/tests/fixtures at commit 90c27d9. */
+/** crates/verify-core/tests/fixtures of https://github.com/out-layer/outlayer-verify at commit
+ *  90c27d9. */
 const VERIFIER: [string, string, Served][] = [
   [
     'mainnet-205123-v1',

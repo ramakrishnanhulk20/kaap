@@ -142,8 +142,8 @@ export class Judge {
     this.#s = settings;
   }
 
-  /** The exact input WO-02b's job accepts and nothing else, with a member's sealed text when one
-   *  is given. */
+  /** The exact input the sealed job accepts (packages/sealed/src/input.rs) and nothing else, with
+   *  a member's sealed text when one is given. */
   input(dao: string, id: number, text?: SealedText): string {
     const base = { v: 1, network: this.#s.network, guard: this.#s.guard, dao, proposal_id: id, expires_in_ms: this.#s.verdictTtlMs };
     return JSON.stringify(text ? { ...base, text_ciphertext: text.ciphertext, reply_key: text.replyKey } : base);

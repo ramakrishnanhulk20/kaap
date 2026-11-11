@@ -1,7 +1,7 @@
 // `kaap subscribe` against a worker that answers the way packages/worker/src/status.ts does, and
 // every refusal: a DAO the worker does not watch, a rate limit, an answer that is not a token or
-// whose parts disagree, an account id that is not one. It does not run a real worker (WO-06b's live
-// test did) or Telegram. `kaap seal-text` is in seal-text.test.ts.
+// whose parts disagree, an account id that is not one. It does not run a real worker (the live
+// testnet run of 2 Nov 2026 did) or Telegram. `kaap seal-text` is in seal-text.test.ts.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
