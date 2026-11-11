@@ -395,7 +395,8 @@ async function live(o, records) {
     const completed = chain.events(outcome).find((e) => e.event === 'execution_completed')?.data?.[0] ?? null;
     const charged = /^\d+$/.test(String(completed?.payment_charged ?? '')) ? BigInt(completed.payment_charged) : 0n;
     const nearYocto = chain.burnt(outcome) + charged;
-    const base = { id: r.id, input_bytes: r.bytes, prices_trimmed: r.trimmed, tx: hash, near_yocto: nearYocto.toString(), wall_ms: wallMs };
+    const workerMs = completed?.resources_used?.time_ms;
+    const base = { id: r.id, input_bytes: r.bytes, prices_trimmed: r.trimmed, tx: hash, near_yocto: nearYocto.toString(), wall_ms: wallMs, worker_ms: Number.isSafeInteger(workerMs) ? workerMs : null };
     if (outcome.status?.Failure) return { ...base, status: 'tx_failed', usd_nano: null };
     const value = outcome.status?.SuccessValue;
     const out = value === undefined ? null : readOutput(Buffer.from(value, 'base64').toString('utf8'));
