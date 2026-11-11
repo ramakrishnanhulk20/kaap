@@ -14,7 +14,7 @@ paid in testnet NEAR, with all three resource limits written out (10,000,000,000
 | Proposal judged | `corm1gu.sputnikv2.testnet` #1, a real InProgress Transfer of 10 tokens of `nori4qx.tanssg2.testnet` |
 | Input | `{"v":1,"network":"testnet","guard":"kaap-worker-1029053612.testnet","dao":"corm1gu.sputnikv2.testnet","proposal_id":1,"expires_in_ms":600000}` |
 
-## The ten timed runs (DONE MEANS 4)
+## The ten timed runs
 
 "Read block" is the final block the job pinned every read to, taken from the verdict. "Wall" is
 from just before near-cli starts to near-cli returning the result; "on chain" is from the
@@ -42,16 +42,16 @@ request's block to the last receipt's block; "worker" is OutLayer's own `time_ms
 
 p50 and p90 are the 5th and 9th of the ten values in order. Paid per run: mean 0.0019189 testnet
 NEAR (range 0.0019100 to 0.0019412), of which OutLayer's charge is 0.0011427 and transaction gas
-0.0007762. Testnet NEAR has no price; at the M0 spike's $4.72 per NEAR the same run on mainnet
-would be about $0.009.
+0.0007762. Testnet NEAR has no price; at $4.72 per NEAR (CoinGecko, 20 Oct 2026) the same run on
+mainnet would be about $0.009.
 
 Where the time goes: the job itself takes about 1.4 s inside the worker (ten chain reads, five
 from each provider, about 0.1 to 0.5 s each). The rest of the on-chain time is OutLayer picking up
-the request and resolving it, the same 13 to 15 blocks the M0 spike measured. Every run here
-was a cached one: the first run of this version (run 1 of DONE MEANS 2 below) was "Freshly
-compiled" and took 18 blocks (10.6 s on chain, 14.8 s wall clock).
+the request and resolving it, the same 13 to 15 blocks the early OutLayer spikes measured. Every
+run here was a cached one: the first run of this version (run 1 of the three runs below) was
+"Freshly compiled" and took 18 blocks (10.6 s on chain, 14.8 s wall clock).
 
-## DONE MEANS 2: three runs, one key
+## Three runs, one key
 
 | Run | Transaction | Read block | Status | Signature (Node crypto) | Key |
 | --- | --- | --- | --- | --- | --- |
@@ -67,10 +67,10 @@ ten runs above passed the same checks under the same key.
 
 The high floor is expected for this honest Transfer: the job has no price list yet, so every token
 is unpriced, and an unpriced token is UNKNOWN_VALUE (high), never zero (C2). The AI part is
-Unavailable on every run because Ram's NEAR AI key is not yet an OutLayer secret of this project;
-the explanation says so.
+Unavailable on every run because no NEAR AI key was an OutLayer secret of this project yet; the
+explanation says so.
 
-## DONE MEANS 3: the providers forced to disagree
+## The providers forced to disagree
 
 | Transaction | Input | Output |
 | --- | --- | --- |
@@ -356,10 +356,12 @@ transaction gas 0.0048875. The filing, 0.0002925 NEAR of gas, is not counted.
 - The NEAR AI call inside OutLayer: one keyed run only, on one proposal, signed through the test
   script and not yet through the worker's own path. Every other run here had no key and never
   asked the model. A refused chat call was exercised only in the local wasmtime build.
-- Three checks WO-05d owes: replaying RTMR3 from its event log, comparing MRCONFIGID against
-  `app_compose`, and an allowlist of approved model builds. Until then "verified" means a genuine,
-  non-debug Intel TDX machine whose GPUs NVIDIA passed holds the key that signed this exact answer,
-  not that it runs a build Kaap has reviewed.
+- Three checks none of these runs made: replaying RTMR3 from its event log, comparing MRCONFIGID
+  against `app_compose`, and an allowlist of approved model builds. The code makes the first two
+  now (README, "When an AI answer counts as verified"), but they have not run live with a key, and
+  there is no allowlist. So here "verified" means a genuine, non-debug Intel TDX machine whose GPUs
+  NVIDIA passed holds the key that signed this exact answer, not that it runs a build Kaap has
+  reviewed.
 - The host's lag: the host read at the HTTPS provider's final block every time, so the one-retry
   path for a host that is a block behind never ran.
 - OutLayer's own quote: this script checks the named fields and the two hashes only. Intel's

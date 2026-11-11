@@ -85,7 +85,7 @@ function show(label, analysis) {
 }
 
 async function main() {
-  console.log(`WO-04 testnet hash check, ${new Date().toISOString()}: ${memberId} files a sign proposal on ${dao}`);
+  console.log(`Kaap testnet hash check, ${new Date().toISOString()}: ${memberId} files a sign proposal on ${dao}`);
   const member = accountFor(memberId);
 
   const plantedKey = `ed25519:${baseEncode(randomBytes(32))}`;

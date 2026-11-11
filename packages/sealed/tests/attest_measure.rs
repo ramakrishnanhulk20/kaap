@@ -1,9 +1,9 @@
-//! The model machine's software record (C11, WO-05d DONE MEANS 1): NEAR AI's real report of
-//! 11 Nov 2026, both of its quotes checked by dcap-qvl against Intel's collateral of that day, and
-//! the event log, launcher configuration and deployment log held to them. Then that report with
-//! one piece broken at a time, each of which must give exactly its own reason word. Not covered
-//! here: a live report (the keyed testnet run in `RUNS.md`), whether the software is safe (Kaap
-//! records it and does not judge it), and which host served a completion (instances share a key).
+//! The model machine's software record (C11): NEAR AI's real report of 11 Nov 2026, both of its
+//! quotes checked by dcap-qvl against Intel's collateral of that day, and the event log, launcher
+//! configuration and deployment log held to them. Then that report with one piece broken at a
+//! time, each of which must give exactly its own reason word. Not covered here: a live report (the
+//! keyed testnet run in `RUNS.md`), whether the software is safe (Kaap records it and does not
+//! judge it), and which host served a completion (instances share a key).
 
 mod common;
 

@@ -1,6 +1,6 @@
 //! The facts message the model reads (C10). Not covered here: how a real model reacts to it
-//! (there is no NEAR AI key yet, and WO-05c runs the AI evaluation), and the answer parser, which
-//! is in `ai_answer.rs`.
+//! (there is no NEAR AI key yet, and `scripts/ai-eval.mjs` runs the AI evaluation), and the answer
+//! parser, which is in `ai_answer.rs`.
 
 use kaap_core::{analyze, Effect, History, Network, Prices, ProposalInput};
 use kaap_sealed::prompt::*;

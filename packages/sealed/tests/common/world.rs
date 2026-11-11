@@ -31,8 +31,8 @@ pub const NOW: u64 = 1_792_733_000;
 /// unicode escapes, which parse to the same strings, so the repo's dash sweep passes.
 pub const REPORT_11_NOV: &str = include_str!("../fixtures/near-ai-report-2026-11-11.json");
 pub const REPORT_11_NOV_NONCE: &str = include_str!("../fixtures/near-ai-report-2026-11-11.nonce");
-/// Intel's collateral for that report's quotes, recorded the same day with the tool that made the
-/// 23 Oct set (scratchpad/m0d-nearai qvl-live).
+/// Intel's collateral for that report's quotes, recorded the same day by the same four keyless PCS
+/// calls that recorded the 23 Oct set.
 pub const COLLATERAL_11_NOV: &str = include_str!("../fixtures/intel-collateral-2026-11-11.json");
 /// Inside that collateral's dates (issued 06:48 UTC on 11 Nov, valid for 30 days).
 pub const NOW_11_NOV: u64 = 1_794_382_000;

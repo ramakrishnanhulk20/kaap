@@ -51,8 +51,8 @@ pub fn severity_of(risk: AiRisk) -> Severity {
 }
 
 /// The verdict's risk (C9): the higher of the plain-code floor and the AI's risk, where an AI
-/// answer that is not Verified counts as high at most (Ram, 23 Oct 2026: only a proven AI answer
-/// may lead to a veto). The AI can raise the risk and never lower it. An Unknown floor is
+/// answer that is not Verified counts as high at most (decided 23 Oct 2026: only a proven AI
+/// answer may lead to a veto). The AI can raise the risk and never lower it. An Unknown floor is
 /// reported as High, as kaap-core reports it.
 pub fn combine_risk(floor: Severity, ai: Option<(AiRisk, AiStatus)>) -> Severity {
     let floor = if floor == Severity::Unknown { Severity::High } else { floor };
@@ -72,8 +72,8 @@ pub fn combine_risk(floor: Severity, ai: Option<(AiRisk, AiStatus)>) -> Severity
 }
 
 /// The words in front of the model's explanation. A verified answer states the Intel TCB level the
-/// model's hardware reported (Ram, 23 Oct 2026: every verdict says which); an unverified one says
-/// which check failed. Both come before the model's text because `fit` cuts from the end.
+/// model's hardware reported (decided 23 Oct 2026: every verdict says which); an unverified one
+/// says which check failed. Both come before the model's text because `fit` cuts from the end.
 pub fn ai_note(check: &Check) -> String {
     match check {
         Check::Verified { tcb_status } => format!("AI verified (Intel TCB: {tcb_status}). "),

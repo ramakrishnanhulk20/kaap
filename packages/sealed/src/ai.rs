@@ -277,10 +277,10 @@ pub fn check_model(list_body: &[u8], model_id: &str) -> Result<(), Refusal> {
 /// through `chat_template_kwargs` only moves it into `content`, which would break the exact-JSON
 /// answer, so the reasoning is kept short with a budget instead. The first live run (5 Nov 2026,
 /// one proposal) reasoned for 257 tokens against a budget of 256 and finished with `stop` in 15.7 s
-/// of the run's 60 s, so 512 leaves harder proposals room. WO-05c's evaluation is the check.
+/// of the run's 60 s, so 512 leaves harder proposals room. scripts/ai-eval.mjs measures it.
 pub const THINKING_TOKEN_BUDGET: u32 = 512;
 /// The answer itself. The same run's answer took about 66 of these 400 tokens, and one run is thin,
-/// so WO-05c's evaluation is the check here too.
+/// so scripts/ai-eval.mjs measures this too.
 pub const MAX_ANSWER_TOKENS: u32 = 400;
 
 /// The one chat request: non-streamed (a streamed answer is signed by the gateway, not the

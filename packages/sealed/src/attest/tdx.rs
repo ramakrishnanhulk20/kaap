@@ -1,5 +1,5 @@
 //! The model's own Intel TDX quote, checked inside the job with Phala's dcap-qvl 0.7.1 against
-//! collateral the job fetched from Intel's PCS with four keyless calls (scratchpad/m0d-nearai Q9).
+//! collateral the job fetched from Intel's PCS with four keyless calls (tried live on 23 Oct 2026).
 //!
 //! The collateral may come from anywhere: dcap-qvl checks Intel's signatures on it up to the Intel
 //! root CA compiled into the crate, so a fetcher can never forge it. It can only hand over an
@@ -77,7 +77,7 @@ impl PckFlags {
 /// only where a real quote that binds a key they hold cannot exist.
 pub type QuoteCheck = fn(&[u8], &QuoteCollateralV3, u64) -> Result<QuoteFacts, Unverified>;
 
-/// The policy beyond Intel's signatures: the two TCB levels Ram accepts with no time limit on
+/// The policy beyond Intel's signatures: the two TCB levels Kaap accepts with no time limit on
 /// OutOfDate, and no set older than `MIN_TCB_EVAL_DATA_NUMBER`. dcap-qvl refuses a debug TD and a
 /// revoked platform on its own. The PCK flags for SMT, cached keys and dynamic platforms are
 /// allowed, as ruled on 2 Nov 2026: NEAR AI's own verification guide does not judge them. Each

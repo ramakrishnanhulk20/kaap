@@ -1,9 +1,9 @@
-//! "AI verified" end to end (C11, WO-05a DONE MEANS 1): one answer through every check, then the
-//! same answer with exactly one piece of evidence broken, each of which must come out Unverified,
-//! never Verified and never a silent pass. The stand-in world (`common/world.rs`) serves Intel's
-//! real collateral and key set and NEAR AI's real public Intel token; the model's quote is a
-//! stand-in except where a real dcap-qvl check is the thing under test. Not covered here: real
-//! NEAR AI, NVIDIA and model evidence (the first keyed testnet run, `RUNS.md`).
+//! "AI verified" end to end (C11): one answer through every check, then the same answer with
+//! exactly one piece of evidence broken, each of which must come out Unverified, never Verified
+//! and never a silent pass. The stand-in world (`common/world.rs`) serves Intel's real collateral
+//! and key set and NEAR AI's real public Intel token; the model's quote is a stand-in except where
+//! a real dcap-qvl check is the thing under test. Not covered here: real NEAR AI, NVIDIA and model
+//! evidence (the first keyed testnet run, `RUNS.md`).
 
 mod common;
 
@@ -186,7 +186,7 @@ fn a_bad_nvidia_token_is_unverified() {
 }
 
 #[test]
-fn a_tcb_level_ram_did_not_accept_or_no_clock_is_unverified() {
+fn a_tcb_level_kaap_does_not_accept_or_no_clock_is_unverified() {
     fn revoked(_: &[u8], _: &dcap_qvl::QuoteCollateralV3, _: u64) -> Result<tdx::QuoteFacts, Unverified> {
         Err(Unverified::TcbNotAccepted)
     }

@@ -152,8 +152,8 @@ Before the question is sent:
    run's nonce, `provider=near`. Every model entry in it is checked:
    - its Intel TDX quote, verified here with dcap-qvl 0.7.1 against collateral the job fetched from
      Intel's PCS with four keyless calls; dcap-qvl refuses a debug or revoked machine;
-   - Intel's TCB level is UpToDate or OutOfDate, the two levels Ram accepted on 23 Oct 2026, and
-     the collateral is in date with Intel's evaluation data number 20 or later;
+   - Intel's TCB level is UpToDate or OutOfDate, the two levels Kaap accepts (decided 23 Oct
+     2026), and the collateral is in date with Intel's evaluation data number 20 or later;
    - the quote's report data binds the entry's signing key and this run's nonce in NEAR's layout
      (bytes 0 to 31 the key, 32 to 63 the nonce); any other layout is refused;
    - its software record is held to that quote, with no network call. The event log replays to

@@ -1,7 +1,7 @@
 #!/bin/bash
-# DONE MEANS 1, second half: the local build under plain wasmtime, against a recorded fixture,
-# signed with the RFC 8032 test key, checked with Node crypto. Also runs the corrupt flag and a
-# refused input. Needs wasmtime (KAAP_WASMTIME, default the M0 copy of 28.0.1).
+# The local build under plain wasmtime, against a recorded fixture, signed with the RFC 8032 test
+# key, checked with Node crypto. Also runs the corrupt flag and a refused input. Needs wasmtime
+# 28.0.1 (KAAP_WASMTIME, default ~/kaap-m0-outlayer/tools/wasmtime28).
 #
 # Usage: bash packages/sealed/run-local.sh [fixture.json ...]
 set -euo pipefail

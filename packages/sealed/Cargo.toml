@@ -20,8 +20,8 @@ base64.workspace = true
 bs58.workspace = true
 near-account-id = { version = "=3.0.0", default-features = false }
 # The checks behind "AI verified" (C11). Pure Rust with no network code inside: the job fetches
-# every piece of evidence itself and these crates only check it. Versions from the 23 Oct spike
-# (scratchpad/m0d-nearai), each the latest stable on 2 Nov 2026 and each built for wasm32-wasip2.
+# every piece of evidence itself and these crates only check it. Versions from the 23 Oct spike on
+# NEAR AI's attestation, each the latest stable on 2 Nov 2026 and each built for wasm32-wasip2.
 # dcap-qvl without `report`, which would pull in reqwest.
 dcap-qvl = { version = "=0.7.1", default-features = false, features = ["std", "rustcrypto", "default-x509"] }
 p384 = { version = "=0.14.0", default-features = false, features = ["ecdsa", "alloc"] }
@@ -46,7 +46,7 @@ chacha20poly1305 = { version = "=0.11.0", default-features = false, features = [
 outlayer = { version = "=0.2.1", features = ["signing-keys", "encryption-keys"] }
 # The WASI bindings wasi-http-client 0.2.1 wraps. Called directly because that crate sets only
 # a connect timeout, and every outside call here needs a first-byte, a between-bytes and an
-# overall deadline (standard 4). 0.13.3 is the version OutLayer's worker ran in the M0 spikes.
+# overall deadline (standard 4). 0.13.3 is the version OutLayer's worker ran in the Oct 2026 spikes.
 wasi = "=0.13.3"
 
 [dev-dependencies]

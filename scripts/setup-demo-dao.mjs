@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Sets up the testnet treasury Kaap's M1 proof runs against: a Sputnik DAO running the exact 3.2
+// Sets up the demo treasury Kaap's testnet proof runs against: a Sputnik DAO running the exact 3.2
 // code, with the role setup of a live NEAR Business treasury (deployments/near-business-policy.json,
 // members removed) and our demo accounts in its two member places, plus a reject-only `guard` role held by the
 // deployed kaap-guard, which the DAO joins through its own approved proposal. Last, the DAO's own
@@ -269,7 +269,7 @@ export function demoPolicy(template, owner, member, guard) {
   const roles = template.roles.map((role) => ({ ...role, kind: { Group: role.kind.Group.map((m) => ours.get(m)) } }));
   // Two of two Approvers means one approval never executes a payment, which is what leaves the
   // guard time to vote. A treasury with one Approver, or a threshold of one, loses that race:
-  // the payment runs inside the approver's own call (scratchpad M0 test alice_alone_approves_first).
+  // the payment runs inside the approver's own call, as an early sandbox test on Sputnik showed.
   const approver = roles.find((r) => r.name === 'Approver');
   for (const label of ['transfer', 'call']) {
     const vp = approver.vote_policy?.[label];
@@ -338,7 +338,7 @@ async function main() {
   const guard = state.guard.account_id;
   const registry = state.registry.account_id;
   const owner = state.owner.account_id;
-  console.log(`Kaap M1 testnet setup, ${new Date().toISOString()}, RPC ${TESTNET_RPC}, near-api-js ${NEAR_API_JS_VERSION}`);
+  console.log(`Kaap demo treasury setup, ${new Date().toISOString()}, RPC ${TESTNET_RPC}, near-api-js ${NEAR_API_JS_VERSION}`);
 
   const printed = await keyTheSealedJobPrinted(state.sealed);
   const guardKey = await viewFinal(guard, 'accepted_key');
@@ -357,12 +357,12 @@ async function main() {
   const saved = await policyTemplate();
   console.log(`NEAR Business template: ${saved.source}; in deployments/near-business-policy.json`);
 
-  state.dao ??= { set_up_by: 'scripts/setup-demo-dao.mjs (work order WO-02c)' };
+  state.dao ??= { set_up_by: 'scripts/setup-demo-dao.mjs' };
   const dao = state.dao;
   if (!dao.member) {
     const id = `kaap-member-${stamp()}.${NETWORK}`;
     await createFaucetAccount(id);
-    dao.member = { account_id: id, held_by: `Ram; the key is only in ~/.near-credentials/testnet/${id}.json inside WSL on his machine` };
+    dao.member = { account_id: id, held_by: `Kaap's founder; the key is only in ~/.near-credentials/testnet/${id}.json inside WSL on the founder's machine` };
     saveState(state);
     console.log(`created ${id} (faucet)`);
   }

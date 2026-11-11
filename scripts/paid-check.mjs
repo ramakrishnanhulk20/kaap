@@ -39,7 +39,8 @@ const PRICE = 10_000n;
 const HTTPS_AMOUNTS = [10_000n, 5_000n, 0n];
 // The three attached amounts plus room for each call's compute reservation (X-Compute-Limit 10000).
 const KEY_NEEDS = 25_000n;
-// The M1 proposal and the expiry Kaap's worker sends (packages/worker/src/judge.ts `input`).
+// The first testnet proof's proposal on the demo DAO, and the expiry Kaap's worker sends
+// (packages/worker/src/judge.ts `input`).
 const PROPOSAL = 9;
 const EXPIRES_IN_MS = 600_000;
 // All three limits written out: an empty resource_limits object is never picked up (OutLayer #31).
@@ -159,7 +160,7 @@ const earningsOnChain = async () => BigInt(await viewFinal(OUTLAYER, 'get_develo
 async function paidRun(key) {
   const out = process.env.KAAP_PAID_OUT || join(homedir(), 'kaap-sealed-testnet', 'paid', new Date().toISOString().replace(/[:.]/g, '-'));
   mkdirSync(out, { recursive: true });
-  console.log(`WO-05e paid calls, ${new Date().toISOString()}, OutLayer testnet`);
+  console.log(`Kaap paid calls, ${new Date().toISOString()}, OutLayer testnet`);
   console.log(`project ${builds.project_id}, active build ${builds.active_version}`);
   console.log(`payer ${key.payer}, payment key nonce ${key.nonce}, price ${PRICE} micro-USD`);
   console.log(`input ${JSON.stringify(input)}`);
@@ -250,7 +251,7 @@ async function paidRun(key) {
 async function pinnedRun(key, sha) {
   if (!/^[0-9a-f]{64}$/.test(sha ?? '')) throw new Error('usage: node scripts/paid-check.mjs --version-key <64 hex characters>');
   const listed = (await viewFinal(OUTLAYER, 'list_versions', { project_id: builds.project_id })).map((v) => `${v.wasm_hash.slice(0, 8)}${v.is_active ? ' (active)' : ''}`);
-  console.log(`WO-05e pinned call, ${new Date().toISOString()}: version_key ${sha}`);
+  console.log(`Kaap pinned call, ${new Date().toISOString()}: version_key ${sha}`);
   console.log(`versions listed on ${OUTLAYER}: ${listed.join(', ')}`);
   const r = await httpsCall(key, 0n, { version_key: sha });
   console.log(`HTTP ${r.http}: ${r.text.slice(0, 800)}`);

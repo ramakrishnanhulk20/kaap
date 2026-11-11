@@ -1,6 +1,7 @@
 //! Verdict assembly, the risk rule (C9), signing and the 900-byte cap. Not covered here: the
-//! guard's own checks on a verdict (WO-02a), the OutLayer keystore (the test key stands in for
-//! it; the testnet runs in `RUNS.md` use the real one), and NEAR AI verification (WO-05).
+//! guard's own checks on a verdict (`packages/contracts`), the OutLayer keystore (the test key
+//! stands in for it; the testnet runs in `RUNS.md` use the real one), and NEAR AI verification
+//! (`attest_*.rs`).
 
 mod common;
 

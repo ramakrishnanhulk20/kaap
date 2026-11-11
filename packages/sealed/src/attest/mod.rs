@@ -159,7 +159,7 @@ impl Unverified {
     }
 }
 
-/// The Intel TCB levels Kaap accepts (Ram, 23 Oct 2026, threat model C11). On that day NEAR AI's
+/// The Intel TCB levels Kaap accepts (decided 23 Oct 2026, threat model C11). That day NEAR AI's
 /// hardware reported OutOfDate with 10 Intel advisories; every verdict states which level it saw.
 pub const ACCEPTED_TCB: [&str; 2] = ["UpToDate", "OutOfDate"];
 

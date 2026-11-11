@@ -1,9 +1,9 @@
 //! Eval mode: a ProposalInput handed in whole is judged by kaap-core and the model, and the job
 //! prints the scores without a signature or an evidence write, reading only the final block for its
-//! clock. Also pins every judge
-//! run with no `op` to the bytes it printed before eval mode existed. Not covered here: a live
-//! model answer (WO-05c part 2 runs the answer key on testnet), OutLayer setting the run's variables,
-//! and whether the inputs the script builds match the scoreboards (`packages/core-wasm/tests`).
+//! clock. Also pins every judge run with no `op` to the bytes it printed before eval mode existed.
+//! Not covered here: a live model answer (`scripts/ai-eval.mjs` runs the answer key on testnet),
+//! OutLayer setting the run's variables, and whether the inputs the script builds match the
+//! scoreboards (`packages/core-wasm/tests`).
 
 mod common;
 
@@ -109,8 +109,8 @@ fn judge_runs() -> Vec<(String, String)> {
     seen
 }
 
-/// Taken at 04a26ae with only this file added, before any eval code existed
-/// (`scratchpad/wo05c/capture.log`). The three no-key outputs equal `tests/texts.rs`'s own capture.
+/// Taken on 11 Nov 2026 at commit 04a26ae with only this file added, before any eval code existed.
+/// The three no-key outputs equal `tests/texts.rs`'s own capture.
 const CAPTURE: [(&str, &str); 19] = [
     ("transfer-ft.json worker, no key output", "11b43ca0b4b379fd442cadf48c23594ff56c665f9b98dc4b5be4f57fe8bf78ac"),
     ("transfer-ft.json worker, no key evidence 0", "4df13dd379a4d7242a0861498b79ef8aac0aaee9dd01bc4681b193ac74a7e655"),

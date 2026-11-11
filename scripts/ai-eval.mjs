@@ -2,7 +2,7 @@
 // Runs every record of an evaluation set through Kaap's sealed job once, in eval mode, and writes
 // what came back as it comes: the risk a verdict would carry, the AI's own risk, its status, the
 // sha256 of its explanation, the token counts and the transaction. Nothing is tuned to the answer
-// key; the numbers are reported as they come (WO-05c).
+// key; the numbers are reported as they come.
 //
 //   node scripts/ai-eval.mjs --dry-run
 //     Builds every input and prints how many fit the job's 32,768-byte limit, how many needed the
@@ -12,7 +12,7 @@
 //     The live run on OutLayer testnet. Resumes from what an earlier run with the same --out wrote.
 //   node scripts/ai-eval.mjs --report
 //     Scores what --out holds against the set's own labels. Sends nothing.
-//   --set <labels.jsonl> (repeatable) runs another set, such as reference/eval-nb/labels.jsonl.
+//   --set <labels.jsonl> (repeatable) runs another set instead of eval/real and eval/planted.
 //   --out <file> defaults to <the set's folder>/ai-runs/<UTC date>.jsonl and must lie inside that
 //     folder, so the results of a private set stay beside it and out of every public file.
 //
@@ -220,7 +220,7 @@ function dryRun(o, records) {
   const largest = (list) => list.reduce((a, b) => ((b.fullBytes ?? b.bytes) > (a.fullBytes ?? a.bytes) ? b : a), list[0] ?? { id: 'none', bytes: 0 });
   const big = largest(built);
   const sent = built.filter((r) => r.bytes <= MAX_INPUT_BYTES).reduce((a, b) => (b.bytes > a.bytes ? b : a), { id: 'none', bytes: 0 });
-  console.log(`WO-05c eval dry run, ${new Date().toISOString()}: nothing is sent`);
+  console.log(`Kaap AI evaluation dry run, ${new Date().toISOString()}: nothing is sent`);
   console.log(`set: ${o.sets.map(shown).join(', ')}; results would go to ${shown(o.out)}`);
   console.log(`records: ${records.length}; inputs built: ${built.length}; refused by kaap-core: ${records.length - built.length}${records.length > built.length ? ` (${records.filter((r) => r.raw === null).map((r) => r.id).join(', ')})` : ''}`);
   console.log(`fit the ${MAX_INPUT_BYTES}-byte input limit as built, sent untouched: ${untouched.length} of ${records.length}`);
@@ -379,7 +379,7 @@ async function live(o, records) {
   });
   const worstNear = (raw) => (RUN_GAS + BigInt(Buffer.byteLength('request_execution') + Buffer.byteLength(JSON.stringify(args(raw)))) * ARG_BYTE_GAS) * price + RUN_DEPOSIT;
 
-  console.log(`WO-05c eval run, ${new Date().toISOString()}, OutLayer testnet`);
+  console.log(`Kaap AI evaluation run, ${new Date().toISOString()}, OutLayer testnet`);
   console.log(`project ${builds.project_id}, active build ${builds.active_version}, caller ${builds.account}, secret near-ai of ${owner}`);
   console.log(`set ${o.sets.map(shown).join(', ')} (${records.length} records); results ${shown(o.out)}; journal ${shown(pendingFile)}`);
   console.log(`caps ${o.maxUsd} USD and ${o.maxNear} NEAR; ${MODEL_ID} at ${prices.input} and ${prices.output} nano-USD per input and output token; gas price ${price}`);

@@ -1,6 +1,6 @@
 //! NEAR AI's public Intel Trust Authority token (`GET /v1/attestation/ita-token`), shown as
 //! gateway evidence and never as the model's: its "model" token carries the gateway's own TDX
-//! quote and the gateway's key, not the model server's (scratchpad/m0d-nearai/RESULTS.md Q1).
+//! quote and the gateway's key, not the model server's (seen in the live response, 23 Oct 2026).
 //!
 //! Intel signs with PS384 (RSASSA-PSS, SHA-384). Its keys are fetched from Intel's own URL on every
 //! run and looked up by `kid`; the token's `jku` is only compared with that URL, never followed.

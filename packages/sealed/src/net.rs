@@ -23,7 +23,7 @@ pub const NEAR_AI_SIGNATURE: Endpoint = Endpoint { authority: "cloud-api.near.ai
 pub const NEAR_AI_ITA: Endpoint = Endpoint { authority: "cloud-api.near.ai", path: "/v1/attestation/ita-token" };
 
 /// Intel's Provisioning Certification Service: the keyless calls that make up the collateral for
-/// a TDX quote (scratchpad/m0d-nearai/RESULTS.md Q9). The root CA's CRL lives on its own host,
+/// a TDX quote (tried live on 23 Oct 2026). The root CA's CRL lives on its own host,
 /// the one named in Intel's root certificate.
 pub const INTEL_PCK_CRL: Endpoint = Endpoint { authority: "api.trustedservices.intel.com", path: "/sgx/certification/v4/pckcrl" };
 pub const INTEL_TCB_INFO: Endpoint = Endpoint { authority: "api.trustedservices.intel.com", path: "/tdx/certification/v4/tcb" };

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Files M1's planted attack #17 on the demo treasury and then only watches: the running worker
-// (bash scripts/run-worker-local.sh) must notice it, have it judged, record the verdict and cast the
-// veto with no help from here. Exit code 0 only when the proposal ends Rejected by the guard's
-// vote alone within the wait.
+// Files planted attack #17, the disguised payment scripts/prove.mjs also files, on the demo
+// treasury and then only watches: the running worker (bash scripts/run-worker-local.sh) must
+// notice it, have it judged, record the verdict and cast the veto with no help from here. Exit
+// code 0 only when the proposal ends Rejected by the guard's vote alone within the wait.
 //
 // Testnet only. Inside WSL, with Node 24 and near-api-js 7.4.0 at the repo root, while the worker
 // runs in another shell:
@@ -44,7 +44,7 @@ function attack(root) {
 }
 
 async function main() {
-  console.log(`WO-06 attack filer, ${new Date().toISOString()}: files ${ATTACK} on ${dao}; the worker does the rest`);
+  console.log(`Kaap attack filer, ${new Date().toISOString()}: files ${ATTACK} on ${dao}; the worker does the rest`);
   if (!(await viewFinal(guard, 'is_enrolled', { dao }))) throw new Error(`${dao} is not enrolled in ${guard}`);
   const member = accountFor(memberId);
 

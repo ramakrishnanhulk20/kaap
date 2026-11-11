@@ -303,7 +303,7 @@ async function runCase(c, member, worker, acceptedKey, dir) {
 }
 
 async function main() {
-  console.log(`Kaap M1 proof on ${NETWORK}, ${new Date().toISOString()}`);
+  console.log(`Kaap end-to-end proof on ${NETWORK}, ${new Date().toISOString()}`);
   if (!dao || !memberId) throw new Error('no demo DAO in deployments/testnet.json: run scripts/setup-demo-dao.mjs first');
   const daoState = await accountState(dao);
   if (daoState?.code_hash !== SPUTNIK_CODE_HASH) throw new Error(`${dao} runs ${daoState?.code_hash}, not Sputnik 3.2`);

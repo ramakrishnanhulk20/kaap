@@ -8,4 +8,4 @@ export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$HOME/kaap-target}"
 
 cargo test --workspace
 
-# ---- later work orders add their own commands below this line, never above it ----
+# Further suites go below this line, never above it.

@@ -307,7 +307,7 @@ fn seal_with(
 }
 
 /// The testnet-only test flag: the HTTPS provider's `get_proposal` answer gains one character in
-/// its description, so the two providers disagree and the job must hold (DONE MEANS 3).
+/// its description, so the two providers disagree and the job must hold (RUNS.md shows it live).
 struct Corrupting(Box<dyn Provider>);
 
 impl Provider for Corrupting {

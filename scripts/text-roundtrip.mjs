@@ -181,7 +181,7 @@ async function testnetTrip() {
   const worker = accountFor(state.sealed.worker_account);
   const member = accountFor(state.dao.member.account_id);
   const text = plantedText(dao);
-  const description = 'WO-05b sealed text round trip: a planted sign request';
+  const description = 'Sealed text round trip: a planted sign request';
   const filed = await call(member, dao, 'add_proposal', { proposal: { description, kind: signKind(dao, text.payload) } }, 30n * TGAS);
   if (filed.failure) throw new Error(`add_proposal failed in ${filed.hash}: ${refusal(filed.failure)}`);
   const id = returned(filed.outcome);
@@ -213,7 +213,7 @@ async function main() {
   if (local && !process.argv[3]) throw new Error('usage: node scripts/text-roundtrip.mjs [--local <kaap-sealed-local.wasm>]');
   const trip = local ? localTrip(process.argv[3]) : await testnetTrip();
   const { dao, id, guard, verdictKey, text, run } = trip;
-  console.log(`WO-05b round trip, ${new Date().toISOString()}, ${local ? 'local wasmtime build, test keys' : 'OutLayer testnet'}: ${dao} #${id}`);
+  console.log(`Kaap sealed text round trip, ${new Date().toISOString()}, ${local ? 'local wasmtime build, test keys' : 'OutLayer testnet'}: ${dao} #${id}`);
 
   console.log('1. the job\'s key');
   const answer = JSON.parse(await run('{"v":1,"op":"pubkey"}'));

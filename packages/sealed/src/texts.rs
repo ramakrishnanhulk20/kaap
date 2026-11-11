@@ -3,7 +3,7 @@
 //!
 //! The job's X25519 key pair is never stored. Its secret is the `mac` of a fixed label under the
 //! project's declared encryption key `texts`, the route OutLayer's SDK 0.2.1 offers, because the
-//! SDK hands out no key (scratchpad/m0c-outlayer/RESULTS.md): the same 32 bytes in every run with
+//! SDK hands out no key (testnet runs, 23 to 26 Oct 2026): the same 32 bytes in every run with
 //! the same project and caller, across versions, and no other program or caller can compute them.
 //!
 //! The encryption is the construction OutLayer's own secrets use, an ephemeral X25519 exchange,

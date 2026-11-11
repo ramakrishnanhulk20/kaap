@@ -27,7 +27,7 @@ struct RawInput {
     dao: String,
     proposal_id: u64,
     expires_in_ms: u64,
-    /// Testnet only: corrupt the HTTPS read so the two providers disagree (DONE MEANS 3).
+    /// Testnet only: corrupt the HTTPS read so the two providers disagree, to show the job holds.
     #[serde(default)]
     test_corrupt_https: bool,
     /// Base64 of a text encrypted to the job's public key (`texts`). Comes with `reply_key`.

@@ -124,7 +124,7 @@ fn plain(status: &'static str, reason: &'static str) -> String {
 /// `value` as one line of JSON with every object's keys in order. Everything this job prints or
 /// stores goes through here: dcap-qvl turns on serde_json's `preserve_order` for every crate built
 /// with this one, so without the sort the job and the CLI would show one object in two orders
-/// (DECISIONS, 2 Nov 2026).
+/// (decided 2 Nov 2026).
 pub fn sorted_json(value: &impl Serialize) -> Result<String, serde_json::Error> {
     let mut value: Value = serde_json::to_value(value)?;
     value.sort_all_objects();

@@ -2,7 +2,7 @@
 //! evidence published beside it, and every way to no signature. Not covered here: the OutLayer
 //! host, keystore, storage and network (stood in by FastNEAR answers, the RFC 8032 test key, a
 //! stand-in store and recorded answers; the testnet runs in `RUNS.md` cover them), and live NEAR
-//! AI answers, which need Ram's key.
+//! AI answers, which need a NEAR AI key.
 
 mod common;
 
@@ -182,7 +182,8 @@ fn an_unverified_ai_answer_raises_to_high_at_most_and_the_key_never_shows() {
         .to_string()
         .into_bytes()
     };
-    // An unknown call keeps a high floor; a Vote proposal has moved nothing since WO-03b, so its floor is low.
+    // An unknown call keeps a high floor; kaap-core's policy engine reads a Vote proposal as
+    // moving nothing, so its floor is low.
     let fx = fixture("function-call.json");
     // No NEAR_BLOCK_TIMESTAMP here, so no check can run: the answer counts, unverified.
     for (said, want) in [("critical", Severity::High), ("low", Severity::High), ("high", Severity::High)] {

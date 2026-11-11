@@ -63,7 +63,7 @@ fn an_older_genuine_set_is_refused_and_a_forged_one_never_verifies() {
 }
 
 #[test]
-fn the_policy_accepts_only_the_two_levels_ram_chose() {
+fn the_policy_accepts_only_the_two_levels_kaap_chose() {
     use dcap_qvl::TcbStatus::*;
     let p = policy(FETCHED_AT);
     for (status, accepted) in [

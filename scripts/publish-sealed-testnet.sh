@@ -5,9 +5,9 @@
 #   2. creates the worker account from the testnet faucet if packages/sealed/testnet.json names
 #      none yet (its key stays in ~/.near-credentials/testnet, legacy keychain, never in the repo);
 #   3. hosts the wasm: `fastfs` uploads it to testnet FastFS from the worker account; any https URL
-#      means the file is already served there (a host Ram approved);
+#      means the file is already served there (a host the operator approved);
 #   4. downloads the URL and stops unless the served bytes have the build's sha256, because a run
-#      whose wasm cannot be fetched is not refused, it hangs about 200 blocks (m0c spike);
+#      whose wasm cannot be fetched is not refused, it hangs about 200 blocks (seen 24 Oct 2026);
 #   5. registers it: create_project the first time, add_version (set active) after that.
 # Runs inside WSL with near-cli-rs 0.30.1. Testnet only.
 #
