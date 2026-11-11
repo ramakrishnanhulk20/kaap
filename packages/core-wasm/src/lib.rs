@@ -102,4 +102,14 @@ mod bindings {
     pub fn eval_scoreboards(real_jsonl: &str, planted_jsonl: &str, tokens_json: &str) -> Result<String, JsError> {
         crate::eval::scoreboards(real_jsonl, planted_jsonl, tokens_json).map_err(thrown)
     }
+
+    #[wasm_bindgen(js_name = evalInput)]
+    pub fn eval_input(record_json: &str, tokens_json: &str) -> Result<String, JsError> {
+        crate::eval::eval_input(record_json, tokens_json).map_err(thrown)
+    }
+
+    #[wasm_bindgen(js_name = evalInputTrimmed)]
+    pub fn eval_input_trimmed(record_json: &str, tokens_json: &str) -> Result<String, JsError> {
+        crate::eval::eval_input_trimmed(record_json, tokens_json).map_err(thrown)
+    }
 }

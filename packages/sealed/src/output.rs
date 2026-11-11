@@ -1,10 +1,14 @@
 //! Everything the job prints. A refusal or a hold carries a fixed reason written in this crate
 //! (the `&'static str` type makes any other text impossible) and never a signature.
 
+use kaap_core::{AiStatus, Analysis, FindingCode, Severity};
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::ai::{AiOutcome, Check};
+use crate::attest::evidence::CompletionRecord;
 use crate::payment::Refusal;
+use crate::verdict::{combine_risk, severity_of, sha256};
 
 /// The documented limit on what `request_execution` returns on chain. Testnet returned 2,000
 /// bytes whole on 26 Oct; mainnet is unmeasured, so 900 stays the cap.
@@ -53,6 +57,63 @@ pub fn held(reason: &'static str) -> String {
 /// cap). No signature.
 pub fn failed(reason: &'static str) -> String {
     plain("failed", reason)
+}
+
+#[derive(Serialize)]
+struct EvalScores<'a> {
+    v: u8,
+    status: &'static str,
+    floor: Severity,
+    risk: Severity,
+    findings: Vec<FindingCode>,
+    ai_status: AiStatus,
+    ai_reason: Option<&'static str>,
+    ai_risk: Option<Severity>,
+    model_id: Option<&'static str>,
+    explanation_sha256: Option<String>,
+    finish_reason: Option<&'a str>,
+    prompt_tokens: Option<u64>,
+    completion_tokens: Option<u64>,
+    reasoning_tokens: Option<u64>,
+}
+
+/// What an eval run prints: `{"v":1,"status":"eval",...}` with kaap-core's floor and findings, the
+/// risk a verdict would carry (`verdict::combine_risk`, so an answer that is not verified raises it
+/// to high at most), the AI's status, the code of why it is not verified or not used, the AI's own
+/// risk, the model that answered, the hex sha256 of the model's explanation, and the completion's
+/// finish reason and token counts as `CompletionRecord` kept them. Every key is always present,
+/// null when it does not apply. Never a signature, verdict bytes, a public key or the explanation
+/// itself: the scores carry no mark of Kaap's verdict key, and the text stays out of the chain.
+/// Fails when the line would pass `MAX_OUTPUT_BYTES`, which every finding at once still does not
+/// unless a token count reaches 10^15.
+pub fn eval_scores(analysis: &Analysis, ai: &AiOutcome, completion: Option<&CompletionRecord>) -> Result<String, &'static str> {
+    let (ai_status, ai_reason, answer, model_id) = match ai {
+        AiOutcome::Answered { answer, model_id, check: Check::Verified { .. } } => (AiStatus::Verified, None, Some(answer), Some(*model_id)),
+        AiOutcome::Answered { answer, model_id, check: Check::Unverified(why) } => (AiStatus::Unverified, Some(why.code()), Some(answer), Some(*model_id)),
+        AiOutcome::Unavailable(why) => (AiStatus::Unavailable, Some(why.code()), None, None),
+    };
+    let floor = analysis.risk_floor;
+    let scores = EvalScores {
+        v: 1,
+        status: "eval",
+        floor,
+        risk: combine_risk(floor, answer.map(|a| (a.risk, ai_status))),
+        findings: analysis.findings.iter().map(|f| f.code).collect(),
+        ai_status,
+        ai_reason,
+        ai_risk: answer.map(|a| severity_of(a.risk)),
+        model_id,
+        explanation_sha256: answer.map(|a| hex::encode(sha256(a.explanation.as_bytes()))),
+        finish_reason: completion.and_then(|c| c.finish_reason.as_deref()),
+        prompt_tokens: completion.and_then(|c| c.prompt_tokens),
+        completion_tokens: completion.and_then(|c| c.completion_tokens),
+        reasoning_tokens: completion.and_then(|c| c.reasoning_tokens),
+    };
+    let out = sorted_json(&scores).map_err(|_| "the output could not be written")?;
+    if out.len() > MAX_OUTPUT_BYTES {
+        return Err("the eval output does not fit in 900 bytes");
+    }
+    Ok(out)
 }
 
 fn plain(status: &'static str, reason: &'static str) -> String {

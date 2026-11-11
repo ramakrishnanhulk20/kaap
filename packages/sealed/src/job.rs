@@ -1,19 +1,21 @@
 //! One run of the job, in order: check the input, settle the payment, open a sealed text if there
 //! is one, read both providers at one block, on mainnet read prices and payment history, decode,
 //! refuse a sealed text that matches no payload, ask the model, assemble, sign, print. Every way out
-//! that is not a signed verdict prints a fixed reason and no signature.
+//! that is not a signed verdict prints a fixed reason and no signature. An eval run takes the
+//! proposal from its input instead, reads only the final block for its clock, and prints its
+//! scores unsigned.
 
 use kaap_core::history::history_before;
-use kaap_core::{verdict_hash, AiStatus, Analysis, FindingCode, Network, Verdict};
+use kaap_core::{analyze, verdict_hash, AiStatus, Analysis, FindingCode, Network, Verdict};
 
 use crate::ai::{consult, AiOutcome, Audience, Check};
 use crate::attest::evidence::key_for;
 use crate::attest::tdx::QuoteCheck;
 use crate::attest::{trusted_now, Evidence, EvidenceSink, Trust, Unverified};
 use crate::history::read_proposals;
-use crate::input::{parse_request, JobInput, Request};
+use crate::input::{parse_request, EvalInput, JobInput, Request};
 use crate::net::{Deadline, Http};
-use crate::output::{below_price, failed, held, refused, TEXT_DOES_NOT_MATCH};
+use crate::output::{below_price, eval_scores, failed, held, refused, TEXT_DOES_NOT_MATCH};
 use crate::payment::{gate, worker_account, PayEnv, Payer};
 use crate::prices::read_prices;
 use crate::proposal::{judge, Past};
@@ -65,9 +67,10 @@ pub struct RunEnv<'a> {
 /// Runs the job on the raw stdin bytes and returns what it prints.
 ///
 /// `env` is what OutLayer set for the run and `ai_key` the `NEAR_AI_API_KEY` secret. A judge run
-/// passes `gate` right after its input is parsed; asking for the text key is free. `connect` is
-/// called only for an input that passed every check and a payment that was accepted, with the
-/// network and the read deadline, so a refused input or payment makes no outside call at all.
+/// and an eval run pass `gate` right after their input is parsed, so Kaap's worker runs either free
+/// and anyone else pays; asking for the text key is free. `connect` is called only for an input
+/// that passed every check and a payment that was accepted, with the network and the read
+/// deadline, so a refused input or payment makes no outside call at all.
 pub fn run(raw: &[u8], env: RunEnv<'_>, ai_key: Option<&str>, connect: impl FnOnce(Network, Deadline) -> Connections) -> String {
     let RunEnv { network, pay } = env;
     let request = match parse_request(raw, network) {
@@ -80,7 +83,65 @@ pub fn run(raw: &[u8], env: RunEnv<'_>, ai_key: Option<&str>, connect: impl FnOn
             Ok(payer) => judge_run(input, ai_key, payer, connect),
             Err(why) => below_price(why),
         },
+        Request::Eval(input) => match gate(&pay, worker_account(input.network).unwrap_or("")) {
+            Ok(_) => eval_run(*input, ai_key, connect),
+            Err(why) => below_price(why),
+        },
     }
+}
+
+/// Scores a proposal handed in whole, for a payer `gate` has already settled, and prints
+/// `output::eval_scores`.
+///
+/// Everything judged comes from the input: kaap-core analyses `input.proposal` as given and the
+/// model is asked about those facts, as a public prompt (there is no text channel). The one chain
+/// read is the final block's time for the clock (`agreed_head`), which is not printed. Of the rest
+/// of what `connect` hands over, only the AI client, the nonce and the quote check are used: no
+/// other read, no signature, no text key and no evidence write, so nothing an eval prints or leaves
+/// behind carries Kaap's verdict key or sits in Kaap's public storage, whoever pays.
+///
+/// The clock is a judge run's: `NEAR_BLOCK_TIMESTAMP`, taken as a time only beside a final block
+/// both providers agree on (`attest::trusted_now`). With no such block the answer is unverified
+/// (`no_clock`) and the scores are still printed. `ai_status` reports what the checks reached.
+pub fn eval_run(input: EvalInput, ai_key: Option<&str>, connect: impl FnOnce(Network, Deadline) -> Connections) -> String {
+    let read_deadline = Deadline::after_ms(READ_BUDGET_MS);
+    let job_deadline = Deadline::after_ms(JOB_BUDGET_MS);
+    let Connections { mut host, mut https, mut http, nonce, block_timestamp, quote, .. } = connect(input.network, read_deadline);
+    let now = match agreed_head(host.as_mut(), https.as_mut(), read_deadline) {
+        Some(head) => trusted_now(block_timestamp.as_deref(), head.timestamp_ns),
+        None => Err(Unverified::NoClock),
+    };
+    let analysis = analyze(&input.proposal);
+    let facts = user_message(&input.proposal, &analysis);
+    let trust = Trust { nonce, now, quote };
+    let (outcome, record) = consult(http.as_mut(), ai_key, facts.as_deref(), Audience::Public, job_deadline, &trust);
+    eval_scores(&analysis, &outcome, record.completion.as_ref()).unwrap_or_else(failed)
+}
+
+/// The final block both providers agree on, by `reads::read_chain`'s own block rule: the HTTPS
+/// provider's final block, then the host's block at that height, asked once more after
+/// `HOST_CATCH_UP_MS` when the host is behind, and the two must be the same block (height, hash
+/// and time). `None` on a failed read, a disagreement or the read deadline.
+fn agreed_head(host: &mut dyn Provider, https: &mut dyn Provider, deadline: Deadline) -> Option<BlockView> {
+    if deadline.passed() {
+        return None;
+    }
+    let head = https.block(At::Final).ok()?;
+    let at = At::Height(head.height);
+    if deadline.passed() {
+        return None;
+    }
+    let host_head = match host.block(at) {
+        Ok(block) => block,
+        Err(_) => {
+            std::thread::sleep(std::time::Duration::from_millis(HOST_CATCH_UP_MS.min(deadline.remaining_ms())));
+            if deadline.passed() {
+                return None;
+            }
+            host.block(at).ok()?
+        }
+    };
+    (host_head == head).then_some(head)
 }
 
 fn text_key(network: Network, connect: impl FnOnce(Network, Deadline) -> Connections) -> String {

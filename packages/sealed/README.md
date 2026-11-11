@@ -261,6 +261,44 @@ the guard reads them. So does the evidence record, which holds hashes and sizes,
 `node scripts/WO-05b-text-roundtrip.mjs` runs the whole trip and three attacks on testnet, and
 `--local <wasm>` runs it against the local build.
 
+## Eval mode
+
+Not yet in a published build: it ships with the next one. A third input scores a proposal handed in
+whole, so the AI can be measured on the answer key without a DAO on chain:
+
+```
+{"v":1,"op":"eval","network":"testnet","input":<a kaap-core ProposalInput, exactly as serde writes it>}
+```
+
+`network` is the run's own network. The proposal is read by serde into `ProposalInput`, the one
+reader, and must be exactly what serde writes for what it read, so an unknown or missing field at
+any depth is refused (`input is not a kaap-core ProposalInput as serde writes it`). The whole input
+is at most 32 KiB. The payment gate is the judge run's: the worker is free and anyone else pays.
+
+Every fact judged comes from the input. The one chain read is the final block, from both providers
+by the judge run's rule, for the clock; it is not printed. kaap-core analyses the input, and the
+model is asked about it exactly as for a public verdict. Then it prints, keys sorted, every key always
+present and null when it does not apply:
+
+```
+{"ai_reason":"no_clock","ai_risk":"critical","ai_status":"unverified","completion_tokens":120,"explanation_sha256":"<hex>","findings":["NEW_RECIPIENT"],"finish_reason":"stop","floor":"medium","model_id":"z-ai/glm-5.3-flash","prompt_tokens":900,"reasoning_tokens":40,"risk":"high","status":"eval","v":1}
+```
+
+`risk` is what a verdict would carry: the higher of the floor and the AI's own `ai_risk`, an answer
+that is not verified counting as high at most. `explanation_sha256` is the sha256 of the model's own
+explanation, which is not printed. There is no signature, no verdict and no public key, nothing is
+written to public storage and the text key is never touched, so an eval leaves no mark under Kaap's
+verdict key, whoever paid for it. The clock is a judge run's: `NEAR_BLOCK_TIMESTAMP` beside a final
+block both providers agree on. Without one, the answer is unverified (`no_clock`) and the scores are
+still printed.
+
+`node scripts/WO-05c-ai-eval.mjs --dry-run` builds the input of every answer-key record through
+kaap-core (`evalInput` in packages/core-wasm, the scoreboards' own `input_of`, with the census price
+list) and prints how many fit. A record over 32 KiB gets its price table cut to the tokens its own
+analysis names (`evalInputTrimmed`), and only when kaap-core's whole analysis is the same with both
+tables; its row says `prices_trimmed: true`. Without `--dry-run` the script runs them on testnet once
+each, with spending caps, and `--report` scores the results.
+
 ## Outside calls
 
 The job calls no host outside its manifest: `cloud-api.near.ai`, `near.drpc.org`,

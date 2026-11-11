@@ -1,10 +1,11 @@
 // Pins the JavaScript-facing functions to kaap-core itself: `analyze` through its JSON input gives
 // kaap-core's own answer on every answer-key record, `read_proposal` keeps the kind's exact text
 // and refuses a duplicate key, the scoreboards give today's numbers, the enrolment template is
-// generated from Sputnik's label list and arms the guard on the NEAR Business role setup, and
-// `who_acts` names who files and approves on that setup. It does not run the wasm build (the CLI
-// tests do), and it does not cover the hash, verdict or arming exports beyond what kaap-core's own
-// tests already prove of the functions they call.
+// generated from Sputnik's label list and arms the guard on the NEAR Business role setup,
+// `who_acts` names who files and approves on that setup, `eval_input` hands the sealed job's eval
+// mode the scoreboards' own input, and its trimmed form changes only the prices. It does not run
+// the wasm build (the CLI tests do), and it does not cover the hash, verdict or arming exports
+// beyond what kaap-core's own tests already prove of the functions they call.
 
 use std::path::{Path, PathBuf};
 
@@ -96,6 +97,45 @@ fn the_scoreboards_give_todays_numbers() {
     assert_eq!((pick("describe", 1), pick("describe", 2), pick("describe", 3)), ((373, 373), (373, 373), (337, 337)));
     assert_eq!((pick("value", 0), pick("value", 2), pick("value", 3)), ((205, 205), (205, 205), (147, 147)));
     assert!((0..5).all(|i| pick("hash", i) == (42, 42)), "codes, floor, veto fields and effects: {:?}", rows("hash"));
+}
+
+#[test]
+fn eval_input_is_what_the_scoreboards_judge() {
+    let tokens = std::fs::read_to_string(repo().join("packages/core/tests/fixtures/tokens.json")).unwrap();
+    let prices = api::prices_from_tokens(&tokens).unwrap();
+    let lines: Vec<String> = ["eval/real/labels.jsonl", "eval/planted/labels.jsonl"]
+        .iter()
+        .flat_map(|f| std::fs::read_to_string(repo().join(f)).unwrap().lines().map(str::to_string).collect::<Vec<_>>())
+        .collect();
+    // A payment with a history, a full policy change with the policy before, and a supplied text.
+    for id in ["mainnet:aurora-dao-bvi.sputnik-dao.near:548", "mainnet:adam.sputnik-dao.near:6", "planted:32"] {
+        let line = lines.iter().find(|l| serde_json::from_str::<Value>(l).unwrap()["id"] == id).unwrap();
+        let out = eval::eval_input(line, &tokens).unwrap();
+        let judged = eval::input_of(&serde_json::from_str(line).unwrap(), &prices).unwrap();
+        assert_eq!(out, serde_json::to_string(&judged).unwrap(), "{id}");
+        let read: ProposalInput = serde_json::from_str(&out).unwrap();
+        assert_eq!(read, judged, "{id}");
+        assert_eq!(analyze(&read), analyze(&judged), "{id}");
+    }
+    assert!(eval::eval_input("not json", &tokens).is_err());
+}
+
+#[test]
+fn a_trimmed_price_table_is_judged_exactly_as_the_full_one() {
+    let tokens = std::fs::read_to_string(repo().join("packages/core/tests/fixtures/tokens.json")).unwrap();
+    let prices = api::prices_from_tokens(&tokens).unwrap();
+    let mut trimmed_any = 0;
+    for line in ["eval/real/labels.jsonl", "eval/planted/labels.jsonl"].iter().flat_map(|f| std::fs::read_to_string(repo().join(f)).unwrap().lines().map(str::to_string).collect::<Vec<_>>()) {
+        let full = eval::input_of(&serde_json::from_str(&line).unwrap(), &prices).unwrap();
+        let Ok(out) = eval::eval_input_trimmed(&line, &tokens) else { continue };
+        let cut: ProposalInput = serde_json::from_str(&out).unwrap();
+        assert_eq!(analyze(&cut), analyze(&full));
+        assert_eq!(ProposalInput { prices: full.prices.clone(), ..cut.clone() }, full, "only the prices differ");
+        assert!(cut.prices.usd_by_token.keys().all(|k| full.prices.usd_by_token.contains_key(k)));
+        assert!(out.len() < eval::eval_input(&line, &tokens).unwrap().len());
+        trimmed_any += 1;
+    }
+    assert!(trimmed_any > 300, "{trimmed_any}");
 }
 
 /// The NEAR Business role setup (deployments/near-business-policy.json) with one account in every

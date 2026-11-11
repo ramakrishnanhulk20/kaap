@@ -67,8 +67,49 @@ fn read_jsonl(text: &str) -> Result<Vec<Value>, Error> {
         .collect()
 }
 
+/// One answer-key record as the ProposalInput `scoreboards` judges, priced with the census token
+/// list, written by serde: the input of kaap-sealed's eval mode (WO-05c), so the AI run and the
+/// scoreboards judge the very same inputs. The error never quotes the record.
+pub fn eval_input(record_json: &str, tokens_json: &str) -> Result<String, Error> {
+    let prices = prices_from_tokens(tokens_json)?;
+    let record: Value = serde_json::from_str(record_json).map_err(|_| Error("the record is not JSON"))?;
+    let input = input_of(&record, &prices).map_err(|_| Error("the record is not one kaap-core can read"))?;
+    serde_json::to_string(&input).map_err(|_| Error("the input could not be written"))
+}
+
+/// `eval_input` with the price table cut down, for a record whose full input is over the sealed
+/// job's 32 KiB (WO-05c). Kept: `near`, and every price whose token id is a string somewhere in the
+/// effects kaap-core finds with the full table. Refused unless kaap-core's whole analysis (effects,
+/// findings, floor, description check and veto fields) is the same with the cut table as with the
+/// full one, so the cut changes the size and nothing that is judged.
+pub fn eval_input_trimmed(record_json: &str, tokens_json: &str) -> Result<String, Error> {
+    fn strings<'a>(v: &'a Value, out: &mut BTreeSet<&'a str>) {
+        match v {
+            Value::String(s) => {
+                out.insert(s);
+            }
+            Value::Array(items) => items.iter().for_each(|i| strings(i, out)),
+            Value::Object(map) => map.values().for_each(|i| strings(i, out)),
+            _ => {}
+        }
+    }
+    let prices = prices_from_tokens(tokens_json)?;
+    let record: Value = serde_json::from_str(record_json).map_err(|_| Error("the record is not JSON"))?;
+    let full = input_of(&record, &prices).map_err(|_| Error("the record is not one kaap-core can read"))?;
+    let analysis = analyze(&full);
+    let effects = serde_json::to_value(&analysis.effects).map_err(|_| Error("the effects could not be read"))?;
+    let mut named = BTreeSet::from(["near"]);
+    strings(&effects, &mut named);
+    let usd_by_token = prices.usd_by_token.into_iter().filter(|(token, _)| named.contains(token.as_str())).collect();
+    let trimmed = ProposalInput { prices: Prices { usd_by_token }, ..full };
+    if analyze(&trimmed) != analysis {
+        return Err(Error("the cut price table changes kaap-core's analysis"));
+    }
+    serde_json::to_string(&trimmed).map_err(|_| Error("the input could not be written"))
+}
+
 /// `tests/common::input_of`, unchanged.
-fn input_of(record: &Value, prices: &Prices) -> Result<ProposalInput, String> {
+pub fn input_of(record: &Value, prices: &Prices) -> Result<ProposalInput, String> {
     let text = |v: &Value, what: &str| v.as_str().map(str::to_string).ok_or_else(|| format!("{what} is not a string"));
     let context = &record["context"];
     let proposal_id = match record.get("proposal_id").and_then(Value::as_u64) {

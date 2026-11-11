@@ -2,9 +2,11 @@
 //! refused before a single outside call is made (standard 4).
 
 use base64::Engine as _;
-use kaap_core::Network;
+use kaap_core::{Network, ProposalInput};
 use near_account_id::AccountIdRef;
 use serde::Deserialize;
+use serde_json::value::RawValue;
+use serde_json::Value;
 
 use crate::texts::is_usable_key;
 
@@ -43,12 +45,33 @@ struct RawOp {
     op: String,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawEval<'a> {
+    v: u8,
+    op: String,
+    network: String,
+    #[serde(borrow)]
+    input: &'a RawValue,
+}
+
 /// What a run is asked to do.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Request {
     Judge(JobInput),
     /// `{"v":1,"op":"pubkey"}` on this network: print the job's text key, signed.
     TextKey(Network),
+    /// `{"v":1,"op":"eval","network":...,"input":...}`: score a proposal handed in whole. Boxed,
+    /// because a whole proposal is far larger than the other two.
+    Eval(Box<EvalInput>),
+}
+
+/// An eval request after every check: the run's network, and the proposal exactly as kaap-core
+/// will judge it. Nothing in it was read from the chain.
+#[derive(Clone, Debug, PartialEq)]
+pub struct EvalInput {
+    pub network: Network,
+    pub proposal: ProposalInput,
 }
 
 /// A text as it arrived: ciphertext only.
@@ -88,6 +111,8 @@ pub enum InputError {
     TextFieldsNotPaired,
     BadTextCiphertext,
     BadReplyKey,
+    NotTheEvalShape,
+    NotAProposalInput,
 }
 
 impl InputError {
@@ -103,20 +128,26 @@ impl InputError {
             InputError::BadDao => "dao is not a valid NEAR account id",
             InputError::ExpiryOutOfRange => "expires_in_ms must be 1 to 3600000",
             InputError::TestFlagOffTestnet => "test_corrupt_https is allowed on testnet only",
-            InputError::UnknownOp => "op must be pubkey",
+            InputError::UnknownOp => "op must be pubkey or eval",
             InputError::TextFieldsNotPaired => "text_ciphertext and reply_key come together or not at all",
             InputError::BadTextCiphertext => "text_ciphertext is not base64",
             InputError::BadReplyKey => "reply_key is not 32 bytes of hex holding a usable X25519 public key",
+            InputError::NotTheEvalShape => "an eval input is not {v,op,network,input}",
+            InputError::NotAProposalInput => "input is not a kaap-core ProposalInput as serde writes it",
         }
     }
 }
 
-/// Parses and checks the raw stdin bytes as either thing a run can do. `{"v":1,"op":...}` is the
-/// key request, on the network OutLayer says this run is on; anything else is a judge input, read
-/// by `parse_input`.
+/// Parses and checks the raw stdin bytes as one of the things a run can do. An object whose `op`
+/// is `eval` is an eval request, read by `parse_eval`. `{"v":1,"op":...}` is the key request, on
+/// the network OutLayer says this run is on. Anything else is a judge input, read by `parse_input`
+/// exactly as before eval mode existed.
 pub fn parse_request(raw: &[u8], run_network: Option<&str>) -> Result<Request, InputError> {
     if raw.len() > MAX_INPUT_BYTES {
         return Err(InputError::TooLarge);
+    }
+    if names_eval(raw) {
+        return parse_eval(raw, run_network).map(|input| Request::Eval(Box::new(input)));
     }
     let Ok(op) = serde_json::from_slice::<RawOp>(raw) else {
         return parse_input(raw, run_network).map(Request::Judge);
@@ -133,6 +164,53 @@ pub fn parse_request(raw: &[u8], run_network: Option<&str>) -> Result<Request, I
         Some("mainnet") => Ok(Request::TextKey(Network::Mainnet)),
         Some(_) => Err(InputError::UnknownNetwork),
     }
+}
+
+/// True only for a JSON object whose `op` is the string `eval`. An input without that member,
+/// arrays included, never reaches `parse_eval`, so every judge input reads as it always has.
+fn names_eval(raw: &[u8]) -> bool {
+    serde_json::from_slice::<serde_json::Map<String, Value>>(raw).is_ok_and(|object| object.get("op").and_then(Value::as_str) == Some("eval"))
+}
+
+/// Parses and checks an eval request: `{"v":1,"op":"eval","network":<the run's network>,"input":
+/// <a kaap-core ProposalInput as serde writes it>}`.
+///
+/// The proposal is read by one reader, serde into `ProposalInput`, and the job writes no record
+/// reader of its own. Strict on top of that: the input's JSON must equal the JSON serde writes for
+/// what it read, compared as values by the same parser, so an unknown or missing field at any
+/// depth, or a value read as something else, is refused (standard 2). Refuses as `parse_input`
+/// does for the size, the version and the run's network. Only the run's network is checked here;
+/// the proposal's own network is a fact kaap-core judges, as the answer key's mainnet and sandbox
+/// records carry it. There is no text channel: the wrapper has no field for one.
+pub fn parse_eval(raw: &[u8], run_network: Option<&str>) -> Result<EvalInput, InputError> {
+    if raw.len() > MAX_INPUT_BYTES {
+        return Err(InputError::TooLarge);
+    }
+    let wrapper: RawEval<'_> = serde_json::from_slice(raw).map_err(|_| InputError::NotTheEvalShape)?;
+    if wrapper.v != 1 {
+        return Err(InputError::UnknownVersion);
+    }
+    if wrapper.op != "eval" {
+        return Err(InputError::UnknownOp);
+    }
+    let network = match wrapper.network.as_str() {
+        "testnet" => Network::Testnet,
+        "mainnet" => Network::Mainnet,
+        _ => return Err(InputError::UnknownNetwork),
+    };
+    match run_network {
+        None => return Err(InputError::RunNetworkUnset),
+        Some(run) if run != wrapper.network => return Err(InputError::NetworkNotThisRun),
+        Some(_) => {}
+    }
+    let text = wrapper.input.get();
+    let proposal: ProposalInput = serde_json::from_str(text).map_err(|_| InputError::NotAProposalInput)?;
+    let as_sent: Value = serde_json::from_str(text).map_err(|_| InputError::NotAProposalInput)?;
+    let as_read = serde_json::to_value(&proposal).map_err(|_| InputError::NotAProposalInput)?;
+    if as_sent != as_read {
+        return Err(InputError::NotAProposalInput);
+    }
+    Ok(EvalInput { network, proposal })
 }
 
 /// Parses and checks the raw stdin bytes.
