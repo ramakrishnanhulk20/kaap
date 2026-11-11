@@ -9,6 +9,8 @@
 // and on every later pass, until they land or the chain calls their block hash Expired, which
 // then takes the re-sign path like any other refusal. A caller that will never send such bytes
 // again (a sealed run moving on to its next attempt) releases what they reserved under the caps.
+// The one exception to keeping the bytes is a run that carries a member's sealed text, whose bytes
+// are never written down (`memoryOnly`).
 
 import type { Chain } from './chain.ts';
 import type { Logger } from './log.ts';
@@ -32,6 +34,10 @@ export interface SubmitRequest {
   windowBlocks: number;
   /** The part of the deposit the receiver keeps, read from the outcome. */
   kept: (outcome: TxOutcome) => bigint;
+  /** The signed bytes carry a member's sealed text: they live in memory for this call only, and
+   *  the spend row keeps an empty string in their place, with the hash, nonce and reservation the
+   *  caps need (C26). A later call with the same key sends nothing and only looks for the outcome. */
+  memoryOnly?: boolean;
 }
 
 export type SubmitResult =
@@ -96,24 +102,29 @@ export class Submitter {
 
   async submit(req: SubmitRequest): Promise<SubmitResult> {
     let row = this.#store.spend(req.key);
+    const kept = (signedB64: string) => (req.memoryOnly ? '' : signedB64);
+    let bytes: string;
     if (!row || row.state === 'rejected') {
       const s = await this.#sign(req);
-      if (row) this.#store.resign(req.key, s.hash, s.signedB64, s.nonce);
-      else this.#store.addSpend({ idempotency_key: req.key, kind: req.kind, network: this.#network, dao: req.dao, proposal_id: req.proposalId, tx_hash: s.hash, signed_b64: s.signedB64, nonce: s.nonce, reserved_yocto: req.reserved.toString() });
+      if (row) this.#store.resign(req.key, s.hash, kept(s.signedB64), s.nonce);
+      else this.#store.addSpend({ idempotency_key: req.key, kind: req.kind, network: this.#network, dao: req.dao, proposal_id: req.proposalId, tx_hash: s.hash, signed_b64: kept(s.signedB64), nonce: s.nonce, reserved_yocto: req.reserved.toString() });
       row = this.#store.spend(req.key)!;
+      bytes = s.signedB64;
       this.#log.info('tx_signed', { kind: req.kind, key: req.key, dao: req.dao, proposal_id: req.proposalId, tx: row.tx_hash, to: `${req.receiver}.${req.method}`, reserved_near: formatNear(req.reserved) });
     } else {
       this.#log.info('tx_resumed', { kind: req.kind, key: req.key, tx: row.tx_hash, state: row.state });
       const known = await this.#chain.outcome(row.tx_hash);
       if (known) return this.#final(req, row, known);
-      // A transaction that was final once is never sent again, even if its outcome is gone.
-      if (row.state === 'final') return { kind: 'no_outcome', hash: row.tx_hash, taken: true };
+      // A transaction that was final once is never sent again, even if its outcome is gone; one
+      // whose bytes were never kept cannot be. Either keeps its reservation.
+      if (row.state === 'final' || req.memoryOnly) return { kind: 'no_outcome', hash: row.tx_hash, taken: true };
+      bytes = row.signed_b64;
     }
 
     let resigned = false;
     let taken = false;
     for (let attempt = 1; attempt <= this.#o.sendTries; attempt++) {
-      const sent = await this.#chain.broadcast(row.signed_b64);
+      const sent = await this.#chain.broadcast(bytes);
       if (sent.kind === 'included') {
         taken = true;
         break;
@@ -133,9 +144,10 @@ export class Submitter {
           return { kind: 'not_sent', detail: sent.detail };
         }
         const s = await this.#sign(req);
-        this.#store.resign(req.key, s.hash, s.signedB64, s.nonce);
+        this.#store.resign(req.key, s.hash, kept(s.signedB64), s.nonce);
         this.#log.warn('tx_resigned', { kind: req.kind, key: req.key, old_tx: row.tx_hash, tx: s.hash, why: sent.detail });
         row = this.#store.spend(req.key)!;
+        bytes = s.signedB64;
         resigned = true;
         attempt--;
         continue;

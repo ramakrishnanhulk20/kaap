@@ -170,7 +170,7 @@ test('GET /status shows each level with no secret in it, and POST /subscribe han
   const botToken = '123456789:AAEhBOweik6ad9r_QXMENQjcrGbqCr4K-Ms';
   s.health.raise('veto_refused', DAO, { proposal_id: 3, code: 'ERR_SECRET_CODE', private_key: privateKey, chat: CHAT, token: botToken, detail: 'provider said <script>' });
   s.health.raise('worker_balance_low', ALL, { account: WORKER, spendable_near: '0.123456' });
-  const http = new StatusServer({ health: s.health, subs: s.subs, log: s.log, now: s.c.now, watching: () => s.worker.watching() }, { host: '127.0.0.1', port: 0, network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 3 });
+  const http = new StatusServer({ health: s.health, subs: s.subs, log: s.log, now: s.c.now, watching: () => s.worker.watching(), texts: s.worker }, { host: '127.0.0.1', port: 0, network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 3, textsPerAddressHour: 3, textKey: null });
   const base = `http://127.0.0.1:${await http.start()}`;
 
   const res = await fetch(`${base}/status`);
@@ -213,7 +213,7 @@ test('behind the HTTPS proxy on the same machine, POST /subscribe counts each cl
   assert.equal(clientAddress(undefined, '203.0.113.7'), 'unknown');
 
   const s = await started();
-  const http = new StatusServer({ health: s.health, subs: s.subs, log: s.log, now: s.c.now, watching: () => s.worker.watching() }, { host: '127.0.0.1', port: 0, network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 2 });
+  const http = new StatusServer({ health: s.health, subs: s.subs, log: s.log, now: s.c.now, watching: () => s.worker.watching(), texts: s.worker }, { host: '127.0.0.1', port: 0, network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 2, textsPerAddressHour: 3, textKey: null });
   const base = `http://127.0.0.1:${await http.start()}`;
   const ask = async (forwarded: string) => (await fetch(`${base}/subscribe`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': forwarded }, body: JSON.stringify({ dao: DAO }) })).status;
   assert.deepEqual([await ask('203.0.113.7'), await ask('203.0.113.7'), await ask('203.0.113.7')], [200, 200, 429]);

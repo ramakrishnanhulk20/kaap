@@ -77,5 +77,12 @@
     "checked_at": "2026-10-29T07:20:07.404Z",
     "full_access_key_deleted_tx": "4giSEanWSMba3yPoBZkrKAjNs6mUprFXG4dsBntrweP4",
     "access_keys_left": 0
+  },
+  "text_key": {
+    "key": "09bc21bb1621d1d9a2ce1783375341a199038084e5239e120de823809a1b2f6a",
+    "signature": "FKzWgOvxNLgnJhj/qOOFGPCZJHcDuYLpKegGQ9RJTQ1EdGqRwkgX33Tg53yvR5dhxPd7kZcHHiH9JCSEBJa6AA==",
+    "public_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
+    "run_tx": "4EoaigPGidMBU8FqeDJ5SHMZVJapHjXph88AFNM9pKgn",
+    "build": "e1192b2806dd088541a87794808949fbe35ee5b3422405f07c224f4c02130527"
   }
 }

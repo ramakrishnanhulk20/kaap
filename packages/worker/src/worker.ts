@@ -1,13 +1,14 @@
 // The worker: every enrolled DAO watched, every new proposal judged once, every verdict recorded,
 // and the veto sent when the rule says so, with no manual step. The guard can only veto what this
 // hands it, so a quiet worker is a disarmed guard; everything that can stop it is logged loudly.
+// A member's sealed text (POST /texts) is judged here too, one proposal at a time like the rest.
 
 import { RECORD_DEPOSIT, RECORD_GAS, VETO_GAS, type Actor, type Signed } from './act.ts';
 import type { AlertSink } from './alerts.ts';
 import { Bridge, type DecodedVerdict } from './bridge.ts';
 import { ACCOUNT_ID } from './config.ts';
 import { ALL, type Health, type Signal } from './health.ts';
-import { RUN_DEPOSIT, RUN_GAS, type Judge } from './judge.ts';
+import { RUN_DEPOSIT, RUN_GAS, type Judge, type Judgement, type SealedText } from './judge.ts';
 import type { Logger } from './log.ts';
 import { STORAGE_PRICE_PER_BYTE, formatNear, worstCase } from './near.ts';
 import type { Reads } from './reads.ts';
@@ -23,6 +24,15 @@ export const WORKER_FLOOR = 20n * PER_STOPPED_ATTACK;
  *  packages/contracts/GAS.md); callers pay all the gas. So 20 vetoes need 1,680 bytes. */
 export const GUARD_FLOOR = 20n * 84n * STORAGE_PRICE_PER_BYTE;
 export const DEFAULT_LAG_MS = 15_000;
+
+/** What became of one member's sealed text (POST /texts). */
+export type TextOutcome =
+  | { kind: 'not_watched' }
+  | { kind: 'not_open' }
+  | { kind: 'capped' }
+  /** `reason` is the sealed program's own fixed text when it refused or held the run, else a word. */
+  | { kind: 'failed'; reason: string; runTx: string | null }
+  | { kind: 'judged'; runTx: string; verdict: DecodedVerdict; explanation: string; veto: 'started' | 'not_needed' };
 
 export interface WorkerSettings {
   network: string;
@@ -67,6 +77,10 @@ export class Worker {
   readonly #queued = new Set<string>();
   readonly #inFlight = new Set<string>();
   readonly #again = new Set<string>();
+  /** Texts waiting for a proposal another judgement holds, in arrival order. */
+  readonly #waiting = new Map<string, Array<() => void>>();
+  /** Every text being judged or acted on, so stop() can wait for them. */
+  readonly #texts = new Set<Promise<void>>();
   readonly #timers: NodeJS.Timeout[] = [];
   #running = 0;
   #idle: Array<() => void> = [];
@@ -188,11 +202,13 @@ export class Worker {
     );
   }
 
-  /** Stops the loops and waits for every judgement and resumed send in flight to finish. */
+  /** Stops the loops and waits for every judgement, text and resumed send in flight to finish. */
   async stop(): Promise<void> {
     this.#stopped = true;
     for (const t of this.#timers) clearInterval(t);
     await this.#lane;
+    // Texts first: one that finishes can hand its proposal back to the queue.
+    await Promise.all(this.#texts);
     await this.idle();
   }
 
@@ -292,23 +308,54 @@ export class Worker {
       const [dao, id] = this.#queue.shift()!;
       const key = `${dao}#${id}`;
       this.#queued.delete(key);
+      // A text took this proposal while it waited in the queue; it runs once the text is done.
+      if (this.#inFlight.has(key)) {
+        this.#again.add(key);
+        continue;
+      }
       this.#inFlight.add(key);
       this.#running++;
       this.process(dao, id)
         .catch((e) => this.#d.log.error('judgement_failed', { dao, proposal_id: id, error: e }))
         .finally(() => {
           this.#running--;
-          this.#inFlight.delete(key);
-          if (this.#again.delete(key)) this.enqueue(dao, id);
+          this.#free(key, dao, id);
           this.#pump();
           if (this.#running === 0 && this.#queue.length === 0) for (const done of this.#idle.splice(0)) done();
         });
     }
   }
 
+  /** Lets go of (`dao`, `id`): hands it straight to the first text waiting for it, or else runs
+   *  any judgement asked for meanwhile. */
+  #free(key: string, dao: string, id: number): void {
+    const next = this.#waiting.get(key)?.shift();
+    if (next) {
+      next();
+      return;
+    }
+    this.#waiting.delete(key);
+    this.#inFlight.delete(key);
+    if (this.#again.delete(key)) this.enqueue(dao, id);
+  }
+
+  /** Resolves once this caller holds (`dao`, `id`): no judgement, resumed send or other text of
+   *  it runs until `#free`. */
+  #hold(key: string): Promise<void> {
+    if (!this.#inFlight.has(key)) {
+      this.#inFlight.add(key);
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      const waiting = this.#waiting.get(key) ?? [];
+      waiting.push(resolve);
+      this.#waiting.set(key, waiting);
+    });
+  }
+
   /** Judges one queued proposal, then vetoes (first, since it races the approvers) and records. */
   async process(dao: string, id: number): Promise<void> {
-    const { store, judge, actor, log } = this.#d;
+    const { store, judge, log } = this.#d;
     const net = this.#s.network;
     const row = store.judged(net, dao, id);
     if (!row || (row.state !== 'queued' && row.state !== 'judging')) return;
@@ -323,6 +370,15 @@ export class Worker {
       log.info('verdict_superseded', { dao, proposal_id: id, generation, why: 'a re-judge was asked for while this run was out' });
       return;
     }
+    await this.#act(dao, id, row.reason, j);
+  }
+
+  /** Keeps a verdict as the proposal's current one, then vetoes (first, since it races the
+   *  approvers) and records. The verdict is stored before the first wait, so a caller that does
+   *  not wait for the veto still finds it kept. */
+  async #act(dao: string, id: number, reason: string, j: Extract<Judgement, { kind: 'verdict' }>): Promise<void> {
+    const { store, actor } = this.#d;
+    const net = this.#s.network;
     const v = j.verdict;
     store.setVerdict(net, dao, id, {
       verdict_b64: j.verdictB64,
@@ -347,7 +403,66 @@ export class Worker {
       this.#d.alerts?.vetoCast(dao, id, vetoed.seconds);
     }
     await actor.record(dao, id, signed);
-    if (vetoed.kind === 'rejudge') this.#rejudge(dao, id, row.reason, vetoed.why);
+    if (vetoed.kind === 'rejudge') this.#rejudge(dao, id, reason, vetoed.why);
+  }
+
+  /** Whether the sealed run's input for this text stays inside what the sealed program reads. */
+  textFits(dao: string, id: number, text: SealedText): boolean {
+    return this.#d.judge.fits(dao, id, text);
+  }
+
+  /** Judges (`dao`, `id`) with a member's sealed text, for POST /texts. The proposal must be one
+   *  of a watched DAO that both providers agree is open at one final block (C22). The run waits
+   *  for any other judgement of the proposal to finish, and holds it until its own veto and record
+   *  are done, so the two never act on one proposal at once. Its verdict, once it checks out like
+   *  every verdict, becomes the proposal's current one under a new generation and goes down the
+   *  same veto path; the answer comes back before the veto lands. A refused or failed run leaves
+   *  the proposal's earlier verdict and its actions as they were.
+   *
+   *  The text itself is never here: only its ciphertext, held for this call. Not covered: a re-judge
+   *  of a text's verdict after the state moves runs without the text, which the worker no longer
+   *  has; the member sends it again. */
+  async judgeText(dao: string, id: number, text: SealedText): Promise<TextOutcome> {
+    if (this.#stopped) return { kind: 'failed', reason: 'stopping', runTx: null };
+    if (!this.#watchers.has(dao)) return { kind: 'not_watched' };
+    const live = await this.#d.reads.liveProposal(dao, id);
+    if (live.kind !== 'live' || live.status !== 'InProgress') return { kind: 'not_open' };
+    let answer!: (outcome: TextOutcome) => void;
+    const answered = new Promise<TextOutcome>((resolve) => (answer = resolve));
+    const work = this.#withText(dao, id, text, answer);
+    this.#texts.add(work);
+    void work.finally(() => this.#texts.delete(work));
+    return answered;
+  }
+
+  async #withText(dao: string, id: number, text: SealedText, answer: (outcome: TextOutcome) => void): Promise<void> {
+    const { store, judge, log } = this.#d;
+    const net = this.#s.network;
+    const key = `${dao}#${id}`;
+    await this.#hold(key);
+    let answered = false;
+    const reply = (outcome: TextOutcome) => {
+      answered = true;
+      answer(outcome);
+    };
+    try {
+      if (this.#stopped) return reply({ kind: 'failed', reason: 'stopping', runTx: null });
+      const j = await judge.judge(dao, id, store.judged(net, dao, id)?.generation ?? 0, text);
+      if (j.kind === 'capped') return reply({ kind: 'capped' });
+      if (j.kind === 'no_verdict') return reply({ kind: 'failed', reason: j.last === 'refused' || j.last === 'held' ? j.detail : j.last, runTx: j.tx });
+      // A new generation, so nothing judged before this text can act on its older verdict (C4).
+      if (store.judged(net, dao, id)) store.queueAgain(net, dao, id, 'text');
+      else store.queueNew(net, dao, id, 'text', 'InProgress');
+      const acting = this.#act(dao, id, 'text', j);
+      reply({ kind: 'judged', runTx: j.runTx, verdict: j.verdict, explanation: j.explanation, veto: j.verdict.vetoable ? 'started' : 'not_needed' });
+      await acting;
+    } catch (e) {
+      // Only the error's name: a message could quote what it was handed.
+      log.error('text_failed', { dao, proposal_id: id, error: e instanceof Error ? e.name : 'unknown' });
+      if (!answered) reply({ kind: 'failed', reason: 'failed', runTx: null });
+    } finally {
+      this.#free(key, dao, id);
+    }
   }
 
   /** Queues the members' alert for a verdict. The proposer is read beside the veto, never before
@@ -407,8 +522,7 @@ export class Worker {
         // The row is still pending, so the next pass sends it again.
         log.error('resume_failed', { dao, proposal_id: id, error: e });
       } finally {
-        this.#inFlight.delete(key);
-        if (this.#again.delete(key)) this.enqueue(dao, id);
+        this.#free(key, dao, id);
       }
     }
   }

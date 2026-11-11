@@ -8,8 +8,14 @@
 // idempotency key, because the first run is finished. Each attempt keeps its own key, so a crash
 // and restart re-sends an attempt's signed bytes rather than paying for a second run. An attempt
 // a busy shard never took gives its reservation back under the daily cap when it is finished.
+//
+// A run may carry a member's sealed text (POST /texts): ciphertext only the sealed program can
+// open, and the reply key its explanation is sealed to. Such a run has its own idempotency keys,
+// the same caps, attempts and window, and its signed bytes are kept in memory only, so the store
+// never holds the ciphertext (C26). Not covered: a crash mid-run, after which nothing re-sends that
+// run; the member sends the text again.
 
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 
 import { PublicKey } from 'near-api-js';
 import { z } from 'zod';
@@ -18,7 +24,7 @@ import type { Bridge, DecodedVerdict } from './bridge.ts';
 import type { CapGuard } from './caps.ts';
 import { ALL, type Health } from './health.ts';
 import type { Logger } from './log.ts';
-import { TGAS, worstCase } from './near.ts';
+import { MIN_GAS_PRICE, TGAS, worstCase } from './near.ts';
 import { events, logs, refusal, successValue, type TxOutcome } from './outcome.ts';
 import type { RunState, Store } from './store.ts';
 import type { Submitter } from './submit.ts';
@@ -38,6 +44,28 @@ const output = z.discriminatedUnion('status', [
   z.strictObject({ v: z.literal(1), status: z.literal('ok'), verdict: b64.max(1_400), signature: b64.length(88), public_key: z.string().regex(/^ed25519:[1-9A-HJ-NP-Za-km-z]{43,44}$/), explanation: z.string().max(900) }),
   z.strictObject({ v: z.literal(1), status: z.enum(['held', 'refused', 'failed']), reason: z.string().max(200) }),
 ]);
+
+/** The most input the sealed program reads (`MAX_INPUT_BYTES`, packages/sealed/src/input.rs): what
+ *  OutLayer stores for a request without charging for it. Anything longer it refuses. */
+export const MAX_RUN_INPUT_BYTES = 32_768;
+
+/** Gas NEAR charges per byte of a call's method name and arguments sent to another account:
+ *  nearcore's `action_function_call_per_byte`, its send and execution parts (2,235,934 each).
+ *  A plain input is about 200 bytes, which the caps leave out; a sealed text can bring 32 KiB,
+ *  about 0.015 NEAR at the minimum gas price, so a text run reserves it too. */
+const ARG_BYTE_GAS = 2n * 2_235_934n;
+
+/** A member's text as POST /texts hands it on: ciphertext only the sealed program can open, and
+ *  the X25519 public key the explanation is sealed to. */
+export interface SealedText {
+  /** Canonical base64. */
+  ciphertext: string;
+  /** 64 lower-case hex characters. */
+  replyKey: string;
+}
+
+/** A printed explanation sealed to a member's reply key (packages/sealed/src/texts.rs). */
+const SEALED_EXPLANATION = /^sealed:[A-Za-z0-9+/]+={0,2}$/;
 
 /** The start of the explanation the sealed job signs when no NEAR AI key reached the run
  *  (packages/sealed/src/ai.rs, `Refusal::AiKeyMissing`). OutLayer runs a project whose secret row
@@ -72,12 +100,13 @@ export interface JudgeSettings {
 }
 
 export type Judgement =
-  | { kind: 'verdict'; verdict: DecodedVerdict; verdictB64: string; signatureB64: string; runTx: string }
-  | { kind: 'no_verdict'; attempts: number; last: RunState; detail: string }
+  | { kind: 'verdict'; verdict: DecodedVerdict; verdictB64: string; signatureB64: string; runTx: string; explanation: string }
+  | { kind: 'no_verdict'; attempts: number; last: RunState; detail: string; tx: string | null }
   | { kind: 'capped'; detail: string };
 
 type Attempt =
-  | { state: 'answered'; verdict: DecodedVerdict; verdictB64: string; signatureB64: string; tx: string; aiKeyMissing: boolean }
+  /** `aiKeyMissing` is null when the explanation is sealed to a member, so the worker cannot read it. */
+  | { state: 'answered'; verdict: DecodedVerdict; verdictB64: string; signatureB64: string; tx: string; explanation: string; aiKeyMissing: boolean | null }
   | { state: Exclude<RunState, 'answered' | 'pending'>; detail: string; tx: string | null };
 
 /** OutLayer's charge for a run: its `execution_completed` event, or for an unanswered run the
@@ -112,19 +141,44 @@ export class Judge {
     this.#s = settings;
   }
 
-  /** The exact input WO-02b's job accepts and nothing else. */
-  input(dao: string, id: number): string {
-    return JSON.stringify({ v: 1, network: this.#s.network, guard: this.#s.guard, dao, proposal_id: id, expires_in_ms: this.#s.verdictTtlMs });
+  /** The exact input WO-02b's job accepts and nothing else, with a member's sealed text when one
+   *  is given. */
+  input(dao: string, id: number, text?: SealedText): string {
+    const base = { v: 1, network: this.#s.network, guard: this.#s.guard, dao, proposal_id: id, expires_in_ms: this.#s.verdictTtlMs };
+    return JSON.stringify(text ? { ...base, text_ciphertext: text.ciphertext, reply_key: text.replyKey } : base);
   }
 
-  /** Runs the sealed job for (`dao`, `id`) at `generation`, retrying once without an answer. */
-  async judge(dao: string, id: number, generation: number): Promise<Judgement> {
+  /** Whether the input for this text stays inside what the sealed program reads, so a text it
+   *  would refuse unread is never paid for. */
+  fits(dao: string, id: number, text: SealedText): boolean {
+    return Buffer.byteLength(this.input(dao, id, text)) <= MAX_RUN_INPUT_BYTES;
+  }
+
+  #args(dao: string, id: number, text: SealedText | undefined) {
+    return {
+      source: { Project: { project_id: this.#s.project, version_key: null } },
+      input_data: this.input(dao, id, text),
+      response_format: 'Json',
+      resource_limits: RESOURCE_LIMITS,
+      ...(this.#s.secretsRef ? { secrets_ref: this.#s.secretsRef } : {}),
+    };
+  }
+
+  /** Runs the sealed job for (`dao`, `id`) at `generation`, retrying once without an answer. With
+   *  `text`, the run carries a member's sealed text, and its answer counts only with an explanation
+   *  sealed to them that the signed verdict covers. */
+  async judge(dao: string, id: number, generation: number, text?: SealedText): Promise<Judgement> {
     let last: Attempt | null = null;
+    const args = this.#args(dao, id, text);
+    // A sealed text's bytes cost gas of their own, so the caps reserve them as well.
+    const reserved = worstCase(RUN_GAS, RUN_DEPOSIT) + (text ? BigInt(Buffer.byteLength('request_execution') + Buffer.byteLength(JSON.stringify(args))) * ARG_BYTE_GAS * MIN_GAS_PRICE : 0n);
+    // One text request is one judgement of its own, never resumed from an earlier one.
+    const textRun = text ? randomBytes(8).toString('hex') : null;
     for (let attempt = 1; attempt <= RUN_ATTEMPTS; attempt++) {
-      const key = `run:${this.#s.network}:${dao}:${id}:g${generation}:a${attempt}`;
+      const key = textRun ? `text:${this.#s.network}:${dao}:${id}:${textRun}:a${attempt}` : `run:${this.#s.network}:${dao}:${id}:g${generation}:a${attempt}`;
       const seen = this.#store.run(key);
       if (!seen) {
-        const capped = this.#caps.run(dao, worstCase(RUN_GAS, RUN_DEPOSIT));
+        const capped = this.#caps.run(dao, reserved);
         if (capped) {
           const detail = JSON.stringify(capped, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
           this.#log.warn('refused', { what: 'sealed_run', dao, proposal_id: id, reason: 'cap', detail });
@@ -145,24 +199,19 @@ export class Judge {
         proposalId: id,
         receiver: this.#s.outlayer,
         method: 'request_execution',
-        args: {
-          source: { Project: { project_id: this.#s.project, version_key: null } },
-          input_data: this.input(dao, id),
-          response_format: 'Json',
-          resource_limits: RESOURCE_LIMITS,
-          ...(this.#s.secretsRef ? { secrets_ref: this.#s.secretsRef } : {}),
-        },
+        args,
         gas: RUN_GAS,
         deposit: RUN_DEPOSIT,
-        reserved: worstCase(RUN_GAS, RUN_DEPOSIT),
+        reserved,
         windowBlocks: this.#s.windowBlocks,
         kept: outlayerCharge,
+        ...(text ? { memoryOnly: true } : {}),
       });
-      const result = res.kind === 'final' ? this.read(dao, id, res.outcome, res.hash) : res.kind === 'no_outcome' ? ({ state: 'no_answer', detail: `nothing final within ${this.#s.windowBlocks} blocks`, tx: res.hash } as const) : ({ state: 'failed', detail: `not sent: ${res.detail}`, tx: null } as const);
+      const result = res.kind === 'final' ? this.read(dao, id, res.outcome, res.hash, text !== undefined) : res.kind === 'no_outcome' ? ({ state: 'no_answer', detail: `nothing final within ${this.#s.windowBlocks} blocks`, tx: res.hash } as const) : ({ state: 'failed', detail: `not sent: ${res.detail}`, tx: null } as const);
       last = result;
       if (result.state === 'answered') {
         this.#store.finishRun(key, 'answered', null);
-        this.#log.info('verdict', { dao, proposal_id: id, generation, attempt, risk: result.verdict.risk, floor: result.verdict.floor, findings: result.verdict.findings, ai_status: result.verdict.ai_status, vetoable: result.verdict.vetoable, read_at_block: result.verdict.block_height, verdict_hash: result.verdict.verdict_hash, run_tx: result.tx });
+        this.#log.info('verdict', { dao, proposal_id: id, generation, attempt, risk: result.verdict.risk, floor: result.verdict.floor, findings: result.verdict.findings, ai_status: result.verdict.ai_status, vetoable: result.verdict.vetoable, read_at_block: result.verdict.block_height, verdict_hash: result.verdict.verdict_hash, run_tx: result.tx, sealed_text: text !== undefined });
         // A verdict that verified under the guard's current key shows the sealed judge works and
         // that the guard and the sealed job agree on the key again.
         this.#health.clear('run_no_answer', dao);
@@ -170,10 +219,10 @@ export class Judge {
         this.#health.clear('verdict_rejected', dao);
         this.#health.clear('accepted_key_changed', ALL);
         // The key is one setting for every DAO: missing in one run means missing for all, and a
-        // run it reached means it is back.
-        if (result.aiKeyMissing) this.#health.raise('ai_key_missing', ALL, { dao, proposal_id: id });
-        else this.#health.clear('ai_key_missing', ALL);
-        return { kind: 'verdict', verdict: result.verdict, verdictB64: result.verdictB64, signatureB64: result.signatureB64, runTx: result.tx };
+        // run it reached means it is back. A sealed explanation says neither.
+        if (result.aiKeyMissing === true) this.#health.raise('ai_key_missing', ALL, { dao, proposal_id: id });
+        else if (result.aiKeyMissing === false) this.#health.clear('ai_key_missing', ALL);
+        return { kind: 'verdict', verdict: result.verdict, verdictB64: result.verdictB64, signatureB64: result.signatureB64, runTx: result.tx, explanation: result.explanation };
       }
       this.#store.finishRun(key, result.state, result.detail);
       // A finished attempt is never sent again, so bytes no node took can never land, and what
@@ -188,14 +237,18 @@ export class Judge {
     }
     const detail = last && 'detail' in last ? last.detail : 'no attempt was made';
     const state = last && last.state !== 'answered' ? last.state : 'failed';
-    this.#health.raise('run_without_verdict', dao, { proposal_id: id, last: state });
-    return { kind: 'no_verdict', attempts: RUN_ATTEMPTS, last: state, detail };
+    // A text the sealed program refused is the sender's fault, not a sign the judge is down, and
+    // anyone may send one; raising it would let a stranger mark any DAO degraded.
+    if (!(text && state === 'refused')) this.#health.raise('run_without_verdict', dao, { proposal_id: id, last: state });
+    return { kind: 'no_verdict', attempts: RUN_ATTEMPTS, last: state, detail, tx: last?.tx ?? null };
   }
 
   /** Reads one final request_execution outcome. Every field of the job's output is checked like
    *  an input (standard 3): the shape, the key that signed it, the signature, and that the
-   *  verdict names this guard, network, DAO and proposal and is not already expired. */
-  read(dao: string, id: number, o: TxOutcome, tx: string): Attempt {
+   *  verdict names this guard, network, DAO and proposal and is not already expired. For a run
+   *  with a sealed text, the explanation the member gets must also be sealed and be the one the
+   *  signed verdict's hash covers. */
+  read(dao: string, id: number, o: TxOutcome, tx: string, sealedText = false): Attempt {
     const why = refusal(o);
     if (why) return { state: 'failed', detail: `request_execution failed: ${why}`, tx };
     const value = successValue(o);
@@ -231,7 +284,11 @@ export class Judge {
     if (verdict.expires_at_ms <= this.#now()) return reject('the verdict is already expired');
     // The explanation counts only when it is the text the signed verdict's hash covers.
     const explained = createHash('sha256').update(parsed.explanation, 'utf8').digest('hex') === verdict.explanation_hash;
+    if (sealedText) {
+      if (!explained || !SEALED_EXPLANATION.test(parsed.explanation)) return reject('the explanation is not sealed to the member, or not the one the verdict covers');
+      return { state: 'answered', verdict, verdictB64: parsed.verdict, signatureB64: parsed.signature, tx, explanation: parsed.explanation, aiKeyMissing: null };
+    }
     const aiKeyMissing = explained && verdict.ai_status === 'unavailable' && parsed.explanation.startsWith(AI_KEY_MISSING);
-    return { state: 'answered', verdict, verdictB64: parsed.verdict, signatureB64: parsed.signature, tx, aiKeyMissing };
+    return { state: 'answered', verdict, verdictB64: parsed.verdict, signatureB64: parsed.signature, tx, explanation: parsed.explanation, aiKeyMissing };
   }
 }

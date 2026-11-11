@@ -2,9 +2,10 @@
 // started. Any problem at boot stops it with a message saying what to fix and a non-zero exit, so
 // a host's restart policy shows the failure instead of hiding it.
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { Actor } from './act.ts';
 import { Alerts } from './alerts.ts';
@@ -14,12 +15,12 @@ import { NearChain, loadKey } from './chain.ts';
 import { ConfigError, loadConfig } from './config.ts';
 import { ALL, Health } from './health.ts';
 import { Judge, aiSecrets } from './judge.ts';
-import { addSecret, createLogger } from './log.ts';
+import { addSecret, createLogger, type Logger } from './log.ts';
 import { formatNear } from './near.ts';
 import { Reads } from './reads.ts';
 import { RejudgeWatch } from './rejudge.ts';
 import { RpcClient } from './rpc.ts';
-import { StatusServer } from './status.ts';
+import { StatusServer, textKeySchema, textKeySigned, type TextKey } from './status.ts';
 import { Store } from './store.ts';
 import { Submitter } from './submit.ts';
 import { Bot, Subscriptions } from './subscriptions.ts';
@@ -30,6 +31,21 @@ import { Worker } from './worker.ts';
 const TOKENS_PER_ADDRESS_HOUR = 10;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** The sealed program's text key from deployments/<network>.json, which one worker-signed run
+ *  wrote, or null when it holds none in the shape GET /text-key serves. */
+function storedTextKey(network: string, log: Logger): TextKey | null {
+  const path = fileURLToPath(new URL(`../../../deployments/${network}.json`, import.meta.url));
+  let parsed;
+  try {
+    parsed = textKeySchema.safeParse((JSON.parse(readFileSync(path, 'utf8')) as { text_key?: unknown }).text_key);
+  } catch {
+    parsed = null;
+  }
+  if (parsed?.success) return parsed.data;
+  log.warn('text_key_missing', { file: path, effect: 'GET /text-key answers 404, so members cannot seal a text to the sealed program' });
+  return null;
+}
 
 async function main(): Promise<void> {
   // Values already in the environment win over the file, so a host's own settings are never
@@ -93,9 +109,19 @@ async function main(): Promise<void> {
       workerAccount: config.KAAP_WORKER_ACCOUNT,
     },
   );
+  const textKey = storedTextKey(config.KAAP_NETWORK, log);
   const http = new StatusServer(
-    { health, subs, log, now, watching: () => worker!.watching() },
-    { host: config.KAAP_HTTP_HOST, port: config.KAAP_HTTP_PORT, network: config.KAAP_NETWORK, guard: config.KAAP_GUARD, botUsername: bot.username, tokensPerAddressHour: TOKENS_PER_ADDRESS_HOUR },
+    { health, subs, log, now, watching: () => worker!.watching(), texts: worker },
+    {
+      host: config.KAAP_HTTP_HOST,
+      port: config.KAAP_HTTP_PORT,
+      network: config.KAAP_NETWORK,
+      guard: config.KAAP_GUARD,
+      botUsername: bot.username,
+      tokensPerAddressHour: TOKENS_PER_ADDRESS_HOUR,
+      textsPerAddressHour: config.KAAP_TEXTS_PER_ADDRESS_HOUR,
+      textKey,
+    },
   );
 
   log.info('worker_starting', {
@@ -111,6 +137,7 @@ async function main(): Promise<void> {
     db: config.KAAP_WORKER_DB,
     alerts: { telegram_bot: bot.username, site: config.KAAP_SITE_URL ?? 'none, so alerts carry no link', batch_ms: config.KAAP_ALERT_BATCH_MS, cap_per_hour: config.KAAP_ALERT_CAP_PER_HOUR },
     lag_alert_ms: config.KAAP_LAG_ALERT_MS,
+    texts: { per_address_hour: config.KAAP_TEXTS_PER_ADDRESS_HOUR, text_key: textKey?.key ?? null },
   });
 
   let stopping = false;
@@ -133,6 +160,11 @@ async function main(): Promise<void> {
 
   await http.start();
   await worker.start();
+  // Members check this signature themselves before they seal a text; a key it no longer covers
+  // would only be refused there, so it is said here first.
+  if (textKey && acceptedKey.value && !textKeySigned(textKey, acceptedKey.value)) {
+    log.warn('text_key_unverified', { text_key: textKey.key, accepted_key: acceptedKey.value, fix: 'make one worker-signed pubkey run and store its answer as text_key' });
+  }
   alerts.start();
   chatBot.start();
   log.info('worker_started', { watching: worker.watching().length, status: health.current().length === 0 ? 'healthy' : 'degraded' });

@@ -7,7 +7,8 @@
 // every other table and every log line refers to a subscription by its row id (C26). One-time
 // subscription tokens are kept only as their SHA-256, so a copy of the file cannot redeem one.
 //
-// Never stored: hash texts, descriptions, keys, the bot token, alert texts.
+// Never stored: hash texts, descriptions, keys, the bot token, alert texts, and a member's sealed
+// text or reply key in any form: a run that carries one keeps no signed bytes (C26).
 
 import Database from 'better-sqlite3';
 

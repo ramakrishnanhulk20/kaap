@@ -143,3 +143,52 @@ after 15 minutes.
 Not covered: someone with many addresses, such as an IPv6 range, gets 10 tokens an hour per
 address. A token only lets a chat subscribe to alerts about facts that are public on chain, so
 this limit protects the worker from waste, not a secret.
+
+## Member texts: GET /text-key and POST /texts
+
+NEAR Business treasuries pay through sign requests that carry only a hash, and the text behind the
+hash sits on their own server. A member who has it can hand it to Kaap without the worker ever
+reading it: the text is sealed so that only the sealed program can open it, and the explanation
+comes back sealed so that only that member can open it. Both routes listen beside `/status`, on the
+same port, behind the same proxy.
+
+`GET /text-key` returns the `text_key` object in `deployments/<network>.json`, exactly as stored and
+with the same headers as `/status`: `key` (the sealed program's X25519 key, 64 hex), `signature`
+(the verdict key's, over `kaap-text-key-v1\n` followed by the 32 key bytes), `public_key`, `run_tx`
+and `build`. The program derives this key per caller, so it comes from one `{"v":1,"op":"pubkey"}`
+run the worker account signed; a key from anyone else's run would not open in the worker's runs.
+Members check the signature against the guard's `accepted_key` before they seal anything. With no
+`text_key` in the file the route answers 404 `no_text_key` and the worker logs `text_key_missing`
+at boot; when the guard's key no longer signed it, the worker logs `text_key_unverified`.
+
+`POST /texts` takes exactly `{"dao": <account>, "proposal_id": <whole number>, "text_ciphertext":
+<base64>, "reply_key": <64 hex>}`, at most 64 KiB, on the worker's own network. Every answer is
+JSON with a fixed word, and none repeats anything from the request:
+
+| Answer | When |
+|---|---|
+| 200 `{"status":"judged","run_tx","risk","floor","findings","ai_status","model_id","explanation":"sealed:...","veto":"started" or "not_needed"}` | the sealed run answered and its verdict checked out like every verdict; a veto it calls for has started down the usual veto path, and the answer does not wait for it to land |
+| 400 `bad_request` | any shape fault: a missing or unknown field, a reply key that is not 32 usable bytes, a ciphertext that is not canonical base64 or is over 48 KiB once decoded, or a run input over the 32 KiB the sealed program reads (in practice a ciphertext over about 24 KiB) |
+| 404 `dao_not_watched` | the worker does not watch the DAO |
+| 409 `proposal_not_open` | the proposal is not InProgress, or the two RPC providers do not agree it is |
+| 429 `too_many_requests`, with `retry-after` | the client address sent `KAAP_TEXTS_PER_ADDRESS_HOUR` texts in the past hour (default 3, 1 to 100), counted the way `/subscribe` counts tokens behind the proxy |
+| 503 `over_budget` | the daily caps refuse the run |
+| 502 `{"error":"run_failed","reason":...}` | the run gave no verdict: the sealed program's own fixed reason when it refused or held the run, else `no_answer` or `failed` |
+
+What it costs and how long it takes. Each text is one sealed run under the same daily caps, attempts
+and window as any other run. On 11 Nov 2026 a text for a planted proposal on the demo treasury cost
+0.0042 testnet NEAR to judge, then 0.0008 for the veto and 0.0058 for the registry record. The
+answer waits for the run, about 40 seconds, and for any judgement of the same proposal already
+running: that text was answered after 86 seconds because the worker was judging the new proposal
+without its text first. At worst, with OutLayer not answering, the run alone takes two windows of
+220 blocks, about four and a half minutes, and a judgement it waits for can take as long again.
+The proxy must let a request run that long. nginx cuts it at 60
+seconds unless `proxy_read_timeout` is raised; check whichever proxy is used by sending one text
+after setup and watching the answer arrive.
+
+What the worker keeps. The worker only ever holds the ciphertext, for the one request. Neither it
+nor the reply key is logged or stored: the log line for a text names the DAO, the proposal, the run
+and the result, and a run that carries a text keeps no signed bytes in the database, only its hash
+and what it reserved under the caps. Not covered: a worker that stops in the middle of a text run
+does not send it again after a restart; the member sends the text again. A re-judge of a text's
+verdict, after the proposal's state moves, runs without the text for the same reason.

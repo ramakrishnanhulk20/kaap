@@ -54,6 +54,8 @@ const schema = z
     KAAP_ALERT_BATCH_MS: count(5_000, 3_600_000).default(60_000),
     KAAP_ALERT_CAP_PER_HOUR: count(1, 1_000).default(30),
     KAAP_LAG_ALERT_MS: count(3_000, 600_000).default(15_000),
+    // Each text a member sends on POST /texts costs the worker one sealed run.
+    KAAP_TEXTS_PER_ADDRESS_HOUR: count(1, 100).default(3),
     // The OutLayer secret row holding the sealed job's NEAR_AI_API_KEY: the account that owns it
     // and its profile. With no account the worker names no row, so the sealed judge answers
     // without its AI, which is logged once at boot.

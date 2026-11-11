@@ -85,6 +85,12 @@ test('the bot token is required and checked, never echoed, and alerts get no lin
   assert.ok(problems({ ...complete, TELEGRAM_BOT_TOKEN: '' }).includes('TELEGRAM_BOT_TOKEN: missing'));
 });
 
+test('texts one address may send an hour: 3 by default, 1 to 100', () => {
+  assert.equal(loadConfig(complete).KAAP_TEXTS_PER_ADDRESS_HOUR, 3);
+  assert.equal(loadConfig({ ...complete, KAAP_TEXTS_PER_ADDRESS_HOUR: '100' }).KAAP_TEXTS_PER_ADDRESS_HOUR, 100);
+  for (const bad of ['0', '101', '2.5']) assert.ok(problems({ ...complete, KAAP_TEXTS_PER_ADDRESS_HOUR: bad }).some((p) => p.startsWith('KAAP_TEXTS_PER_ADDRESS_HOUR:')), bad);
+});
+
 test('the two providers must be different hosts (C22)', () => {
   const got = problems({ ...complete, KAAP_RPC_SECONDARY: 'https://rpc.testnet.fastnear.com/other' });
   assert.deepEqual(got, ['KAAP_RPC_SECONDARY: the two RPC providers must be different hosts (C22)']);
