@@ -1,7 +1,8 @@
 // The veto decision: the worker's mirror of the guard's ERR_NOT_VETOABLE rule (WO-02a2, with its
 // ai_status rule), the last check against live state on both providers (C4, C22), and the veto
 // itself: the kind sent exactly as read (C5), veto_result read after the callback, a refusal
-// raised. Not covered: the guard's own checks, which its sandbox tests and M1 prove on chain.
+// raised, and a veto and a record checked at once never both passing a NEAR cap with room for one
+// (C29). Not covered: the guard's own checks, which its sandbox tests and M1 prove on chain.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -51,15 +52,28 @@ test('no veto is sent on a verdict whose pinned state differs from the state rea
   assert.deepEqual(decide(verdict({ risk: 'high', floor: 'high', findings: ['UNKNOWN_VALUE'] }), live(), T0), { act: 'none', why: 'not_vetoable' });
 });
 
-function setup() {
+/** A chain whose signing can be made to wait, so an action can be kept between its cap check and
+ *  its spend row. */
+class GatedChain extends FakeChain {
+  gate: Promise<void> | null = null;
+  waiting = 0;
+
+  override async sign(...args: Parameters<FakeChain['sign']>) {
+    this.waiting++;
+    if (this.gate) await this.gate;
+    return super.sign(...args);
+  }
+}
+
+function setup(opts: { nearPerDay?: bigint } = {}) {
   const [a, b] = twoProviders();
   bothSet([a, b], (p) => p.proposals.set(2, proposalText(2)));
-  const chain = new FakeChain();
+  const chain = new GatedChain();
   const store = memoryStore();
   store.queueNew(NETWORK, DAO, 2, 'new');
   const { log, lines } = memoryLog();
   const health = new Health(log);
-  const caps = new CapGuard(store, { runsPerDaoDay: 50, textRunsPerDaoDay: 5, recordsPerDaoDay: 50, nearPerDay: 10n ** 24n }, NETWORK);
+  const caps = new CapGuard(store, { runsPerDaoDay: 50, textRunsPerDaoDay: 5, recordsPerDaoDay: 50, nearPerDay: opts.nearPerDay ?? 10n ** 24n }, NETWORK);
   const submitter = new Submitter(store, chain, NETWORK, log, { pollMs: 1, sendTries: 3, sleep: noSleep, explorer: (h) => h });
   const reads = new Reads(a, b, bridge, 0, noSleep);
   const actor = new Actor({ store, submitter, caps, reads, health, log, now: () => T0, sleep: noSleep }, { network: NETWORK, guard: GUARD, registry: REGISTRY, gateTries: 2, gateRetryMs: 0 });
@@ -165,4 +179,43 @@ test('every verdict is recorded with 0.02 NEAR attached, and the storage kept is
   const rec = events(s.lines(), 'recorded')[0];
   assert.equal(rec?.storage_near, '0.006380');
   assert.equal(events(s.lines(), 'tx_final')[0]?.kept_near, '0.006380');
+});
+
+test('a veto and a record started at once against a NEAR cap with room for one get exactly one through, whichever checks first (C29)', async () => {
+  // The veto reserves 0.03 NEAR and the record 0.023: either fits under 0.04, both do not.
+  const cap = 4n * 10n ** 22n;
+  const until = async (done: () => boolean) => {
+    for (let i = 0; i < 1_000 && !done(); i++) await new Promise((resolve) => setTimeout(resolve, 1));
+  };
+  const watched = <T>(p: Promise<T>) => {
+    const w = { done: false, result: p.finally(() => (w.done = true)) };
+    return w;
+  };
+  const hold = (chain: GatedChain) => {
+    let open!: () => void;
+    chain.gate = new Promise<void>((resolve) => (open = resolve));
+    return () => open();
+  };
+
+  // The record checks first, since the veto reads the live state before its check.
+  const r = setup({ nearPerDay: cap });
+  const openR = hold(r.chain);
+  const recording = watched(r.actor.record(DAO, 2, r.signed));
+  const vetoing = watched(r.actor.veto(DAO, 2, r.signed));
+  await until(() => vetoing.done || r.chain.waiting === 2);
+  openR();
+  assert.deepEqual([await vetoing.result, await recording.result], [{ kind: 'held', why: 'near_per_day cap' }, 'recorded']);
+  assert.deepEqual(r.chain.signed.map((c) => c.method), ['record']);
+
+  // The veto checks first and waits to sign; the record then finds no room.
+  const v = setup({ nearPerDay: cap });
+  bothSet([v.a, v.b], (p) => p.vetoResults.set(v.signed.verdict.verdict_hash, 'Ok'));
+  const openV = hold(v.chain);
+  const vetoFirst = watched(v.actor.veto(DAO, 2, v.signed));
+  await until(() => v.chain.waiting === 1);
+  const recordAfter = watched(v.actor.record(DAO, 2, v.signed));
+  await until(() => recordAfter.done || v.chain.waiting === 2);
+  openV();
+  assert.deepEqual([(await vetoFirst.result).kind, await recordAfter.result], ['cast', 'capped']);
+  assert.deepEqual(v.chain.signed.map((c) => c.method), ['veto']);
 });

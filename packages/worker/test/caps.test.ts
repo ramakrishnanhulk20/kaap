@@ -73,14 +73,16 @@ test('the global NEAR cap counts worst cases in flight and refuses what would cr
   const run = worstCase(300n * TGAS, 20n * 10n ** 21n);
   assert.equal(run, 5n * 10n ** 22n, 'a run reserves 0.05 NEAR: 300 Tgas at the minimum price plus 0.02 attached');
   store.addSpend({ idempotency_key: 'run:a', kind: 'run', network: NETWORK, dao: DAO, proposal_id: 1, tx_hash: 'h1', signed_b64: 'x', nonce: '1', reserved_yocto: run.toString() });
-  assert.equal(guard.near(run), null, '0.05 in flight plus 0.05 more is exactly the 0.1 cap');
+  assert.equal(guard.near(run, 'run:b'), null, '0.05 in flight plus 0.05 more is exactly the 0.1 cap');
   store.addSpend({ idempotency_key: 'run:b', kind: 'run', network: NETWORK, dao: DAO, proposal_id: 2, tx_hash: 'h2', signed_b64: 'x', nonce: '2', reserved_yocto: run.toString() });
-  assert.equal(guard.near(1n)?.cap, 'near_per_day');
+  guard.settle('run:b');
+  assert.equal(guard.near(1n, 'veto:probe')?.cap, 'near_per_day');
   // Once final, a transaction counts at what it really cost.
   store.markFinal('run:a', 'ok', 2n * 10n ** 21n, null);
   store.markFinal('run:b', 'ok', 2n * 10n ** 21n, null);
   assert.equal(store.spentOn('2026-11-02'), 4n * 10n ** 21n);
-  assert.equal(guard.near(run), null);
+  assert.equal(guard.near(run, 'run:c'), null);
+  guard.settle('run:c');
   // A transaction the chain refused outright never cost anything.
   store.addSpend({ idempotency_key: 'veto:c', kind: 'veto', network: NETWORK, dao: DAO, proposal_id: 3, tx_hash: 'h3', signed_b64: 'x', nonce: '3', reserved_yocto: run.toString() });
   store.markRejected('veto:c', 'InvalidNonce');

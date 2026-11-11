@@ -12,7 +12,7 @@ import { events, receiptBlock, refusal } from './outcome.ts';
 import type { LiveProposal, Problem, Reads } from './reads.ts';
 import type { ViewProvider } from './rpc.ts';
 import type { Store } from './store.ts';
-import type { Submitter } from './submit.ts';
+import type { SubmitResult, Submitter } from './submit.ts';
 
 /** The guard's NatSpec asks for 300 Tgas: big kinds need it and what is not burnt comes back. */
 export const VETO_GAS = 300n * TGAS;
@@ -163,29 +163,34 @@ export class Actor {
     }
 
     const reserved = worstCase(VETO_GAS, 0n);
-    const capped = this.#alreadySigned(key) ? null : this.#caps.near(reserved);
+    const capped = this.#alreadySigned(key) ? null : this.#caps.near(reserved, key);
     if (capped) {
       this.#store.setVetoState(this.#s.network, dao, id, 'capped');
       this.#log.error('refused', { what: 'veto', dao, proposal_id: id, reason: 'cap', cap: capped.cap });
       this.#health.raise('cap_reached', dao, { cap: capped.cap });
       return { kind: 'held', why: 'near_per_day cap' };
     }
-    this.#store.setVetoState(this.#s.network, dao, id, 'sent');
-    const res = await this.#submitter.submit({
-      key,
-      kind: 'veto',
-      dao,
-      proposalId: id,
-      receiver: this.#s.guard,
-      method: 'veto',
-      // The kind exactly as get_proposal returned it; the guard hashes it canonically (C5).
-      args: { verdict: signed.verdictB64, signature: signed.signatureB64, kind_json: live.kindText },
-      gas: VETO_GAS,
-      deposit: 0n,
-      reserved,
-      windowBlocks: SHORT_WINDOW_BLOCKS,
-      kept: () => 0n,
-    });
+    let res: SubmitResult;
+    try {
+      this.#store.setVetoState(this.#s.network, dao, id, 'sent');
+      res = await this.#submitter.submit({
+        key,
+        kind: 'veto',
+        dao,
+        proposalId: id,
+        receiver: this.#s.guard,
+        method: 'veto',
+        // The kind exactly as get_proposal returned it; the guard hashes it canonically (C5).
+        args: { verdict: signed.verdictB64, signature: signed.signatureB64, kind_json: live.kindText },
+        gas: VETO_GAS,
+        deposit: 0n,
+        reserved,
+        windowBlocks: SHORT_WINDOW_BLOCKS,
+        kept: () => 0n,
+      });
+    } finally {
+      this.#caps.settle(key);
+    }
     if (res.kind === 'no_outcome') {
       // The vote may still land, or may never have reached the chain: the worker re-sends the same
       // bytes on its next pass until the outcome is final or the veto is no longer needed.
@@ -291,31 +296,36 @@ export class Actor {
   async record(dao: string, id: number, signed: Signed): Promise<'recorded' | 'refused' | 'capped' | 'no_outcome'> {
     const key = `record:${this.#s.network}:${dao}:${id}:${signed.verdict.verdict_hash}`;
     const reserved = worstCase(RECORD_GAS, RECORD_DEPOSIT);
-    const capped = this.#alreadySigned(key) ? null : this.#caps.record(dao, reserved);
+    const capped = this.#alreadySigned(key) ? null : this.#caps.record(dao, reserved, key);
     if (capped) {
       this.#store.setRecordState(this.#s.network, dao, id, 'capped');
       this.#log.warn('refused', { what: 'record', dao, proposal_id: id, reason: 'cap', cap: capped.cap });
       this.#health.raise('cap_reached', dao, { cap: capped.cap });
       return 'capped';
     }
-    this.#store.setRecordState(this.#s.network, dao, id, 'sent');
-    const res = await this.#submitter.submit({
-      key,
-      kind: 'record',
-      dao,
-      proposalId: id,
-      receiver: this.#s.registry,
-      method: 'record',
-      args: { verdict: signed.verdictB64, signature: signed.signatureB64 },
-      gas: RECORD_GAS,
-      deposit: RECORD_DEPOSIT,
-      reserved,
-      windowBlocks: SHORT_WINDOW_BLOCKS,
-      kept: (o) => {
-        const entry = events(o).find((e) => e.by === this.#s.registry && e.event === 'verdict_recorded')?.data[0] as { storage_cost?: unknown } | undefined;
-        return typeof entry?.storage_cost === 'string' && /^\d+$/.test(entry.storage_cost) ? BigInt(entry.storage_cost) : 0n;
-      },
-    });
+    let res: SubmitResult;
+    try {
+      this.#store.setRecordState(this.#s.network, dao, id, 'sent');
+      res = await this.#submitter.submit({
+        key,
+        kind: 'record',
+        dao,
+        proposalId: id,
+        receiver: this.#s.registry,
+        method: 'record',
+        args: { verdict: signed.verdictB64, signature: signed.signatureB64 },
+        gas: RECORD_GAS,
+        deposit: RECORD_DEPOSIT,
+        reserved,
+        windowBlocks: SHORT_WINDOW_BLOCKS,
+        kept: (o) => {
+          const entry = events(o).find((e) => e.by === this.#s.registry && e.event === 'verdict_recorded')?.data[0] as { storage_cost?: unknown } | undefined;
+          return typeof entry?.storage_cost === 'string' && /^\d+$/.test(entry.storage_cost) ? BigInt(entry.storage_cost) : 0n;
+        },
+      });
+    } finally {
+      this.#caps.settle(key);
+    }
     if (res.kind === 'no_outcome') {
       // Re-sent with the same bytes on the worker's next pass, until its outcome is final.
       this.#store.setRecordState(this.#s.network, dao, id, 'no_outcome');

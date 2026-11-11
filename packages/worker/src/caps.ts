@@ -33,9 +33,9 @@ export class CapGuard {
   readonly #store: Store;
   readonly #caps: Caps;
   readonly #network: string;
-  /** Runs let through but not yet in the spend table, by idempotency key, at their worst case.
-   *  Signing waits on the network, so without these, runs started together would each pass the
-   *  NEAR check before any of them was counted. */
+  /** Runs, records and vetoes let through but not yet in the spend table, by idempotency key, at
+   *  their worst case. Signing waits on the network, so without these, spends started together
+   *  would each pass the NEAR check before any of them was counted. */
   readonly #held = new Map<string, bigint>();
 
   constructor(store: Store, caps: Caps, network: string) {
@@ -66,22 +66,23 @@ export class CapGuard {
     return this.#hold(key, worstCase, PER_STOPPED_ATTACK);
   }
 
-  /** Null when `dao` may have one more registry write today that can cost up to `worstCase`. */
-  record(dao: string, worstCase: bigint): CapRefusal | null {
+  /** Null when `dao` may have one more registry write today that can cost up to `worstCase`. The
+   *  write is then held under `key`, in the same step as the check, until `settle(key)`. */
+  record(dao: string, worstCase: bigint, key: string): CapRefusal | null {
     const used = this.#store.recordsOn(this.#network, dao, this.#today());
     if (used >= this.#caps.recordsPerDaoDay) return { cap: 'records_per_dao_day', used, limit: this.#caps.recordsPerDaoDay };
-    return this.near(worstCase);
+    return this.#hold(key, worstCase, 0n);
   }
 
-  /** Null when the whole worker may commit `worstCase` more yoctoNEAR today. */
-  near(worstCase: bigint): CapRefusal | null {
-    const used = this.#committed();
-    if (used + worstCase > this.#caps.nearPerDay) return { cap: 'near_per_day', used, limit: this.#caps.nearPerDay, asked: worstCase };
-    return null;
+  /** Null when the whole worker may commit `worstCase` more yoctoNEAR today, for a veto. It is then
+   *  held under `key`, in the same step as the check, until `settle(key)`. Nothing is kept back
+   *  here: a veto is the proposal check that the reserve is kept for. */
+  near(worstCase: bigint, key: string): CapRefusal | null {
+    return this.#hold(key, worstCase, 0n);
   }
 
-  /** Lets go of the run held under `key`. Called once its submit is over: by then the spend table
-   *  counts it, or it was never signed and costs nothing. A key with nothing held is ignored. */
+  /** Lets go of the spend held under `key`. Called once its submit is over: by then the spend
+   *  table counts it, or it was never signed and costs nothing. A key with nothing held is ignored. */
   settle(key: string): void {
     this.#held.delete(key);
   }
@@ -95,8 +96,8 @@ export class CapGuard {
     return null;
   }
 
-  /** NEAR committed today: the store's figure, plus every held run whose spend row is not live
-   *  yet. A rejected row counts nothing in the store, so a run re-signing under it stays held. */
+  /** NEAR committed today: the store's figure, plus every held spend whose row is not live yet. A
+   *  rejected row counts nothing in the store, so a spend re-signing under it stays held. */
   #committed(): bigint {
     let held = 0n;
     for (const [key, yocto] of this.#held) {
