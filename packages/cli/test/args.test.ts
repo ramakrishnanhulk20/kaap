@@ -77,8 +77,14 @@ test('verify, enroll and arming take the network from --network, else from a .te
   }
 });
 
-test('seal-text needs --dao, --id and --file; subscribe needs an https --worker', () => {
-  assert.deepEqual(parse(['seal-text', '--dao', 'a.testnet', '--id', '3', '--file', 't.json']), { command: 'seal-text', dao: 'a.testnet', id: 3, file: 't.json', network: 'testnet' });
+test('seal-text needs --dao, --id, --file and a worker from --worker or KAAP_WORKER_URL; subscribe needs an https --worker', () => {
+  const sealed = { command: 'seal-text', dao: 'a.testnet', id: 3, file: 't.json', network: 'testnet' };
+  assert.deepEqual(parse(['seal-text', '--dao', 'a.testnet', '--id', '3', '--file', 't.json', '--worker', 'https://kaap.example.com/']), { ...sealed, worker: 'https://kaap.example.com' });
+  assert.deepEqual(parse(['seal-text', '--dao', 'a.testnet', '--id', '3', '--file', 't.json'], { KAAP_WORKER_URL: 'http://127.0.0.1:8787' }), { ...sealed, worker: 'http://127.0.0.1:8787' });
+  assert.deepEqual(parse(['seal-text', '--dao', 'a.testnet', '--id', '3', '--file', 't.json', '--worker', 'https://a.example.com'], { KAAP_WORKER_URL: 'https://b.example.com' }), { ...sealed, worker: 'https://a.example.com' }, '--worker wins');
+  assert.throws(() => parse(['seal-text', '--dao', 'a.testnet', '--id', '3', '--file', 't.json']), /needs --worker <https url>, or KAAP_WORKER_URL/);
+  assert.throws(() => parse(['seal-text', '--dao', 'a.testnet', '--id', '3', '--file', 't.json'], { KAAP_WORKER_URL: 'http://kaap.example.com' }), /^UsageError: KAAP_WORKER_URL must be an https URL/);
+  assert.deepEqual(parse(['seal-text', '--help']), { command: 'help' });
   assert.deepEqual(parse(['subscribe', 'a.near', '--worker', 'https://kaap.example.com/api/']), { command: 'subscribe', dao: 'a.near', worker: 'https://kaap.example.com/api' });
   assert.deepEqual(parse(['subscribe', 'a.near', '--worker', 'http://127.0.0.1:8787']), { command: 'subscribe', dao: 'a.near', worker: 'http://127.0.0.1:8787' });
   for (const argv of [

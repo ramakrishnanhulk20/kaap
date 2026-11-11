@@ -53,3 +53,26 @@ export const MAX_ATTESTATION_BYTES = 256 * 1024;
 
 /** The worker's answer to POST /subscribe is a few hundred bytes (packages/worker/src/status.ts). */
 export const MAX_WORKER_ANSWER_BYTES = 4 * 1024;
+
+/** The text file `kaap seal-text` reads. A text bigger than this could not fit in a sealed run's
+ *  input anyway (MAX_RUN_INPUT_BYTES), so a larger file is refused before it is read. */
+export const MAX_TEXT_FILE_BYTES = 64 * 1024;
+
+/** The most input the sealed job reads (packages/sealed/src/input.rs `MAX_INPUT_BYTES`, the
+ *  worker's `MAX_RUN_INPUT_BYTES`): the run's JSON with the ciphertext in it as base64, which leaves
+ *  about 24 KiB for the ciphertext itself. */
+export const MAX_RUN_INPUT_BYTES = 32_768;
+
+/** The longest verdict life the sealed job takes (input.rs `MAX_EXPIRES_IN_MS`) and the worker's
+ *  KAAP_VERDICT_TTL_MS allows. The run input is counted with it, so never shorter than the worker
+ *  counts it. */
+export const MAX_EXPIRES_IN_MS = 3_600_000;
+
+/** POST /texts answers once the sealed run has landed, about 10 to 30 seconds when it goes well.
+ *  Node's fetch stops waiting for an answer's headers after 5 minutes whatever is asked, so that is
+ *  the cap. The request is never sent twice: a second one would be a second paid run. */
+export const TEXT_ANSWER_TIMEOUT_MS = 300_000;
+
+/** The judged answer: a verdict summary and a sealed explanation from a sealed output of at most
+ *  900 bytes (packages/sealed/src/output.rs). */
+export const MAX_TEXT_ANSWER_BYTES = 16 * 1024;

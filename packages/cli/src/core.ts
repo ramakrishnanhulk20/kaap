@@ -193,6 +193,19 @@ export class Core {
     return this.#run('policyHash', () => this.#b.policyHash(policy));
   }
 
+  /** Hex of kaap-core's NEP-413 hash of a message, a base64 32-byte nonce and a recipient, with no
+   *  callback URL: the hash the sealed job checks a supplied NEP-413 text against. Throws
+   *  `CoreError` for a nonce that is not 32 bytes of base64. */
+  nep413Hash(message: string, nonceBase64: string, recipient: string): string {
+    return hex32.parse(this.#run('nep413Hash', () => this.#b.nep413Hash(message, nonceBase64, recipient, null)));
+  }
+
+  /** Hex of kaap-core's NEP-461 hash of a borsh delegate action given as base64. Throws
+   *  `CoreError` when it is not base64. */
+  nep461Hash(delegateBase64: string): string {
+    return hex32.parse(this.#run('nep461Hash', () => this.#b.nep461Hash(delegateBase64)));
+  }
+
   /** Hex of kaap-verdict's `verdict_hash` of these fields: sha256 of the domain and the borsh
    *  bytes kaap-verdict writes for them. */
   verdictHash(fields: VerdictFields): string {

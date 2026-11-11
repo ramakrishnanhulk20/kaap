@@ -1,7 +1,8 @@
-// The command router. Exit codes: 0 done; 1 something could not be read or built, or is not yet
-// available; 2 a usage error; 3 not a recognised DAO, no such proposal, no verdict for it, or a DAO
-// the worker does not watch; 4 held, because the two providers disagreed or one could not be
-// compared; 5 `kaap verify` ran and at least one check failed. No result is printed for 1, 3 or 4.
+// The command router. Exit codes: 0 done; 1 something could not be read or built, or a text was
+// refused, here or by the worker; 2 a usage error; 3 not a recognised DAO, no such proposal, no
+// verdict for it, or a DAO the worker does not watch; 4 held, because the two providers disagreed or
+// one could not be compared; 5 `kaap verify` ran and at least one check failed. No result is
+// printed for 1, 3 or 4.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -20,11 +21,10 @@ import { type Clock, RateLimiter, realClock } from './limiter.js';
 import { fetchTransport, type Transport } from './net.js';
 import { REQUESTS_PER_SECOND } from './caps.js';
 import { RpcError } from './rpc.js';
+import { cryptoFresh, type Fresh } from './sealing.js';
+import { render as renderSealText, SealRefused, sealText } from './sealtext.js';
 import { render as renderSubscription, subscribe, WorkerRefused } from './subscribe.js';
 import { NoVerdict, render as renderVerify, verify } from './verify.js';
-
-/** Printed by `kaap seal-text` until Kaap's sealed program publishes the key texts are sealed to. */
-export const SEAL_TEXT_NOT_YET = "kaap seal-text is not yet available: Kaap's sealed program does not publish the key a text is encrypted to yet. Nothing was read or sent.";
 
 export interface Env {
   transport: Transport;
@@ -34,6 +34,10 @@ export interface Env {
   repoRoot: string;
   /** Spaces every request; one at `REQUESTS_PER_SECOND` on `clock` when not given. */
   limiter?: RateLimiter;
+  /** The one environment variable the CLI reads, KAAP_WORKER_URL; none when not given. */
+  vars?: Readonly<Record<string, string | undefined>>;
+  /** Key pairs and nonces for `kaap seal-text`; the system's random source when not given. */
+  fresh?: Fresh;
 }
 
 export interface Io {
@@ -48,6 +52,7 @@ export function realEnv(): Env {
     clock: realClock,
     loadCore: () => Core.load(),
     repoRoot: fileURLToPath(new URL('../../../../', import.meta.url)),
+    vars: { KAAP_WORKER_URL: process.env['KAAP_WORKER_URL'] },
   };
 }
 
@@ -59,7 +64,7 @@ function version(): string {
 export async function main(argv: string[], env: Env, io: Io): Promise<number> {
   let command;
   try {
-    command = parse(argv);
+    command = parse(argv, env.vars ?? {});
   } catch (e) {
     if (e instanceof UsageError) {
       io.err(`${e.message}\n\n${USAGE}`);
@@ -74,10 +79,6 @@ export async function main(argv: string[], env: Env, io: Io): Promise<number> {
   if (command.command === 'version') {
     io.out(`kaap ${version()}`);
     return 0;
-  }
-  if (command.command === 'seal-text') {
-    io.err(SEAL_TEXT_NOT_YET);
-    return 1;
   }
 
   const json = command.command === 'check' && command.json;
@@ -115,11 +116,14 @@ export async function main(argv: string[], env: Env, io: Io): Promise<number> {
       case 'subscribe':
         io.out(renderSubscription(await subscribe(core, env.transport, command)));
         return 0;
+      case 'seal-text':
+        io.out(renderSealText(await sealText({ ...deps, repoRoot: env.repoRoot, fresh: env.fresh ?? cryptoFresh }, command)));
+        return 0;
     }
   } catch (e) {
     if (e instanceof NotADao) return fail(3, e.message, { recognised: false });
     if (e instanceof NoProposal || e instanceof NoVerdict || e instanceof CannotEnrol) return fail(3, e.message);
-    if (e instanceof WorkerRefused) return fail(e.code, e.message);
+    if (e instanceof WorkerRefused || e instanceof SealRefused) return fail(e.code, e.message);
     if (e instanceof NoDeployment) return fail(1, e.message);
     if (e instanceof Held) return fail(4, `held, no result: ${e.message}`);
     if (e instanceof RpcError) return fail(1, `could not read the chain: ${e.message}`);

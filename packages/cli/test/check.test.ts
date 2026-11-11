@@ -18,7 +18,7 @@ import { RateLimiter } from '../src/limiter.js';
 import { PRICE_LIST_URL, readPrices } from '../src/prices.js';
 import { NETWORKS } from '../src/rpc.js';
 import { shown } from '../src/text.js';
-import { fakeClock, load, replay, REPO_ROOT } from './replay.js';
+import { fakeClock, load, replay, REPO_ROOT, withoutAllowedReads } from './replay.js';
 
 const ADVISORY = "advisory: plain-code check only; the AI and the guard run in Kaap's sealed program";
 
@@ -183,7 +183,7 @@ test('the CLI only reads: view calls to the fixed providers, the 1Click list, an
   }
   const src = new URL('../../src/', import.meta.url);
   for (const file of readdirSync(src).filter((f) => f.endsWith('.ts'))) {
-    const text = readFileSync(new URL(file, src), 'utf8');
+    const text = withoutAllowedReads(readFileSync(new URL(file, src), 'utf8'));
     assert.doesNotMatch(text, /process\.env|KeyPair|private_key|seed phrase|send_tx|broadcast_tx/i, file);
   }
 });

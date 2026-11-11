@@ -1,8 +1,9 @@
 // Where Kaap runs on a network, read from the repository's own records: `deployments/<network>.json`
-// (the guard, the registry, the sealed program and the run that printed its key) and
-// `packages/sealed/<network>.json` (every build of the sealed program ever published). These are
-// what `verify`, `enroll` and `arming` check the chain against. Each file is read through a strict
-// schema and a missing or unreadable one stops the command, so nothing is checked against a guess.
+// (the guard, the registry, the sealed program, the run that printed its key, and the key a text is
+// sealed to) and `packages/sealed/<network>.json` (every build of the sealed program ever
+// published). These are what `verify`, `enroll`, `arming` and `seal-text` check the chain against.
+// Each file is read through a strict schema and a missing or unreadable one stops the command, so
+// nothing is checked against a guess.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -65,6 +66,26 @@ export interface Deployment {
   builds: ReadonlySet<string>;
 }
 
+/** The worker's record of one `{"v":1,"op":"pubkey"}` run (WO-06d). */
+const textKeySchema = z.strictObject({
+  key: z.string().regex(/^[0-9a-fA-F]{64}$/),
+  signature: z.string().regex(/^[A-Za-z0-9+/]{86}==$/),
+  public_key: edKey,
+  run_tx: txHash,
+  build: sha256Hex,
+});
+
+export interface TextKey {
+  /** The sealed program's X25519 public key, 32 bytes. */
+  key: Buffer;
+  /** 64 bytes of ed25519 over `kaap-text-key-v1\n` and `key`, by the program's verdict key. */
+  signature: Buffer;
+  /** The verdict key the record says signed it. The guard's own `accepted_key()` is what counts. */
+  publicKey: string;
+  /** The worker-signed run that printed the key. */
+  runTx: string;
+}
+
 function read(path: string): unknown {
   try {
     return JSON.parse(readFileSync(path, 'utf8'));
@@ -98,4 +119,20 @@ export function loadDeployment(repoRoot: string, network: Network): Deployment {
     attestedRunTx: d.data.sealed.attested_run_tx,
     builds: new Set(b.data.versions.map((v) => v.sha256)),
   };
+}
+
+/** The key a text is sealed to on `network`, as the worker recorded it in `deployments/<network>.json`.
+ *  Only read here: whether it is the sealed program's key is the signature check, against the key
+ *  the guard accepts on chain. */
+export function loadTextKey(repoRoot: string, network: Network): TextKey {
+  const where = join(repoRoot, 'deployments', `${network}.json`);
+  const record = read(where);
+  const found = typeof record === 'object' && record !== null ? (record as Record<string, unknown>)['text_key'] : undefined;
+  if (found === undefined) {
+    throw new NoDeployment(`Kaap's worker has not published the key a text is sealed to on ${network} yet (no text_key in ${where}). Nothing was sent.`);
+  }
+  const parsed = textKeySchema.safeParse(found);
+  const signature = parsed.success ? Buffer.from(parsed.data.signature, 'base64') : null;
+  if (!parsed.success || signature?.length !== 64) throw new NoDeployment(`the text_key in ${where} is not a readable key record. Nothing was sent.`);
+  return { key: Buffer.from(parsed.data.key, 'hex'), signature, publicKey: parsed.data.public_key, runTx: parsed.data.run_tx };
 }

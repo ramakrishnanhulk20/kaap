@@ -25,7 +25,7 @@ import type { HttpRequest, Transport } from '../src/net.js';
 import { NETWORKS } from '../src/rpc.js';
 import { base58, BadVerdict, decodeVerdict, ed25519Valid, edKeyBytes, signedBytes } from '../src/verdict.js';
 import { calledAccounts, decoderCheck, render } from '../src/verify.js';
-import { fakeClock, load, replay, REPO_ROOT } from './replay.js';
+import { fakeClock, load, replay, REPO_ROOT, withoutAllowedReads } from './replay.js';
 
 const GUARD_KEY = 'ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN';
 
@@ -358,7 +358,7 @@ test('verify only reads: fixed hosts, view, block, chunk and tx calls, and GETs 
   }
   const src = new URL('../../src/', import.meta.url);
   for (const file of readdirSync(src).filter((f) => f.endsWith('.ts'))) {
-    assert.doesNotMatch(readFileSync(new URL(file, src), 'utf8'), /process\.env|KeyPair|private_key|seed phrase|send_tx|broadcast_tx/i, file);
+    assert.doesNotMatch(withoutAllowedReads(readFileSync(new URL(file, src), 'utf8')), /process\.env|KeyPair|private_key|seed phrase|send_tx|broadcast_tx/i, file);
   }
 });
 

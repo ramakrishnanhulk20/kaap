@@ -13,7 +13,7 @@ export type Command =
   | { command: 'verify'; dao: string; id: number; network: Network }
   | { command: 'enroll'; dao: string; network: Network }
   | { command: 'arming'; dao: string; network: Network }
-  | { command: 'seal-text'; dao: string; id: number; file: string; network: Network }
+  | { command: 'seal-text'; dao: string; id: number; file: string; network: Network; worker: string }
   | { command: 'subscribe'; dao: string; worker: string }
   | { command: 'help' }
   | { command: 'version' };
@@ -42,8 +42,13 @@ export const USAGE = `kaap: check NEAR DAO proposals with no keys, and rerun Kaa
   kaap arming <dao> [--network mainnet|testnet]
       Whether Kaap's guard is armed on the DAO's live policy: the kinds it cannot reject, any
       rights beyond rejecting, and the votes the approvers need per kind.
-  kaap seal-text --dao <dao> --id <id> --file <text> [--network mainnet|testnet]
-      Encrypts the text behind a proposal's hash to Kaap's sealed program. Not yet available.
+  kaap seal-text --dao <dao> --id <id> --file <text.json> [--worker <https url>] [--network mainnet|testnet]
+      Hands Kaap's worker the text behind a hash-only proposal, encrypted here so only Kaap's
+      sealed program can read it, once the key it is sealed to checks out against the guard's
+      and the text hashes to the proposal's payload. Prints the verdict, whether a veto started,
+      and an explanation only you can open. The file holds {"message", "nonce" (base64),
+      "recipient", "standard": "nep413" or "nep461", "quotes" (optional)}. --worker defaults to
+      KAAP_WORKER_URL.
   kaap subscribe <dao> --worker <https url>
       Asks Kaap's worker for a one-time Telegram token for the DAO's alerts.
   kaap eval
@@ -58,7 +63,8 @@ export const USAGE = `kaap: check NEAR DAO proposals with no keys, and rerun Kaa
 For check, verify, enroll, arming and seal-text the network is testnet for an account ending
 in .testnet and mainnet otherwise, unless --network says otherwise.
 
-Nothing here holds a key or sends a transaction.`;
+Nothing here holds a NEAR key or sends a transaction. seal-text makes one reply key for its one
+request and keeps it only in memory.`;
 
 const ID = /^\d{1,16}$/;
 
@@ -98,21 +104,23 @@ const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
 /** The worker's address: https, or plain http only to this machine (a worker run locally). No
  *  user name, password, query or fragment, since the CLI adds the path itself. */
-function workerUrl(text: string): string {
+function workerUrl(text: string, name = '--worker'): string {
   let url: URL;
   try {
     url = new URL(text);
   } catch {
-    throw new UsageError('--worker must be a URL, for example https://kaap.example.com');
+    throw new UsageError(`${name} must be a URL, for example https://kaap.example.com`);
   }
   const local = url.protocol === 'http:' && LOOPBACK.has(url.hostname);
-  if (url.protocol !== 'https:' && !local) throw new UsageError('--worker must be an https URL (plain http only for 127.0.0.1 or localhost)');
-  if (url.username || url.password || url.search || url.hash) throw new UsageError('--worker must not carry a user name, password, query or fragment');
+  if (url.protocol !== 'https:' && !local) throw new UsageError(`${name} must be an https URL (plain http only for 127.0.0.1 or localhost)`);
+  if (url.username || url.password || url.search || url.hash) throw new UsageError(`${name} must not carry a user name, password, query or fragment`);
   return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
 }
 
-export function parse(argv: string[]): Command {
+/** `vars` is the environment, read only for KAAP_WORKER_URL, through the same check as --worker. */
+export function parse(argv: string[], vars: Readonly<Record<string, string | undefined>> = {}): Command {
   const [command, ...rest] = argv;
+  if (command !== undefined && (rest.includes('--help') || rest.includes('-h'))) return { command: 'help' };
   switch (command) {
     case undefined:
     case 'help':
@@ -143,13 +151,18 @@ export function parse(argv: string[]): Command {
       return { command, dao, network: networkFor(values['network'], dao) };
     }
     case 'seal-text': {
-      const { values, positionals } = parsed(rest, { dao: { type: 'string' }, id: { type: 'string' }, file: { type: 'string' }, network: { type: 'string' } });
-      const { dao, id, file } = values;
-      if (positionals.length) throw new UsageError('kaap seal-text takes only --dao, --id, --file and --network');
+      const { values, positionals } = parsed(rest, { dao: { type: 'string' }, id: { type: 'string' }, file: { type: 'string' }, worker: { type: 'string' }, network: { type: 'string' } });
+      const { dao, id, file, worker } = values;
+      if (positionals.length) throw new UsageError('kaap seal-text takes only --dao, --id, --file, --worker and --network');
       if (typeof dao !== 'string' || dao === '' || typeof id !== 'string' || typeof file !== 'string' || file === '') {
         throw new UsageError('kaap seal-text needs --dao, --id and --file, for example: kaap seal-text --dao example.sputnik-dao.near --id 12 --file text.json');
       }
-      return { command: 'seal-text', dao, id: wholeNumber(id, '--id', 0, Number.MAX_SAFE_INTEGER), file, network: networkFor(values['network'], dao) };
+      const fromEnv = vars['KAAP_WORKER_URL'];
+      let url: string;
+      if (typeof worker === 'string' && worker !== '') url = workerUrl(worker);
+      else if (fromEnv !== undefined && fromEnv !== '') url = workerUrl(fromEnv, 'KAAP_WORKER_URL');
+      else throw new UsageError('kaap seal-text needs --worker <https url>, or KAAP_WORKER_URL set to it: the address of the Kaap worker that guards the DAO');
+      return { command: 'seal-text', dao, id: wholeNumber(id, '--id', 0, Number.MAX_SAFE_INTEGER), file, network: networkFor(values['network'], dao), worker: url };
     }
     case 'subscribe': {
       const { values, positionals } = parsed(rest, { worker: { type: 'string' } });

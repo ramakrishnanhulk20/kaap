@@ -1,14 +1,13 @@
 // `kaap subscribe` against a worker that answers the way packages/worker/src/status.ts does, and
 // every refusal: a DAO the worker does not watch, a rate limit, an answer that is not a token or
-// whose parts disagree, an account id that is not one. Then the `kaap seal-text` stub. It does not
-// run a real worker (WO-06b's live test did) or Telegram, and seal-text's encryption does not exist
-// yet.
+// whose parts disagree, an account id that is not one. It does not run a real worker (WO-06b's live
+// test did) or Telegram. `kaap seal-text` is in seal-text.test.ts.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { Core } from '../src/core.js';
-import { main, SEAL_TEXT_NOT_YET } from '../src/main.js';
+import { main } from '../src/main.js';
 import type { HttpRequest, HttpResponse } from '../src/net.js';
 import { fakeClock, REPO_ROOT } from './replay.js';
 
@@ -74,13 +73,5 @@ test('a worker answer that is not a token, or whose parts disagree, is refused a
 test('an invalid account id is refused before the worker is asked', async () => {
   const { code, asked } = await run(['subscribe', 'Not An Account', '--worker', 'https://kaap.example.com'], { status: 200, text: workerAnswer() });
   assert.equal(code, 3);
-  assert.equal(asked.length, 0);
-});
-
-test('seal-text is a stub: it says it is not available, reads nothing and sends nothing', async () => {
-  const { code, out, err, asked } = await run(['seal-text', '--dao', DAO, '--id', '7', '--file', '/no/such/file.json'], { status: 200, text: '' });
-  assert.equal(code, 1);
-  assert.equal(out, '');
-  assert.equal(err, SEAL_TEXT_NOT_YET);
   assert.equal(asked.length, 0);
 });

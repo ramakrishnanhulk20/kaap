@@ -80,6 +80,13 @@ export function replay(fixture: Fixture, log: HttpRequest[] = [], edit?: (reques
   };
 }
 
+/** A source file with the two exact expressions C31's source scan allows taken out: the one
+ *  variable `kaap seal-text` reads for its worker's address, and the X25519 pair it seals a text
+ *  with, which cannot sign a NEAR transaction. Any other environment read or key pair still shows. */
+export function withoutAllowedReads(text: string): string {
+  return text.replaceAll("process.env['KAAP_WORKER_URL']", '').replaceAll("generateKeyPairSync('x25519')", '');
+}
+
 /** A clock whose sleep moves time on at once, so rate limits cost no real time in tests. */
 export function fakeClock(start = 1_800_000_000_000): Clock & { slept: number } {
   let now = start;
