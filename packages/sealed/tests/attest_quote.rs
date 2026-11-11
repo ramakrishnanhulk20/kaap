@@ -62,6 +62,24 @@ fn an_older_genuine_set_is_refused_and_a_forged_one_never_verifies() {
     assert_eq!(check_quote(&quote(), &forged, FETCHED_AT), Err(Unverified::QuoteRejected), "Intel's signature covers the status");
 }
 
+// The quote carries its own PCK chain: genuine Intel material, issued to vouch for one platform's
+// key. A chain Intel really issued for another purpose must never be accepted as the signer of the
+// TCB data or of the enclave identity, or a key Intel gave one machine could sign its own rating.
+#[test]
+fn a_signer_chain_issued_for_another_job_is_refused() {
+    let carried = dcap_qvl::quote::Quote::parse(&quote()).unwrap();
+    let pck_chain = String::from_utf8(carried.raw_cert_chain().unwrap().to_vec()).unwrap();
+    assert_ne!(pck_chain, collateral().tcb_info_issuer_chain, "the swap changes the chain");
+
+    let mut changed = collateral();
+    changed.tcb_info_issuer_chain = pck_chain.clone();
+    assert_eq!(check_quote(&quote(), &changed, FETCHED_AT), Err(Unverified::QuoteRejected), "TCB Info signer");
+
+    let mut changed = collateral();
+    changed.qe_identity_issuer_chain = pck_chain;
+    assert_eq!(check_quote(&quote(), &changed, FETCHED_AT), Err(Unverified::QuoteRejected), "QE Identity signer");
+}
+
 #[test]
 fn the_policy_accepts_only_the_two_levels_kaap_chose() {
     use dcap_qvl::TcbStatus::*;
