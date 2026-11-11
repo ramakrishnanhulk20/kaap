@@ -1,7 +1,7 @@
 {
   "network": "testnet",
   "deployed_at": "2026-10-29T06:12:11Z",
-  "deployed_by": "scripts/WO-02a-deploy-testnet.sh (work order WO-02a2)",
+  "deployed_by": "scripts/deploy-contracts-testnet.sh",
   "accepted_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
   "guard": {
     "account_id": "kaap-guard-1029061211.testnet",
@@ -22,7 +22,7 @@
   },
   "owner": {
     "account_id": "kaap-owner-1029061211.testnet",
-    "held_by": "Ram; the key is only in ~/.near-credentials/testnet/kaap-owner-1029061211.testnet.json inside WSL on his machine"
+    "held_by": "Kaap's founder; the key is only in ~/.near-credentials/testnet/kaap-owner-1029061211.testnet.json inside WSL on the founder's machine"
   },
   "sealed": {
     "project_id": "kaap-worker-1029053612.testnet/kaap-sealed",
@@ -32,10 +32,10 @@
     "attestation_url": "https://testnet-api.outlayer.ai/attestations/by-tx/7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC"
   },
   "dao": {
-    "set_up_by": "scripts/WO-02c-setup-testnet.mjs (work order WO-02c)",
+    "set_up_by": "scripts/setup-demo-dao.mjs",
     "member": {
       "account_id": "kaap-member-1029064001.testnet",
-      "held_by": "Ram; the key is only in ~/.near-credentials/testnet/kaap-member-1029064001.testnet.json inside WSL on his machine"
+      "held_by": "Kaap's founder; the key is only in ~/.near-credentials/testnet/kaap-member-1029064001.testnet.json inside WSL on the founder's machine"
     },
     "account_id": "kaap-dao-1029064008.testnet",
     "deploy_and_init_tx": "77VM5xSUk3ry9Yp2xDU1etyFTf5451g8E6D6RNrdRpav",

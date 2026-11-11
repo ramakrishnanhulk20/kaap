@@ -1,6 +1,6 @@
 # Shard 2: cases the labelling guide does not fully settle
 
-Labeller: shard-2. Each entry gives the record ids, the two readings, and the one I used. Where the guide gave no answer I took the reading with the higher risk, as the work order says. Counts for the whole shard: 100 labels, risk floors critical 20, high 32, medium 17, low 31.
+Labeller: the AI labelling pass for shard 2. Each entry gives the record ids, the two readings, and the one I used. Where the guide gave no answer I took the reading with the higher risk, as the labelling instructions say. Counts for the whole shard: 100 labels, risk floors critical 20, high 32, medium 17, low 31.
 
 ## Conventions I applied everywhere (representation, not risk)
 - One finding entry per code per record, even when several effects trigger it.
@@ -31,7 +31,7 @@ Labeller: shard-2. Each entry gives the record ids, the two readings, and the on
 Both add an account to a role (`Admin`, `governance_voters`) whose rights are not in the record.
 - Reading A: the rights are not known, so no `POLICY_ADDS_APPROVER`.
 - Reading B: the role is taken as approving, so `POLICY_ADDS_APPROVER` fires.
-- Used: B. The DAO's current policy (scratchpad/dao-census/active-daos.json) shows both roles hold approving rights today, but that is the present state, not the state at filing.
+- Used: B. The DAO's current policy (from the census) shows both roles hold approving rights today, but that is the present state, not the state at filing.
 
 ### Q4. A token with no price: duct-community-token:32
 `duct-1078.meme-cooking.near` is not in the census token list and the DAO's median is 52.91 USD.

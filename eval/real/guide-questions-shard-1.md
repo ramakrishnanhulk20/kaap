@@ -1,8 +1,8 @@
 # Guide questions from shard 1
 
-Cases where `docs/eval/labeling-guide.md` does not settle the answer, found while labelling the 100 records of shard 1. Each entry gives the two readings and the one used. Where a reading changes the risk, the higher one was used, as the work order says. Record ids drop the `mainnet:` prefix. Entries Q1 to Q3, Q6, Q7, Q15, Q16, Q18 to Q20, Q23 and Q24 move a risk floor or a finding; the rest only change a field or a note.
+Cases where `docs/eval/labeling-guide.md` does not settle the answer, found while labelling the 100 records of shard 1. Each entry gives the two readings and the one used. Where a reading changes the risk, the higher one was used, as the labelling instructions say. Record ids drop the `mainnet:` prefix. Entries Q1 to Q3, Q6, Q7, Q15, Q16, Q18 to Q20, Q23 and Q24 move a risk floor or a finding; the rest only change a field or a note.
 
-## Rulings that move the risk (head chef to confirm or flip)
+## Rulings that move the risk (each confirmed or flipped by guide section 10)
 
 ### Q1. storage_deposit on a token contract
 Reading A: the attached NEAR is a `transfer` effect ("NEAR attached to a call") and `ATTACHED_DEPOSIT` (medium) is the only finding, so a payment batch that registers new receivers floors at medium.
@@ -78,7 +78,7 @@ Records where this is the only reason: burrow.sputnik-dao.near:1528, ergo-public
 Records: itera.sputnik-dao.near:0, web3stick.sputnik-dao.near:0
 
 ### Q11. is_test left as given
-`is_test` is copied from sample.jsonl, as the order says. Two records move under 5 USD but have `is_test` false, because the census payment rule does not count `near_deposit` or `approve_list` as payments: burrow.sputnik-dao.near:1528 (555 yoctoNEAR) and ergo-public.sputnik-dao.near:1 (0.01 NEAR).
+`is_test` is copied from sample.jsonl, as the labelling instructions say. Two records move under 5 USD but have `is_test` false, because the census payment rule does not count `near_deposit` or `approve_list` as payments: burrow.sputnik-dao.near:1528 (555 yoctoNEAR) and ergo-public.sputnik-dao.near:1 (0.01 NEAR).
 
 ### Q4. Description that only lists method names
 "Proposal from external dApp: storage_deposit, ft_transfer ... on <contract>" names actions and a contract but no amount or recipient. Reading A: `vague`. Reading B (used): `matches`, because the named actions and contract are checkable and agree. Same for o_lskik2.sputnik-dao.near:74.
@@ -118,5 +118,5 @@ The census median is built from the dollar total of each earlier proposal, so th
 
 ## Things the check script cannot confirm
 - Token decimals for tokens outside the census list (LiNEAR 24, SWEAT 18, Burrow internal units 18 for a 6-decimal token) come from the DAO's own earlier proposals or common knowledge, not from the chain.
-- The v3.2 hash `DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF` comes from `reference/dao-census/raw/wasmcheck.json`.
-- hh.sputnik-dao.near:4 and sweat-multisig.sputnik-dao.near:21 were read against the DAO's stored proposal history in `scratchpad/dao-census/proposals/`, which is not on the cards.
+- The v3.2 hash `DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF` comes from the census's code-hash check of every DAO; it is the code hash of the Sputnik 3.2 global contract on mainnet.
+- hh.sputnik-dao.near:4 and sweat-multisig.sputnik-dao.near:21 were read against the DAO's stored proposal history in the census, which is not on the cards.

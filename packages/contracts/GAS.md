@@ -1,6 +1,6 @@
 # Gas and storage for the Kaap contracts
 
-Measured on 29 Oct 2026 (WO-02a, enrolment and builds again for WO-02a2) in a local near-sandbox (nearcore 2.13.4, protocol 86, the protocol mainnet runs) against the real Sputnik DAO 3.2 binary (code hash `DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF`). The contracts were built with `cargo near build non-reproducible-wasm` (cargo-near 0.22.0, Rust 1.93.0, near-sdk 5.29.1):
+Measured on 29 Oct 2026 (the run in `PROOF-sandbox.txt`, with enrolment and the builds measured again in `PROOF-clean-clone-deploy.txt`) in a local near-sandbox (nearcore 2.13.4, protocol 86, the protocol mainnet runs) against the real Sputnik DAO 3.2 binary (code hash `DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF`). The contracts were built with `cargo near build non-reproducible-wasm` (cargo-near 0.22.0, Rust 1.93.0, near-sdk 5.29.1):
 
 | Contract | Size | sha256 |
 |---|---|---|
@@ -99,4 +99,4 @@ Attaching 0.02 NEAR to `record` always covers the storage: the largest record al
 
 - A policy-shaped kind much above 200 KB cannot be vetoed: at 198 KB the whole veto already burnt 291 of the 300 Tgas a transaction may carry.
 - kaap-verdict refuses to canonicalise anything over 256 KiB, so the guard answers ERR_BAD_KIND for such a kind and cannot veto it at any gas. A FunctionCall padded past that size is cheap to file: the 196,735-byte one above was filed and vetoed without trouble.
-- Both are stated limits, in the Limits section of `guard/README.md`: the sealed job holds such a proposal and the worker alerts members that it cannot be judged or vetoed (WO-06b).
+- Both are stated limits, in the Limits section of `guard/README.md`: the sealed job holds such a proposal and the worker (`packages/worker`) alerts members that it cannot be judged or vetoed.

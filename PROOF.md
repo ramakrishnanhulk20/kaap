@@ -1,4 +1,4 @@
-# M1 proof: a disguised payment killed by Kaap on the live testnet
+# Testnet proof: a disguised payment killed by Kaap on the live testnet
 
 Run on 11 Nov 2026 between 07:30 and 07:34 UTC, inside WSL, with Node 22.23.2 and near-api-js 7.4.0, against NEAR testnet (RPC `https://rpc.testnet.fastnear.com`) and the deployment made the same morning from commit `413a74a`. The four proposals were filed at testnet blocks 277184659, 277184718, 277184814 and 277184874.
 
@@ -295,7 +295,7 @@ What one stopped attack costs Kaap, without the proposer's own filing (run 2):
 - the record: 0.00032 gas plus 0.00638 storage;
 - the veto: 0.00080.
 
-That is about 0.0096 testnet NEAR, two thirds of it the record's storage. At the M0 spike's $4.72 per NEAR, the same on mainnet would be about 4.5 cents.
+That is about 0.0096 testnet NEAR, two thirds of it the record's storage. At the early OutLayer trial's $4.72 per NEAR, the same on mainnet would be about 4.5 cents.
 
 ## The invariants, and where the output shows them
 
@@ -305,7 +305,7 @@ That is about 0.0096 testnet NEAR, two thirds of it the record's storage. At the
 | C9, the guard vetoes only a critical verdict backed by a plain-code finding | Attack: `verdict risk: critical, floor: critical, findings: [DESC_CONTRADICTS, UNKNOWN_VALUE], ai_status: unavailable`, vetoed. Control: `risk high, floor high, findings [UNKNOWN_VALUE]`, refused with ERR_NOT_VETOABLE, `status: InProgress`, `no veto`. | guard `lib.rs`, `is_vetoable`; kaap-core `severity.rs` (DESC_CONTRADICTS is critical when value moves) |
 | C15, the guard can only cast VoteReject | `C15 held`: in the veto transaction the guard created exactly two receipts, `act_proposal` with action VoteReject to the DAO and its own `on_veto_result`. `votes: {kaap-guard-1111072803.testnet: Reject}` and nothing else. | guard `lib.rs`, `veto` (the method and the action are fixed in the code) |
 | C19, a verdict is used once | `replay: the same verdict and kind again: refused with ERR_REPLAY`, a real transaction each run. The verdict line shows it names the guard, testnet, the DAO, the proposal id, the kind hash and an expiry. | guard `lib.rs`, `veto` (the `vetoes` map, keyed by the verdict's hash) |
-| C22, the sealed job's reads agreed | `sealed job: status ok` and `C22 held` with the final block the job read at. A disagreement makes the job print `held` and sign nothing, and the script then fails the case. WO-02b forced that once ([ACQcwBVx...](https://testnet.nearblocks.io/txns/ACQcwBVxwAKDQZSf7p8oi8ZWTotrLVNAhb89vp4wWFfW)). | `packages/sealed/src/reads.rs`, `read_chain`, and `job.rs`, `run` |
+| C22, the sealed job's reads agreed | `sealed job: status ok` and `C22 held` with the final block the job read at. A disagreement makes the job print `held` and sign nothing, and the script then fails the case. The sealed job's first testnet trial forced that once ([ACQcwBVx...](https://testnet.nearblocks.io/txns/ACQcwBVxwAKDQZSf7p8oi8ZWTotrLVNAhb89vp4wWFfW)). | `packages/sealed/src/reads.rs`, `read_chain`, and `job.rs`, `run` |
 
 ## No AI answer, and why the veto still stands
 
@@ -314,11 +314,11 @@ No NEAR AI key reached these runs, so every verdict here says `ai_status: unavai
 - An AI answer can raise a verdict, never lower it.
 - An AI answer can only make a verdict critical when it is verified.
 
-The control's high floor comes from UNKNOWN_VALUE. The sealed job has no price source yet, so every token counts as unpriced. This is the known gap recorded in STATE on 29 Oct. The guard does not vote on a high verdict.
+The control's high floor comes from UNKNOWN_VALUE. The sealed job has no price source yet, so every token counts as unpriced. This gap has been known since 29 Oct 2026. The guard does not vote on a high verdict.
 
 ## The race this demo does not hide
 
-The treasury needs both Approvers to pass a payment, so one approval never executes it, and the guard has time to vote first. The live NEAR Business policy is 2 of 2 too. A treasury where one approval is enough loses that race: the payment runs inside the approver's own transaction, and the guard's later vote finds nothing to reject (the M0 sandbox test `alice_alone_approves_first`). Kaap cannot protect such a treasury against an approver acting alone.
+The treasury needs both Approvers to pass a payment, so one approval never executes it, and the guard has time to vote first. The live NEAR Business policy is 2 of 2 too. A treasury where one approval is enough loses that race: the payment runs inside the approver's own transaction, and the guard's later vote finds nothing to reject (shown before the build by a sandbox test on the real Sputnik 3.2 binary, `alice_alone_approves_first`). Kaap cannot protect such a treasury against an approver acting alone.
 
 ## Why it was deployed again on 11 Nov
 
@@ -326,8 +326,8 @@ The contracts deployed on 29 Oct were built at commit `8818af0`, before the verd
 
 ## What this does not cover
 
-- One treasury, one attack family (a payment to a lookalike of the named account) and one control. The hidden-approver attack (#01) needs WO-03c and is shown in WO-08.
-- The script plays the worker. Nothing here watches the chain or reacts on its own; WO-06a builds that.
+- One treasury, one attack family (a payment to a lookalike of the named account) and one control. The hidden-approver attack (#01) depends on the plain-code description checks and is left to the attack suite.
+- The script plays the worker. Nothing here watches the chain or reacts on its own; that is the worker's job (`packages/worker`).
 - No AI answer was asked for (no key reached the runs), and no price source exists, so no verdict here is low.
 - Runs one after another from one machine: no load and nothing concurrent. No approver raced the guard, because the attack proposals were never approved by anyone.
 - The payees are keyless accounts made for the demo. The 500 NEAR payments could not have paid out, because the treasury does not hold 500 NEAR. The guard's vote does not depend on that, and the Rejected status is the proof.
@@ -337,7 +337,7 @@ The contracts deployed on 29 Oct were built at commit `8818af0`, before the verd
 
 ## The first deployment, 29 Oct 2026
 
-The first M1 proof ran against contracts built at commit `8818af0`. They are still on chain, their records stay valid, and recorded test fixtures still point at them. Every id is kept in `deployments/testnet-2026-10-29.json`, which is never edited.
+The first testnet proof ran against contracts built at commit `8818af0`. They are still on chain, their records stay valid, and recorded test fixtures still point at them. Every id is kept in `deployments/testnet-2026-10-29.json`, whose ids are never changed.
 
 | Thing | Value |
 |---|---|
@@ -350,6 +350,6 @@ On 29 Oct the proof passed twice in a row, at 07:10 and 07:12 UTC. Attack #2 was
 What went wrong on the way that day:
 - The first attack-only run passed: proposal #1, Rejected, [veto 8JeFv3Yi...](https://testnet.nearblocks.io/txns/8JeFv3YitSeY5VNu5j8nihNiywmFBFgxb6XMSzu1xEN), 24.2 s.
 - The first whole run stopped before any Kaap transaction. The faucet answered HTTP 429 ("retry in 11 hours") to the per-run account it was asked for. The payee parent is now a sub-account of the member.
-- The retry stopped on `actions.addKey is not a function`: near-api-js 7.4.0 exports `addFullAccessKey`. The head chef fixed that line.
+- The retry stopped on `actions.addKey is not a function`: near-api-js 7.4.0 exports `addFullAccessKey`. That line was fixed.
 - The next run's payee parent, funded with 0.05 NEAR, could not afford the third payee. Each account creation must show about 0.0175 NEAR up front. That parent, `m1-1029070926.kaap-member-1029064001.testnet`, holds its two payees and 0.0158 NEAR. The parent now gets 0.1 NEAR.
 - Two key files in `~/.near-credentials/testnet` belong to accounts that were never made (`kaap-m1-1029070403`, `m1-1029070538.kaap-member-1029064001`). They are harmless.

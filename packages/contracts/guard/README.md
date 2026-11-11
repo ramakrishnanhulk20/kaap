@@ -21,7 +21,7 @@ No other method creates a promise, and nothing in the code builds any action but
 
 ## Who holds the owner key
 
-The owner is Ram. On testnet the owner account is `kaap-owner-1029061211.testnet`, made by the deploy script, with its key kept only on Ram's machine. On mainnet the owner will be Ram's own NEAR account.
+The owner is Kaap's founder. On testnet the owner account is `kaap-owner-1029061211.testnet`, made by the deploy script, with its key kept only on the founder's machine. On mainnet the owner will be the founder's own NEAR account.
 
 The owner can do two things and nothing else: replace the accepted key with `set_accepted_key` (every change emits `key_changed` with the old and the new key, public on chain, so Kaap's worker can alert every enrolled DAO's members, C18), and hand ownership to another account in two steps, `propose_owner` then `accept_owner` by the new owner. Both need exactly one yoctoNEAR attached, so only a full-access key can call them. The owner cannot make the guard vote, cannot enrol or remove a DAO, and cannot change the code.
 
@@ -79,6 +79,6 @@ These proposals cannot be vetoed, whatever the verdict says:
 - A kind whose vote cannot fit in the 300 Tgas one transaction may carry. Big policies cost the most per byte: a 117,526-byte ChangePolicy veto burnt 171.6 Tgas, and a 197,966-byte one 291.3 Tgas (guard 122.7, DAO 155.1, callback 1.6), so policy kinds over about 200 KB do not fit.
 - A RemoveMemberFromRole proposal, by design: the Guard role never holds VoteReject on it, so a DAO can always remove Kaap. The DAO refuses the vote and the guard records the refusal.
 
-For the first two, Kaap's sealed job holds the proposal instead of signing a veto for it, and the worker alerts the DAO's members that it cannot be judged or vetoed, so a person looks at it (WO-06b). Every measurement is in `../GAS.md`.
+For the first two, Kaap's sealed job holds the proposal instead of signing a veto for it, and the worker alerts the DAO's members that it cannot be judged or vetoed, so a person looks at it (the alerts are in `packages/worker`). Every measurement is in `../GAS.md`.
 
 The guard pays for one thing itself: each used verdict takes 74 bytes of its storage (84 when the DAO refused the vote), about 0.0008 NEAR. Only a verdict the accepted key signed can create one. Enrolments are paid by the DAO.

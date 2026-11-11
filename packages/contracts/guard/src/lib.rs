@@ -167,7 +167,7 @@ fn require_one_yocto() {
     );
 }
 
-/// The veto rule (threat model C9; Ram's rulings of 20 and 23 Oct 2026), the same test as
+/// The veto rule (threat model C9; decided 20 and 23 Oct 2026), the same test as
 /// `backed_by_proof` in kaap-core's `floor::finish`. The verdict must be critical and its
 /// plain-code floor high or critical, and at least one finding other than HASH_UNVERIFIED must
 /// be high or critical in its own right: an unexplained hash alerts but never vetoes, so a high

@@ -29,8 +29,8 @@ pub const ERR_NOT_ENOUGH_DEPOSIT: &str = "ERR_NOT_ENOUGH_DEPOSIT";
 
 /// The largest verdict accepted, in borsh bytes. A verdict's fixed fields take about 300 bytes,
 /// and the sealed job's whole output, verdict and signature together, is capped at 900 bytes
-/// (DECISIONS.md, 26 Oct 2026), so anything bigger cannot have come from it. The cap also bounds
-/// what one `history` page can return.
+/// (`MAX_OUTPUT_BYTES` in kaap-sealed, decided 26 Oct 2026), so anything bigger cannot have come
+/// from it. The cap also bounds what one `history` page can return.
 pub const MAX_VERDICT_BYTES: usize = 1024;
 
 /// The most records one `history` page returns. Measured as a transaction: 1.47 Tgas for one

@@ -1,14 +1,14 @@
-WO-02a2 proof run, 2026-10-29 06:06 UTC, inside WSL, CARGO_TARGET_DIR=/home/ram/kaap-target-contracts
+Clean-clone deploy proof run, 2026-10-29 06:06 UTC, inside WSL, CARGO_TARGET_DIR=~/kaap-target-contracts
 rustc 1.93.0 (254b59607 2026-01-19)
 cargo 1.93.0 (083ac5135 2025-12-15)
 cargo-near-near 0.22.0
 Migrating config.toml from V4 to V5...
-Note: `near` CLI configuration is stored in "/home/ram/.config/near-cli/config.toml"
+Note: `near` CLI configuration is stored in "~/.config/near-cli/config.toml"
 near-cli-rs 0.30.1
 
-== First test run, before the ruling (without the fetch script): bash scripts/test-all.sh
+== First test run, before option (a) below (without the fetch script): bash scripts/test-all.sh
     Finished `test` profile [unoptimized + debuginfo] target(s) in 13.97s
-     Running unittests src/lib.rs (/home/ram/kaap-target-contracts/debug/deps/kaap_core-0d4c5d078c79fa01)
+     Running unittests src/lib.rs (~/kaap-target-contracts/debug/deps/kaap_core-0d4c5d078c79fa01)
 
 running 3 tests
 test decode::known::tests::staking_pool_needs_pattern_and_method ... ok
@@ -17,7 +17,7 @@ test tests::labels_match_sputnik ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/canonical.rs (/home/ram/kaap-target-contracts/debug/deps/canonical-09bd5137565f15fb)
+     Running tests/canonical.rs (~/kaap-target-contracts/debug/deps/canonical-09bd5137565f15fb)
 
 running 11 tests
 test ambiguous_or_malformed_json_is_refused ... ok
@@ -34,7 +34,7 @@ test input_over_256_kib_is_refused ... ok
 
 test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
-     Running tests/decoders.rs (/home/ram/kaap-target-contracts/debug/deps/decoders-68aafa7183bf35de)
+     Running tests/decoders.rs (~/kaap-target-contracts/debug/deps/decoders-68aafa7183bf35de)
 
 running 15 tests
 test amounts_go_through_one_integer_parser ... ok
@@ -55,14 +55,14 @@ test a_transfer_sputnik_could_not_hold_is_unknown_call ... ok
 
 test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
 
-     Running tests/eval.rs (/home/ram/kaap-target-contracts/debug/deps/eval-a10cd2123ab71b70)
+     Running tests/eval.rs (~/kaap-target-contracts/debug/deps/eval-a10cd2123ab71b70)
 
 running 1 test
 test eval ... ok
 
 test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
 
-     Running tests/floor.rs (/home/ram/kaap-target-contracts/debug/deps/floor-7b59ef32b88d2715)
+     Running tests/floor.rs (~/kaap-target-contracts/debug/deps/floor-7b59ef32b88d2715)
 
 running 3 tests
 test codes_are_deduplicated_and_ordered_by_the_table ... ok
@@ -71,7 +71,7 @@ test twelve_floor_and_veto_cases ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/severity.rs (/home/ram/kaap-target-contracts/debug/deps/severity-33b16eedf6210874)
+     Running tests/severity.rs (~/kaap-target-contracts/debug/deps/severity-33b16eedf6210874)
 
 running 8 tests
 test guard_weakened_alongside_counts_as_control ... ok
@@ -85,7 +85,7 @@ test member_entries_without_approver_are_refused ... ok
 
 test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/verdict.rs (/home/ram/kaap-target-contracts/debug/deps/verdict-2eecfcf602c01a65)
+     Running tests/verdict.rs (~/kaap-target-contracts/debug/deps/verdict-2eecfcf602c01a65)
 
 running 5 tests
 test byte_layout_is_pinned ... ok
@@ -96,13 +96,13 @@ test hash_is_sha256_of_the_bytes_and_every_field_counts ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/lib.rs (/home/ram/kaap-target-contracts/debug/deps/kaap_core_wasm-452119c5d4c78014)
+     Running unittests src/lib.rs (~/kaap-target-contracts/debug/deps/kaap_core_wasm-452119c5d4c78014)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/lib.rs (/home/ram/kaap-target-contracts/debug/deps/kaap_guard-d2d74cb2f264e9c9)
+     Running unittests src/lib.rs (~/kaap-target-contracts/debug/deps/kaap_guard-d2d74cb2f264e9c9)
 
 running 40 tests
 test tests::err_bad_key_for_a_bare_base58_key - should panic ... ok
@@ -148,7 +148,7 @@ test tests::enrolled_daos_pages_and_caps_the_limit ... ok
 
 test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.13s
 
-     Running ../tests/guard.rs (/home/ram/kaap-target-contracts/debug/deps/guard_sandbox-71b62cfef8ad1215)
+     Running ../tests/guard.rs (~/kaap-target-contracts/debug/deps/guard_sandbox-71b62cfef8ad1215)
 
 running 22 tests
 test a_vote_the_dao_refuses_for_a_different_kind_is_recorded ... ok
@@ -191,7 +191,7 @@ test gas_report ... ok
 
 test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 122.84s
 
-     Running unittests src/lib.rs (/home/ram/kaap-target-contracts/debug/deps/kaap_registry-d4f675c4fd2ac907)
+     Running unittests src/lib.rs (~/kaap-target-contracts/debug/deps/kaap_registry-d4f675c4fd2ac907)
 
 running 17 tests
 test tests::err_bad_key_at_init - should panic ... ok
@@ -214,7 +214,7 @@ test tests::history_caps_the_page_and_pages_past_the_end_are_empty ... ok
 
 test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.55s
 
-     Running ../tests/registry.rs (/home/ram/kaap-target-contracts/debug/deps/registry_sandbox-76d94c1d835dc271)
+     Running ../tests/registry.rs (~/kaap-target-contracts/debug/deps/registry_sandbox-76d94c1d835dc271)
 
 running 7 tests
 test err_not_enough_deposit_when_the_storage_is_not_covered ... ok
@@ -227,19 +227,19 @@ test gas_report ... ok
 
 test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 27.31s
 
-     Running unittests src/lib.rs (/home/ram/kaap-target-contracts/debug/deps/kaap_sealed-afc628d9fe927c89)
+     Running unittests src/lib.rs (~/kaap-target-contracts/debug/deps/kaap_sealed-afc628d9fe927c89)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/main.rs (/home/ram/kaap-target-contracts/debug/deps/kaap_sealed-d46fc37b8958b333)
+     Running unittests src/main.rs (~/kaap-target-contracts/debug/deps/kaap_sealed-d46fc37b8958b333)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/ai_answer.rs (/home/ram/kaap-target-contracts/debug/deps/ai_answer-475d2b51d6e6e3d2)
+     Running tests/ai_answer.rs (~/kaap-target-contracts/debug/deps/ai_answer-475d2b51d6e6e3d2)
 
 running 8 tests
 test a_well_formed_answer_is_accepted ... ok
@@ -253,7 +253,7 @@ test only_the_pinned_sealed_model_passes_the_catalog_check ... ok
 
 test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
-     Running tests/ai_call.rs (/home/ram/kaap-target-contracts/debug/deps/ai_call-274627cd13d4bf20)
+     Running tests/ai_call.rs (~/kaap-target-contracts/debug/deps/ai_call-274627cd13d4bf20)
 
 running 6 tests
 test no_key_means_no_request_at_all ... ok
@@ -265,7 +265,7 @@ test failures_and_refused_answers_are_unavailable ... ok
 
 test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/input.rs (/home/ram/kaap-target-contracts/debug/deps/input-5b0e28a4f43e6017)
+     Running tests/input.rs (~/kaap-target-contracts/debug/deps/input-5b0e28a4f43e6017)
 
 running 8 tests
 test a_good_input_is_accepted_as_written ... ok
@@ -279,7 +279,7 @@ test unknown_missing_and_duplicate_fields_are_refused ... ok
 
 test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/job.rs (/home/ram/kaap-target-contracts/debug/deps/job-29eee9226bfd3e23)
+     Running tests/job.rs (~/kaap-target-contracts/debug/deps/job-29eee9226bfd3e23)
 
 running 6 tests
 test the_code_calls_no_host_outside_the_manifest ... ok
@@ -291,7 +291,7 @@ test every_fixture_runs_to_a_verdict_under_the_cap ... ok
 
 test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
 
-     Running tests/prompt.rs (/home/ram/kaap-target-contracts/debug/deps/prompt-30863355a267ac4f)
+     Running tests/prompt.rs (~/kaap-target-contracts/debug/deps/prompt-30863355a267ac4f)
 
 running 6 tests
 test every_string_key_list_and_level_is_capped ... ok
@@ -303,7 +303,7 @@ test facts_that_cannot_fit_are_not_sent ... ok
 
 test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
-     Running tests/proposal.rs (/home/ram/kaap-target-contracts/debug/deps/proposal-f0719e08ff3a6544)
+     Running tests/proposal.rs (~/kaap-target-contracts/debug/deps/proposal-f0719e08ff3a6544)
 
 running 3 tests
 test the_input_is_the_agreed_read ... ok
@@ -312,7 +312,7 @@ test analyze_runs_on_exactly_that_input ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
 
-     Running tests/reads.rs (/home/ram/kaap-target-contracts/debug/deps/reads-414a115d9fea6303)
+     Running tests/reads.rs (~/kaap-target-contracts/debug/deps/reads-414a115d9fea6303)
 
 running 9 tests
 test called_accounts_follow_what_sputnik_executes ... ok
@@ -327,7 +327,7 @@ test any_difference_in_what_is_judged_holds_the_job ... ok
 
 test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
 
-     Running tests/verdict.rs (/home/ram/kaap-target-contracts/debug/deps/verdict-d0f4519a3d222f69)
+     Running tests/verdict.rs (~/kaap-target-contracts/debug/deps/verdict-d0f4519a3d222f69)
 
 running 5 tests
 test the_ai_never_pushes_risk_below_the_floor ... ok
@@ -370,8 +370,8 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 EXIT test-all.sh: 0
 
-== Item 5 (clean clone): first stopped, because no upstream repository URL serves the exact bytes (findings below);
-== resolved by the head chef's ruling (a): scripts/fetch-sputnik-wasm.sh reads the global contract from mainnet RPC
+== Clean clone: first stopped, because no upstream repository URL serves the exact bytes (findings below);
+== resolved by option (a): scripts/fetch-sputnik-wasm.sh reads the global contract from mainnet RPC
 Checked 29 Oct 2026 through the GitHub API, matching on the git blob id of our 20 Oct copy of the Sputnik 3.2 wasm
 (444,088 bytes, sha256 bf6f951ee5e45968e3367fa857bebf8bc80badec183998c2239c487237e0d7f6, git blob 64550e26f2e94e230b1d49c6b832561109965058):
 - commit 2b0f34a3860460f285307ec2ccf36345acbe05a2 (the factory's 3.2 metadata): wasm files are only sputnikdao2_original.wasm (469,723) and sputnikdao2/tests/ref_exchange_release.wasm (373,824). No match.
@@ -380,11 +380,11 @@ Checked 29 Oct 2026 through the GitHub API, matching on the git blob id of our 2
 - fe699d3 (25 Feb 2026, "Added Global Contracts support") removed every committed res/*.wasm; the last copy before it (af36ff6) is sputnikdao2/res/sputnikdao2.wasm, 430,308 bytes, blob a5ac507f. No match.
 So 3.2 exists only on chain, as the global contract with code hash DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF. The fetch script now takes it from there, and the sandbox tests read only packages/contracts/tests/wasm/ (git-ignored).
 
-== DONE MEANS 2: redeploy, run once, inside WSL with CARGO_TARGET_DIR=/home/ram/kaap-target-contracts
+== Check 2: redeploy, run once, inside WSL with CARGO_TARGET_DIR=~/kaap-target-contracts
 $ KAAP_ACCEPTED_KEY=ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN bash scripts/deploy-contracts-testnet.sh
 Kaap testnet deploy, 2026-10-29 06:12:11 UTC
 accepted key: ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN
-guard owner: kaap-owner-1029061211.testnet (new faucet account; its key is in /home/ram/.near-credentials/testnet/kaap-owner-1029061211.testnet.json)
+guard owner: kaap-owner-1029061211.testnet (new faucet account; its key is in ~/.near-credentials/testnet/kaap-owner-1029061211.testnet.json)
 
 kaap-guard:    kaap-guard-1029061211.testnet
   code sha256: 5adbadb5282e0cf43ab9347d73249ce092be06fd7120aa6294a8bee5797dec76
@@ -400,7 +400,7 @@ kaap-registry: kaap-registry-1029061211.testnet
   key deleted: https://testnet.nearblocks.io/txns/Bin4nWQAJLx8jaJ2GuovuSAwHLmknTNRCrvd3U8VML19
   views:       accepted_key="ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN" network="testnet"
 
-No full-access key is left on the contract accounts. Full log: /home/ram/kaap-target-contracts/near-deploy/deploy-1029061211.log
+No full-access key is left on the contract accounts. Full log: ~/kaap-target-contracts/near-deploy/deploy-1029061211.log
 exit code: 0
 
 == Checked afterwards over RPC
@@ -412,7 +412,7 @@ kaap-registry-1029061211.testnet: block 275260823, code_hash 65Y2p3NqwjE8z8oXdzv
 {
   "network": "testnet",
   "deployed_at": "2026-10-29T06:12:11Z",
-  "deployed_by": "scripts/deploy-contracts-testnet.sh (work order WO-02a2)",
+  "deployed_by": "scripts/deploy-contracts-testnet.sh",
   "accepted_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
   "guard": {
     "account_id": "kaap-guard-1029061211.testnet",
@@ -433,7 +433,7 @@ kaap-registry-1029061211.testnet: block 275260823, code_hash 65Y2p3NqwjE8z8oXdzv
   },
   "owner": {
     "account_id": "kaap-owner-1029061211.testnet",
-    "held_by": "Ram; the key is only in ~/.near-credentials/testnet/kaap-owner-1029061211.testnet.json inside WSL on his machine"
+    "held_by": "Kaap's founder; the key is only in ~/.near-credentials/testnet/kaap-owner-1029061211.testnet.json inside WSL on the founder's machine"
   },
   "sealed": {
     "project_id": "kaap-worker-1029053612.testnet/kaap-sealed",
@@ -444,15 +444,15 @@ kaap-registry-1029061211.testnet: block 275260823, code_hash 65Y2p3NqwjE8z8oXdzv
   }
 }
 
-== DONE MEANS 1 as written, after the ruling
-WO-02a2 DONE MEANS 1 as written, 2026-10-29 06:17 UTC, inside WSL, CARGO_TARGET_DIR=/home/ram/kaap-target-contracts
+== Check 1 in full (fetch script, then tests), after option (a)
+Clean-clone check 1 in full, 2026-10-29 06:17 UTC, inside WSL, CARGO_TARGET_DIR=~/kaap-target-contracts
 before the run: ls: cannot access 'packages/contracts/tests/wasm': No such file or directory
 $ bash scripts/fetch-sputnik-wasm.sh && bash scripts/test-all.sh
 asking https://rpc.mainnet.fastnear.com for global contract DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF
   answered at block 222086542
 saved packages/contracts/tests/wasm/sputnik-dao-3.2.wasm: 444088 bytes, sha256 bf6f951ee5e45968e3367fa857bebf8bc80badec183998c2239c487237e0d7f6 (code hash DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 8.79s
-     Running unittests src/lib.rs (/home/ram/kaap-target-contracts/debug/deps/kaap_core-0d4c5d078c79fa01)
+     Running unittests src/lib.rs (~/kaap-target-contracts/debug/deps/kaap_core-0d4c5d078c79fa01)
 
 running 3 tests
 test decode::known::tests::exact_accounts_only ... ok
@@ -461,7 +461,7 @@ test tests::labels_match_sputnik ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/canonical.rs (/home/ram/kaap-target-contracts/debug/deps/canonical-09bd5137565f15fb)
+     Running tests/canonical.rs (~/kaap-target-contracts/debug/deps/canonical-09bd5137565f15fb)
 
 running 11 tests
 test ambiguous_or_malformed_json_is_refused ... ok
@@ -478,7 +478,7 @@ test input_over_256_kib_is_refused ... ok
 
 test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
 
-     Running tests/decoders.rs (/home/ram/kaap-target-contracts/debug/deps/decoders-68aafa7183bf35de)
+     Running tests/decoders.rs (~/kaap-target-contracts/debug/deps/decoders-68aafa7183bf35de)
 
 running 15 tests
 test amounts_go_through_one_integer_parser ... ok
@@ -499,14 +499,14 @@ test a_transfer_sputnik_could_not_hold_is_unknown_call ... ok
 
 test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
 
-     Running tests/eval.rs (/home/ram/kaap-target-contracts/debug/deps/eval-a10cd2123ab71b70)
+     Running tests/eval.rs (~/kaap-target-contracts/debug/deps/eval-a10cd2123ab71b70)
 
 running 1 test
 test eval ... ok
 
 test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s
 
-     Running tests/floor.rs (/home/ram/kaap-target-contracts/debug/deps/floor-7b59ef32b88d2715)
+     Running tests/floor.rs (~/kaap-target-contracts/debug/deps/floor-7b59ef32b88d2715)
 
 running 3 tests
 test codes_are_deduplicated_and_ordered_by_the_table ... ok
@@ -515,7 +515,7 @@ test twelve_floor_and_veto_cases ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/severity.rs (/home/ram/kaap-target-contracts/debug/deps/severity-33b16eedf6210874)
+     Running tests/severity.rs (~/kaap-target-contracts/debug/deps/severity-33b16eedf6210874)
 
 running 8 tests
 test codes_other_than_desc_contradicts_ignore_context ... ok
@@ -529,7 +529,7 @@ test table_covers_all_24_codes_with_the_guide_severities ... ok
 
 test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/verdict.rs (/home/ram/kaap-target-contracts/debug/deps/verdict-2eecfcf602c01a65)
+     Running tests/verdict.rs (~/kaap-target-contracts/debug/deps/verdict-2eecfcf602c01a65)
 
 running 5 tests
 test byte_layout_is_pinned ... ok
@@ -540,13 +540,13 @@ test hash_is_sha256_of_the_bytes_and_every_field_counts ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/lib.rs (/home/ram/kaap-target-contracts/debug/deps/kaap_core_wasm-452119c5d4c78014)
+     Running unittests src/lib.rs (~/kaap-target-contracts/debug/deps/kaap_core_wasm-452119c5d4c78014)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/lib.rs (/home/ram/kaap-target-contracts/debug/deps/kaap_guard-d2d74cb2f264e9c9)
+     Running unittests src/lib.rs (~/kaap-target-contracts/debug/deps/kaap_guard-d2d74cb2f264e9c9)
 
 running 40 tests
 test tests::err_bad_key_for_a_bare_base58_key - should panic ... ok
@@ -592,7 +592,7 @@ test tests::enrolled_daos_pages_and_caps_the_limit ... ok
 
 test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.15s
 
-     Running ../tests/guard.rs (/home/ram/kaap-target-contracts/debug/deps/guard_sandbox-71b62cfef8ad1215)
+     Running ../tests/guard.rs (~/kaap-target-contracts/debug/deps/guard_sandbox-71b62cfef8ad1215)
 
 running 22 tests
 test err_bad_kind_for_a_kind_that_is_not_json ... ok
@@ -621,7 +621,7 @@ test gas_report ... ok
 
 test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 83.71s
 
-     Running unittests src/lib.rs (/home/ram/kaap-target-contracts/debug/deps/kaap_registry-d4f675c4fd2ac907)
+     Running unittests src/lib.rs (~/kaap-target-contracts/debug/deps/kaap_registry-d4f675c4fd2ac907)
 
 running 17 tests
 test tests::err_bad_key_at_init - should panic ... ok
@@ -644,7 +644,7 @@ test tests::history_caps_the_page_and_pages_past_the_end_are_empty ... ok
 
 test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.42s
 
-     Running ../tests/registry.rs (/home/ram/kaap-target-contracts/debug/deps/registry_sandbox-76d94c1d835dc271)
+     Running ../tests/registry.rs (~/kaap-target-contracts/debug/deps/registry_sandbox-76d94c1d835dc271)
 
 running 7 tests
 test err_not_enough_deposit_when_the_storage_is_not_covered ... ok
@@ -657,19 +657,19 @@ test gas_report ... ok
 
 test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 23.56s
 
-     Running unittests src/lib.rs (/home/ram/kaap-target-contracts/debug/deps/kaap_sealed-afc628d9fe927c89)
+     Running unittests src/lib.rs (~/kaap-target-contracts/debug/deps/kaap_sealed-afc628d9fe927c89)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/main.rs (/home/ram/kaap-target-contracts/debug/deps/kaap_sealed-d46fc37b8958b333)
+     Running unittests src/main.rs (~/kaap-target-contracts/debug/deps/kaap_sealed-d46fc37b8958b333)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/ai_answer.rs (/home/ram/kaap-target-contracts/debug/deps/ai_answer-475d2b51d6e6e3d2)
+     Running tests/ai_answer.rs (~/kaap-target-contracts/debug/deps/ai_answer-475d2b51d6e6e3d2)
 
 running 8 tests
 test anything_but_the_exact_schema_is_refused ... ok
@@ -683,7 +683,7 @@ test only_the_pinned_sealed_model_passes_the_catalog_check ... ok
 
 test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
-     Running tests/ai_call.rs (/home/ram/kaap-target-contracts/debug/deps/ai_call-274627cd13d4bf20)
+     Running tests/ai_call.rs (~/kaap-target-contracts/debug/deps/ai_call-274627cd13d4bf20)
 
 running 6 tests
 test no_key_means_no_request_at_all ... ok
@@ -695,7 +695,7 @@ test failures_and_refused_answers_are_unavailable ... ok
 
 test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/input.rs (/home/ram/kaap-target-contracts/debug/deps/input-5b0e28a4f43e6017)
+     Running tests/input.rs (~/kaap-target-contracts/debug/deps/input-5b0e28a4f43e6017)
 
 running 8 tests
 test a_good_input_is_accepted_as_written ... ok
@@ -709,7 +709,7 @@ test unknown_missing_and_duplicate_fields_are_refused ... ok
 
 test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/job.rs (/home/ram/kaap-target-contracts/debug/deps/job-29eee9226bfd3e23)
+     Running tests/job.rs (~/kaap-target-contracts/debug/deps/job-29eee9226bfd3e23)
 
 running 6 tests
 test a_refused_input_makes_no_outside_call ... ok
@@ -721,7 +721,7 @@ test an_unverified_ai_answer_raises_to_high_at_most_and_the_key_never_shows ... 
 
 test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
 
-     Running tests/prompt.rs (/home/ram/kaap-target-contracts/debug/deps/prompt-30863355a267ac4f)
+     Running tests/prompt.rs (~/kaap-target-contracts/debug/deps/prompt-30863355a267ac4f)
 
 running 6 tests
 test every_string_key_list_and_level_is_capped ... ok
@@ -733,7 +733,7 @@ test facts_that_cannot_fit_are_not_sent ... ok
 
 test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
-     Running tests/proposal.rs (/home/ram/kaap-target-contracts/debug/deps/proposal-f0719e08ff3a6544)
+     Running tests/proposal.rs (~/kaap-target-contracts/debug/deps/proposal-f0719e08ff3a6544)
 
 running 3 tests
 test a_proposal_no_longer_in_progress_has_no_policy_before ... ok
@@ -742,7 +742,7 @@ test analyze_runs_on_exactly_that_input ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
 
-     Running tests/reads.rs (/home/ram/kaap-target-contracts/debug/deps/reads-414a115d9fea6303)
+     Running tests/reads.rs (~/kaap-target-contracts/debug/deps/reads-414a115d9fea6303)
 
 running 9 tests
 test called_accounts_follow_what_sputnik_executes ... ok
@@ -757,7 +757,7 @@ test any_difference_in_what_is_judged_holds_the_job ... ok
 
 test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
 
-     Running tests/verdict.rs (/home/ram/kaap-target-contracts/debug/deps/verdict-d0f4519a3d222f69)
+     Running tests/verdict.rs (~/kaap-target-contracts/debug/deps/verdict-d0f4519a3d222f69)
 
 running 5 tests
 test a_verdict_too_big_for_the_output_is_not_signed ... ok

@@ -1,6 +1,6 @@
 # Shard 3: cases the labelling guide does not fully settle
 
-Labeller: shard-3. Labels are in `eval/real/labels-shard-3.jsonl`. Each entry gives the record ids, the two readings and the one used. Where the guide's text settles a case but a reader might differ, the entry says so. Reading A is the one written into the labels unless stated.
+Labeller: the AI labelling pass for shard 3. Labels are in `eval/real/labels-shard-3.jsonl`. Each entry gives the record ids, the two readings and the one used. Where the guide's text settles a case but a reader might differ, the entry says so. Reading A is the one written into the labels unless stated.
 
 How to read the effect of each entry: "floor change" says what the risk floor would become under the other reading. Findings that sit next to a finding of the same or higher severity change nothing about the floor or the veto fields.
 

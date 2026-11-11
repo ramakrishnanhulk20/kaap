@@ -1,11 +1,11 @@
-# Blind second labeller (blind-2): cases the guide v2.1 does not settle
+# Blind second labelling: cases the guide v2.1 does not settle
 
-Labelled by blind-2 on 20 Oct 2026 from `eval/blind/input.jsonl` (45 records). Where the guide was silent I took the higher-risk reading, as the work order says. Each entry gives the record, the reading taken, and the other reading, so the reconciler can see which way a disagreement would go.
+Labelled by a separate, blind AI labelling pass on 20 Oct 2026 from `eval/blind/input.jsonl` (45 records), without the answer key. Where the guide was silent I took the higher-risk reading, as the labelling instructions say. Each entry gives the record, the reading taken, and the other reading, so the reconciler can see which way a disagreement would go.
 
 ## Process notes (read these first)
 
-- Work order typo. The work order gives the NEP-413 prefix as u32 little-endian 2147483661. NEP-413's tag is 2^31 + 413 = 2147484061. I used 2147484061. It matters for planted:34 only. With 2147484061 the supplied text hashes exactly to the payload (68f79364...391c), so the finding is `HASH_TEXT_DANGEROUS`. With 2147483661 it would not match and the finding would be `HASH_MISMATCH`. Both are critical, so the floor, `must_veto` and `veto_allowed` do not change. For the NEP-461 text in templar:216 I used the prefix 2^30 + 366 and the hash matched the payload exactly.
-- Files outside the list that I touched, none of them label files. (1) One grep over `docs/` for a hash string printed one line of `docs/RD-BRIEF.md` (the Sputnik 3.2 code hash). (2) For deer:0 I read the unlabelled cards of deer:4, astra-testers:10 and mark_treasury:65 in `eval/real/cards` to compare hashes. (3) I listed the top level of `scratchpad/` (directory names only). I opened no file in the forbidden list.
+- Instruction typo. The labelling instructions give the NEP-413 prefix as u32 little-endian 2147483661. NEP-413's tag is 2^31 + 413 = 2147484061. I used 2147484061. It matters for planted:34 only. With 2147484061 the supplied text hashes exactly to the payload (68f79364...391c), so the finding is `HASH_TEXT_DANGEROUS`. With 2147483661 it would not match and the finding would be `HASH_MISMATCH`. Both are critical, so the floor, `must_veto` and `veto_allowed` do not change. For the NEP-461 text in templar:216 I used the prefix 2^30 + 366 and the hash matched the payload exactly.
+- Files outside the list that I touched, none of them label files. (1) One grep over `docs/` for a hash string printed one line of a private research note (the Sputnik 3.2 code hash). (2) For deer:0 I read the unlabelled cards of deer:4, astra-testers:10 and mark_treasury:65 in `eval/real/cards` to compare hashes. (3) I listed the top level of the private working folder (directory names only). I opened no file in the forbidden list.
 - NEAR has no row in tokens.json. I priced native NEAR at the `wrap.near` price, 4.81 USD.
 
 ## Effects and findings

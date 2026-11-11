@@ -1,12 +1,12 @@
 {
   "network": "testnet",
   "deployed_at": "2026-11-11T07:28:03Z",
-  "deployed_by": "scripts/deploy-contracts-testnet.sh (work order WO-02d)",
+  "deployed_by": "scripts/deploy-contracts-testnet.sh",
   "previous": "deployments/testnet-2026-10-29.json",
   "built_from": {
     "commit": "413a74aa91256a8c8603d1f84df33fde64abbcd3",
     "build": "cargo near build non-reproducible-wasm --locked, as scripts/deploy-contracts-testnet.sh runs it (cargo-near 0.22.0, Rust 1.93.0)",
-    "rebuilt": "built twice, in ~/kaap-target and in ~/kaap-target-wo02d; both builds gave the code_sha256 recorded for each contract"
+    "rebuilt": "built twice, in ~/kaap-target and in a second target folder; both builds gave the code_sha256 recorded for each contract"
   },
   "accepted_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
   "guard": {
@@ -28,7 +28,7 @@
   },
   "owner": {
     "account_id": "kaap-owner-1029061211.testnet",
-    "held_by": "Ram; the key is only in ~/.near-credentials/testnet/kaap-owner-1029061211.testnet.json inside WSL on his machine"
+    "held_by": "Kaap's founder; the key is only in ~/.near-credentials/testnet/kaap-owner-1029061211.testnet.json inside WSL on the founder's machine"
   },
   "sealed": {
     "project_id": "kaap-worker-1029053612.testnet/kaap-sealed",
@@ -38,10 +38,10 @@
     "attestation_url": "https://testnet-api.outlayer.ai/attestations/by-tx/7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC"
   },
   "dao": {
-    "set_up_by": "scripts/setup-demo-dao.mjs (work order WO-02d)",
+    "set_up_by": "scripts/setup-demo-dao.mjs",
     "member": {
       "account_id": "kaap-member-1029064001.testnet",
-      "held_by": "Ram; the key is only in ~/.near-credentials/testnet/kaap-member-1029064001.testnet.json inside WSL on his machine"
+      "held_by": "Kaap's founder; the key is only in ~/.near-credentials/testnet/kaap-member-1029064001.testnet.json inside WSL on the founder's machine"
     },
     "account_id": "kaap-dao-1111072928.testnet",
     "deploy_and_init_tx": "GJDgwXkEEFqrRR4p24ruZrjdvtcM3Hrp9r1RboWx3ePz",
