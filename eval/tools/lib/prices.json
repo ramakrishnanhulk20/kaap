@@ -1,0 +1,193 @@
+{
+  "source": "Rows copied unchanged from the census token list: the 1Click token list (GET /v0/tokens) as fetched on 20 Oct 2026, prices of 05:30 UTC that day. The full list is packages/core/tests/fixtures/tokens.json. Only the rows that a value-moving token in eval/real/labels.jsonl or eval/planted/labels.jsonl resolves to are kept; a token with no row here has no price.",
+  "rows": [
+    {
+      "assetId": "nep141:wrap.near",
+      "decimals": 24,
+      "blockchain": "near",
+      "symbol": "wNEAR",
+      "price": 4.81,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "contractAddress": "wrap.near",
+      "coingeckoId": "wrapped-near"
+    },
+    {
+      "assetId": "nep141:eth.bridge.near",
+      "decimals": 18,
+      "blockchain": "near",
+      "symbol": "ETH",
+      "price": 2405.09,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "contractAddress": "eth.bridge.near",
+      "coingeckoId": "ethereum"
+    },
+    {
+      "assetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "decimals": 6,
+      "blockchain": "near",
+      "symbol": "USDC",
+      "price": 0.999864,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "contractAddress": "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+      "coingeckoId": "usd-coin"
+    },
+    {
+      "assetId": "nep141:aaaaaa20d9e0e2461697782ef11675f668207961.factory.bridge.near",
+      "decimals": 18,
+      "blockchain": "near",
+      "symbol": "AURORA",
+      "price": 0.060331,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "contractAddress": "aaaaaa20d9e0e2461697782ef11675f668207961.factory.bridge.near",
+      "coingeckoId": "aurora-near"
+    },
+    {
+      "assetId": "nep141:token.0xshitzu.near",
+      "decimals": 18,
+      "blockchain": "near",
+      "symbol": "SHITZU",
+      "price": 0.00209264,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "contractAddress": "token.0xshitzu.near",
+      "coingeckoId": "shitzu"
+    },
+    {
+      "assetId": "nep141:zec.omft.near",
+      "decimals": 8,
+      "blockchain": "zec",
+      "symbol": "ZEC",
+      "price": 1146.59,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "coingeckoId": "zcash"
+    },
+    {
+      "assetId": "nep141:token.rhealab.near",
+      "decimals": 18,
+      "blockchain": "near",
+      "symbol": "RHEA",
+      "price": 0.069662,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "contractAddress": "token.rhealab.near",
+      "coingeckoId": "rhea-2"
+    },
+    {
+      "assetId": "nep141:token.publicailab.near",
+      "decimals": 18,
+      "blockchain": "near",
+      "symbol": "PUBLIC",
+      "price": 0.0056464,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "contractAddress": "token.publicailab.near",
+      "coingeckoId": "publicai"
+    },
+    {
+      "assetId": "nep141:npro.nearmobile.near",
+      "decimals": 24,
+      "blockchain": "near",
+      "symbol": "NPRO",
+      "price": 0.3344146346917769,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "contractAddress": "npro.nearmobile.near",
+      "coingeckoId": "npro"
+    },
+    {
+      "assetId": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near",
+      "decimals": 6,
+      "blockchain": "eth",
+      "symbol": "USDC",
+      "price": 0.999864,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "contractAddress": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "coingeckoId": "usd-coin"
+    },
+    {
+      "assetId": "nep141:cardano.omft.near",
+      "decimals": 6,
+      "blockchain": "cardano",
+      "symbol": "ADA",
+      "price": 0.217627,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "coingeckoId": "cardano"
+    },
+    {
+      "assetId": "nep141:usdt.tether-token.near",
+      "decimals": 6,
+      "blockchain": "near",
+      "symbol": "USDT",
+      "price": 0.999219,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "contractAddress": "usdt.tether-token.near",
+      "coingeckoId": "tether"
+    },
+    {
+      "assetId": "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near",
+      "decimals": 6,
+      "blockchain": "arb",
+      "symbol": "USDC",
+      "price": 0.999864,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "contractAddress": "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+      "coingeckoId": "usd-coin"
+    },
+    {
+      "assetId": "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
+      "decimals": 6,
+      "blockchain": "base",
+      "symbol": "USDC",
+      "price": 0.999864,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "contractAddress": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+      "coingeckoId": "usd-coin"
+    },
+    {
+      "assetId": "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near",
+      "decimals": 6,
+      "blockchain": "sol",
+      "symbol": "USDC",
+      "price": 0.999864,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "contractAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "coingeckoId": "usd-coin"
+    },
+    {
+      "assetId": "nep141:purge-558.meme-cooking.near",
+      "decimals": 18,
+      "blockchain": "near",
+      "symbol": "PURGE",
+      "price": 0.00111304,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "contractAddress": "purge-558.meme-cooking.near",
+      "coingeckoId": "forgive-me-father"
+    },
+    {
+      "assetId": "nep141:aptos-34ee497f210c5a511e8d5b53bc56d75b63612bb5.omft.near",
+      "decimals": 6,
+      "blockchain": "aptos",
+      "symbol": "USDC",
+      "price": 0.999864,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "contractAddress": "0xbae207659db88bea0cbead6da0ed00aac12edcdda169e591cd41c94180b46f3b",
+      "coingeckoId": "usd-coin"
+    },
+    {
+      "assetId": "nep245:v2_1.omni.hot.tg:1117_3tsdfyziyc7EJbP2aULWSKU4toBaAcN4FdTgfm5W1mC4ouR",
+      "decimals": 6,
+      "blockchain": "ton",
+      "symbol": "USDT",
+      "price": 0.999219,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "contractAddress": "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs",
+      "coingeckoId": "tether"
+    },
+    {
+      "assetId": "1cs_v1:near:nep141:zec.omft.near",
+      "decimals": 8,
+      "blockchain": "near",
+      "symbol": "ZEC",
+      "price": 1146.59,
+      "priceUpdatedAt": "2026-10-20T05:30:00.763Z",
+      "contractAddress": "zec.omft.near",
+      "coingeckoId": "zcash"
+    }
+  ]
+}

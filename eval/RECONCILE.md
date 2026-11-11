@@ -2977,10 +2977,10 @@ Both scripts were run twice in a row by a reproduction script. The outputs are b
 
 | output | sha256 run 1 | sha256 run 2 |
 |---|---|---|
-| eval/real/labels.jsonl | cb859c165e07753741f6dd85e56f6b6717399098ad4d6d1204c5becd72b96ffa | cb859c165e07753741f6dd85e56f6b6717399098ad4d6d1204c5becd72b96ffa |
-| eval/planted/labels.jsonl | 8fddd3b22223216bd4cef1d98b06792c1578894e8772d6fa27d7ef7be771d440 | 8fddd3b22223216bd4cef1d98b06792c1578894e8772d6fa27d7ef7be771d440 |
-| eval/STATS.md | cbfe9465a1a5ec6fc9cc9eafb1060860211c8a9f1414f9013f101d99bfc84f39 | cbfe9465a1a5ec6fc9cc9eafb1060860211c8a9f1414f9013f101d99bfc84f39 |
-| eval/RECONCILE.md above this section | 808bb2c00830212e31b60bc6b6364f0b0e48dd6752d76d892a4701da13f6a2e3 | 808bb2c00830212e31b60bc6b6364f0b0e48dd6752d76d892a4701da13f6a2e3 |
+| eval/real/labels.jsonl at v2.2 (historical) | cb859c165e07753741f6dd85e56f6b6717399098ad4d6d1204c5becd72b96ffa | cb859c165e07753741f6dd85e56f6b6717399098ad4d6d1204c5becd72b96ffa |
+| eval/planted/labels.jsonl at v2.2 (historical) | 8fddd3b22223216bd4cef1d98b06792c1578894e8772d6fa27d7ef7be771d440 | 8fddd3b22223216bd4cef1d98b06792c1578894e8772d6fa27d7ef7be771d440 |
+| eval/STATS.md at v2.2 (historical) | cbfe9465a1a5ec6fc9cc9eafb1060860211c8a9f1414f9013f101d99bfc84f39 | cbfe9465a1a5ec6fc9cc9eafb1060860211c8a9f1414f9013f101d99bfc84f39 |
+| eval/RECONCILE.md above this section, before the 11 Nov wording edit (historical) | 808bb2c00830212e31b60bc6b6364f0b0e48dd6752d76d892a4701da13f6a2e3 | 808bb2c00830212e31b60bc6b6364f0b0e48dd6752d76d892a4701da13f6a2e3 |
 | checker output | 38cbc898844558c9eb288bc0091b552fd5598714614784cdba168bfbd064efa1 | 38cbc898844558c9eb288bc0091b552fd5598714614784cdba168bfbd064efa1 |
 
 The checker printed: `v2.2: 373 records, all rules hold`
@@ -3062,8 +3062,8 @@ A reproduction script rebuilt these from their recorded inputs, twice, and check
 |---|---|
 | eval/real/labels.jsonl | 14d7c812147b609f6e120be457613043850674ec8ae996a4e67ebd4b4ff4c6ba |
 | eval/planted/labels.jsonl | a06c6ed720f4273868556fb23ea112ac770096faf42fd89b2524c15efadd036d |
-| eval/STATS.md | b17c4611e938a66b0b800936aa6ed477b10b7e63abd3e43368e47c0914665ecf |
+| eval/STATS.md before the 11 Nov wording edit (historical) | b17c4611e938a66b0b800936aa6ed477b10b7e63abd3e43368e47c0914665ecf |
 | eval/planted/planted.jsonl | fa925f8d0da39a4b40a2b931ea7758cda0c0d37452c52c4bcbac6b9b3cfcf451 |
 | eval/blind/second-labels-e12.jsonl | 1d392b88a8e8ee347ac5368a23df6134686a7f04bd1153eefb8c39da6dcb4680 |
 
-On 11 Nov 2026 the wording of `eval/STATS.md` and of this file was edited for publication: pointers to scripts outside this repository and internal names were replaced with plain descriptions. No number, label, record or hash changed. So `eval/STATS.md`, and the part of this file above the Reproducibility section, no longer hash to the values recorded here and above, which are those of the files as the scripts wrote them.
+On 11 Nov 2026 the wording of `eval/STATS.md`, and of the part of this file above the Reproducibility section, was edited for publication: pointers to scripts outside this repository and internal names were replaced with plain descriptions. No number, label or record changed. The rows marked historical give the hashes those files had at v2.2 or before that edit, and no longer match the files here. The statistics file is now checked instead of hashed: `node eval/tools/stats.mjs --check` exits 0 only when `eval/STATS.md` is byte for byte what the committed labels produce. `eval/README.md` lists the other checks.
