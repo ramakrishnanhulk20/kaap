@@ -11,12 +11,12 @@
 // Testnet only. Run inside WSL, where the keys live (~/.near-credentials/testnet), with Node 24
 // and near-api-js 7.4.0 at the repo root:
 //   npm install --no-save --no-package-lock near-api-js@7.4.0
-//   node scripts/WO-02c-setup-testnet.mjs
+//   node scripts/setup-demo-dao.mjs
 // The faucet pays for every new account, so no funds are needed. The guard owner's key (from
 // deployments/testnet.json) must be in the keychain, because the owner is one of the two Approvers.
 //
 // The other helpers here (signing, waiting for final, reading at final) are exported for
-// scripts/prove-m1.mjs, so both scripts send and read the chain the same way.
+// scripts/prove.mjs, so both scripts send and read the chain the same way.
 
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -303,7 +303,7 @@ async function policyTemplate() {
   const place = new Map(people.map((m, i) => [m, SLOTS[i]]));
   const saved = {
     source: `the role setup of a live NEAR Business treasury on mainnet, read ${new Date().toISOString().slice(0, 10)}, members removed`,
-    members: `each Group lists ${SLOTS.join(' and ')}; scripts/WO-02c-setup-testnet.mjs puts the guard owner in ${SLOTS[0]} and the demo member in ${SLOTS[1]}`,
+    members: `each Group lists ${SLOTS.join(' and ')}; scripts/setup-demo-dao.mjs puts the guard owner in ${SLOTS[0]} and the demo member in ${SLOTS[1]}`,
     policy: { ...policy, roles: policy.roles.map((role) => (role.kind?.Group ? { ...role, kind: { Group: role.kind.Group.map((m) => place.get(m)) } } : role)) },
   };
   writeFileSync(POLICY_FILE, JSON.stringify(saved, null, 2) + '\n');
@@ -357,7 +357,7 @@ async function main() {
   const saved = await policyTemplate();
   console.log(`NEAR Business template: ${saved.source}; in deployments/near-business-policy.json`);
 
-  state.dao ??= { set_up_by: 'scripts/WO-02c-setup-testnet.mjs (work order WO-02c)' };
+  state.dao ??= { set_up_by: 'scripts/setup-demo-dao.mjs (work order WO-02c)' };
   const dao = state.dao;
   if (!dao.member) {
     const id = `kaap-member-${stamp()}.${NETWORK}`;

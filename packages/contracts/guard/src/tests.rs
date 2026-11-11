@@ -5,7 +5,7 @@
 // - a real DAO: Sputnik's answers (ERR_WRONG_KIND, ERR_PERMISSION_DENIED, the vote landing) are
 //   in packages/contracts/tests/guard.rs, against the real 3.2 binary in a sandbox;
 // - gas: the mocked VM does not charge wasm execution, so nothing here measures it (GAS.md does);
-// - the deploy and the deleted full-access key (scripts/WO-02a-deploy-testnet.sh);
+// - the deploy and the deleted full-access key (scripts/deploy-contracts-testnet.sh);
 // - whether the sealed job computes the verdict fields correctly; the verdicts here are built by
 //   hand and only their signature and rule checks are tested.
 

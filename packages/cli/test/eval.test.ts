@@ -1,6 +1,6 @@
 // `kaap eval` over the repository's public answer key: the numbers kaap-core's own Rust scoreboards
 // print today (launch notes of WO-07a), through the wasm build. It does not judge whether the key
-// or kaap-core is right where they differ (the DISAGREEMENTS files do), and it does not cover the
+// or kaap-core is right where they differ (the packages/core/docs/answer-key-notes files do), and it does not cover the
 // private second set, which the CLI never reads.
 
 import assert from 'node:assert/strict';

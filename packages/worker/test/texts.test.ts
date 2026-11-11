@@ -5,7 +5,7 @@
 // and may not spend the NEAR kept for the DAO's own proposal checks (C29), and neither the
 // ciphertext nor the reply key reaches a log line or a stored row (C26). Not covered: the sealed
 // program opening the text and hashing it, which packages/sealed/tests/texts.rs and
-// scripts/WO-05b-text-roundtrip.mjs prove, and OutLayer's own behaviour, which the live testnet
+// scripts/text-roundtrip.mjs prove, and OutLayer's own behaviour, which the live testnet
 // run shows.
 
 import assert from 'node:assert/strict';

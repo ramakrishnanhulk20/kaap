@@ -1,5 +1,5 @@
 // The member's side of Kaap's sealed text channel, in the same bytes as packages/sealed/src/texts.rs
-// and scripts/WO-05b-text-roundtrip.mjs, with Node's own crypto: an ephemeral X25519 exchange,
+// and scripts/text-roundtrip.mjs, with Node's own crypto: an ephemeral X25519 exchange,
 // HKDF-SHA256 with no salt, ChaCha20-Poly1305, written `0x01 | ephemeral public key (32) | nonce
 // (12) | ciphertext | tag (16)`, and bound through the associated data to the network, the DAO, the
 // proposal and the member's reply key. Rust cannot check these constants from here; a change on

@@ -47,7 +47,7 @@ judge). These numbers are what the code in `src/` actually does, per enrolled tr
 | dRPC public testnet endpoint | Free plan: public nodes, up to about 10 million requests a month, 100 a second | Pay as You Go $6 per million beyond that | $0 (3.2 million a month is inside the free plan) |
 | OutLayer sealed runs | testnet, paid in testnet NEAR | 0.001 NEAR base fee plus 0.0000001 NEAR per millisecond run, so 0.00114 NEAR per run, plus 0.00078 NEAR gas (packages/sealed/RUNS.md) | 0 dollars; testnet NEAR from the faucet |
 
-What one proposal costs the worker account in testnet NEAR (PROOF-M1.md, measured): judging
+What one proposal costs the worker account in testnet NEAR (PROOF.md, measured): judging
 0.0019, recording 0.0067 (mostly the registry storage it keeps forever), and a veto 0.0008. So an
 honest proposal costs about 0.0086 and a stopped attack about 0.0094. At 50 proposals a day that
 is about 0.45 testnet NEAR a day. The worker holds 9.92 testnet NEAR today (read 29 Oct 2026), which

@@ -1,4 +1,4 @@
-# WO-03b: where the policy engine and the answer key differ
+# Where the policy engine and the answer key differ
 
 From the final run of `cargo test -p kaap-core --test policy_eval -- --nocapture` on 29 Oct 2026,
 over the 129 records of `eval/real` and `eval/planted` whose kind is a policy or governance kind

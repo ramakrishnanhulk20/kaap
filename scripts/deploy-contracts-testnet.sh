@@ -5,7 +5,7 @@
 # hashes and explorer links.
 #
 # Testnet only. Run inside WSL (or any Linux shell) from anywhere in the repo:
-#   bash scripts/WO-02a-deploy-testnet.sh
+#   bash scripts/deploy-contracts-testnet.sh
 # Needs cargo-near 0.22.0, near-cli-rs 0.30.1 and python3. The testnet faucet pays for every
 # account, so no wallet or funds are needed.
 #

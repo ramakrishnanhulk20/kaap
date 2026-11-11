@@ -1,6 +1,6 @@
 {
   "source": "the role setup of a live NEAR Business treasury on mainnet, read 29 Oct 2026, members removed",
-  "members": "each Group lists <member 1> and <member 2>; scripts/WO-02c-setup-testnet.mjs puts the guard owner in <member 1> and the demo member in <member 2>",
+  "members": "each Group lists <member 1> and <member 2>; scripts/setup-demo-dao.mjs puts the guard owner in <member 1> and the demo member in <member 2>",
   "policy": {
     "roles": [
       {

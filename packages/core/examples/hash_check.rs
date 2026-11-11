@@ -1,5 +1,5 @@
 //! Reads one `ProposalInput` as JSON on stdin and prints kaap-core's `Analysis` of it as one line
-//! of JSON on stdout. `scripts/WO-04-testnet-hash.mjs` runs it natively on a sign proposal read
+//! of JSON on stdout. `scripts/hash-check-testnet.mjs` runs it natively on a sign proposal read
 //! from testnet, once without its text and once with it:
 //!
 //!   cargo run -q -p kaap-core --example hash_check < input.json

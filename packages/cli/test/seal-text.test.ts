@@ -6,7 +6,7 @@
 // with its model id when judged, and two privacy claims, each checked on
 // the bytes: the request holds no plaintext, and nothing is written to a file while the command
 // runs. It does not cover the real worker or OutLayer (DONE MEANS 3 of WO-07b5 runs live), the
-// sealed program's own opening in Rust (scripts/WO-05b-text-roundtrip.mjs --local checks Node
+// sealed program's own opening in Rust (scripts/text-roundtrip.mjs --local checks Node
 // against it), or a NEP-461 text that opens (none is planted yet).
 
 import assert from 'node:assert/strict';
@@ -220,7 +220,7 @@ async function run(o: RunOptions = {}) {
 }
 
 test("the encryption is the round-trip script's, byte for byte on fixed inputs, and each side opens the other's", () => {
-  const source = readFileSync(join(REPO_ROOT, 'scripts', 'WO-05b-text-roundtrip.mjs'), 'utf8');
+  const source = readFileSync(join(REPO_ROOT, 'scripts', 'text-roundtrip.mjs'), 'utf8');
   const from = source.indexOf('const TEXT_KEY_DOMAIN = ');
   const to = source.indexOf("/** borsh's u32 length");
   assert.ok(from > 0 && to > from, 'the script still holds its constants and crypto helpers where this test cuts them out');

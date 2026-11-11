@@ -3,7 +3,7 @@
 # the transaction's output, hashes the verdict, fetches the evidence record the job published under
 # that hash, and prints it. Needs node and curl. No account, no key.
 #
-# Usage: bash scripts/WO-05a-evidence.sh <transaction hash>
+# Usage: bash scripts/ai-evidence.sh <transaction hash>
 #
 # Refuses, exit 1, when the record is missing or names a different verdict.
 # Does NOT repeat Intel's, NVIDIA's or NEAR AI's checks: it shows what the run recorded and ties that
@@ -59,7 +59,7 @@ function parsed(text, what) {
 
 const [tx] = process.argv.slice(2);
 if (process.argv.length !== 3 || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(tx)) {
-  console.error('usage: bash scripts/WO-05a-evidence.sh <transaction hash>');
+  console.error('usage: bash scripts/ai-evidence.sh <transaction hash>');
   process.exit(2);
 }
 

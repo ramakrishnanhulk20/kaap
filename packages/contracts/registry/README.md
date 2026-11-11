@@ -43,6 +43,6 @@ Each record comes back with the signed bytes and the signature, so a reader can 
 
 The first registry, `kaap-registry-1029061211.testnet` (code hash `65Y2p3NqwjE8z8oXdzvRPjDWux2SXmHrxxzAhpqwPdqY`), was deployed on 29 Oct 2026 from commit `8818af0`. It is still on chain with no keys and its verdicts stay readable. Every id from that deployment is kept in `deployments/testnet-2026-10-29.json`.
 
-Deploy a registry alone with `KAAP_DEPLOY=registry KAAP_ACCEPTED_KEY=ed25519:<key> bash scripts/WO-02a-deploy-testnet.sh`.
+Deploy a registry alone with `KAAP_DEPLOY=registry KAAP_ACCEPTED_KEY=ed25519:<key> bash scripts/deploy-contracts-testnet.sh`.
 
 Gas: a record burns about 3.4 Tgas in all, about 0.0003 NEAR. Every figure is in `../GAS.md`.

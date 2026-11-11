@@ -3,7 +3,7 @@
 // description, prompt or hash code, the risk floor and the veto fields. It prints the table and
 // every record that differs, then fails below the work order's bars. The effects multiset is
 // printed but not held to a bar. It does not score the codes of other modules, and it never
-// judges whether the key or the decoder is right where they differ; DISAGREEMENTS-WO-03b.md does.
+// judges whether the key or the decoder is right where they differ; docs/answer-key-notes/policy-engine.md does.
 // The other tests cover the two optional inputs: GUARD_WEAKENED with and without the guard account
 // (pinning the gap of a guard role under another name when it is not known), and the ChangeConfig
 // flags with and without the config before. They do not read either input from chain.

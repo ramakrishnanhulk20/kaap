@@ -13,7 +13,7 @@ use kaap_core::policy::GUARD_ROLE;
 use kaap_core::{analyze, FindingCode, Network, Prices, ProposalInput};
 use serde_json::{json, Value};
 
-/// The M1 testnet DAO's policy before enrolment, rebuilt as scripts/WO-02c-setup-testnet.mjs
+/// The M1 testnet DAO's policy before enrolment, rebuilt as scripts/setup-demo-dao.mjs
 /// builds it (the NEAR Business template with the owner and the demo member in its places), the
 /// DAO and the guard account.
 fn dao_before() -> (Value, String, String) {

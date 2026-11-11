@@ -7,12 +7,12 @@
 # `kaap verify` still knows the build when it checks a past run; past runs live in OutLayer's
 # attestation records, not in the version list. A build already gone is only marked.
 #
-# Usage: bash scripts/WO-05e-retire-versions.sh <sha256> [<sha256> ...]
+# Usage: bash scripts/retire-sealed-versions.sh <sha256> [<sha256> ...]
 # Runs inside WSL with near-cli-rs 0.30.1, with the owner's key in ~/.near-credentials/testnet.
 # Testnet only. Each removal costs about 0.0005 testnet NEAR of gas and refunds the build's storage.
 set -euo pipefail
 
-[[ $# -ge 1 ]] || { echo "usage: WO-05e-retire-versions.sh <sha256> [<sha256> ...]" >&2; exit 2; }
+[[ $# -ge 1 ]] || { echo "usage: retire-sealed-versions.sh <sha256> [<sha256> ...]" >&2; exit 2; }
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 STATE="$REPO/packages/sealed/testnet.json"
 CONTRACT=$(jq -r .contract "$STATE")

@@ -1,4 +1,4 @@
-# WO-03c: where the description check and the answer key differ
+# Where the description check and the answer key differ
 
 From `cargo test -p kaap-core --test describe_eval -- --nocapture` and
 `cargo test -p kaap-core --test eval -- --nocapture` on 2 Nov 2026, over the 373 records of

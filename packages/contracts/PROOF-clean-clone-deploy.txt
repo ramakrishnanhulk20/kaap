@@ -381,7 +381,7 @@ Checked 29 Oct 2026 through the GitHub API, matching on the git blob id of our 2
 So 3.2 exists only on chain, as the global contract with code hash DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF. The fetch script now takes it from there, and the sandbox tests read only packages/contracts/tests/wasm/ (git-ignored).
 
 == DONE MEANS 2: redeploy, run once, inside WSL with CARGO_TARGET_DIR=/home/ram/kaap-target-contracts
-$ KAAP_ACCEPTED_KEY=ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN bash scripts/WO-02a-deploy-testnet.sh
+$ KAAP_ACCEPTED_KEY=ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN bash scripts/deploy-contracts-testnet.sh
 Kaap testnet deploy, 2026-10-29 06:12:11 UTC
 accepted key: ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN
 guard owner: kaap-owner-1029061211.testnet (new faucet account; its key is in /home/ram/.near-credentials/testnet/kaap-owner-1029061211.testnet.json)
@@ -412,7 +412,7 @@ kaap-registry-1029061211.testnet: block 275260823, code_hash 65Y2p3NqwjE8z8oXdzv
 {
   "network": "testnet",
   "deployed_at": "2026-10-29T06:12:11Z",
-  "deployed_by": "scripts/WO-02a-deploy-testnet.sh (work order WO-02a2)",
+  "deployed_by": "scripts/deploy-contracts-testnet.sh (work order WO-02a2)",
   "accepted_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
   "guard": {
     "account_id": "kaap-guard-1029061211.testnet",

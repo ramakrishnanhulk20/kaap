@@ -4,13 +4,13 @@
 // sha256 of its explanation, the token counts and the transaction. Nothing is tuned to the answer
 // key; the numbers are reported as they come (WO-05c).
 //
-//   node scripts/WO-05c-ai-eval.mjs --dry-run
+//   node scripts/ai-eval.mjs --dry-run
 //     Builds every input and prints how many fit the job's 32,768-byte limit, how many needed the
 //     cut price table below, how many are still skipped, and the largest. Sends nothing and calls no
 //     network.
-//   node scripts/WO-05c-ai-eval.mjs [--max-usd 1.00] [--max-near 5] [--in-flight 4]
+//   node scripts/ai-eval.mjs [--max-usd 1.00] [--max-near 5] [--in-flight 4]
 //     The live run on OutLayer testnet. Resumes from what an earlier run with the same --out wrote.
-//   node scripts/WO-05c-ai-eval.mjs --report
+//   node scripts/ai-eval.mjs --report
 //     Scores what --out holds against the set's own labels. Sends nothing.
 //   --set <labels.jsonl> (repeatable) runs another set, such as reference/eval-nb/labels.jsonl.
 //   --out <file> defaults to <the set's folder>/ai-runs/<UTC date>.jsonl and must lie inside that
@@ -89,7 +89,7 @@ const WORD = /^[a-z_]{1,40}$/;
 class Stop extends Error {}
 
 function usage(why) {
-  throw new Stop(`${why}\nusage: node scripts/WO-05c-ai-eval.mjs [--dry-run | --report] [--set <labels.jsonl>]... [--out <file>] [--max-usd <dollars>] [--max-near <NEAR>] [--in-flight 1-4]`);
+  throw new Stop(`${why}\nusage: node scripts/ai-eval.mjs [--dry-run | --report] [--set <labels.jsonl>]... [--out <file>] [--max-usd <dollars>] [--max-near <NEAR>] [--in-flight 1-4]`);
 }
 
 function options(argv) {
@@ -347,7 +347,7 @@ function report(o, records, lines) {
 }
 
 async function live(o, records) {
-  const chain = await import('./WO-02c-setup-testnet.mjs');
+  const chain = await import('./setup-demo-dao.mjs');
   const builds = JSON.parse(readFileSync(join(REPO, 'packages', 'sealed', 'testnet.json'), 'utf8'));
   if (builds.network !== RUN_NETWORK) throw new Stop('packages/sealed/testnet.json is not a testnet record');
   const owner = process.env.KAAP_AI_SECRETS_ACCOUNT ?? '';

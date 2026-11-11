@@ -11,11 +11,11 @@
 #   5. registers it: create_project the first time, add_version (set active) after that.
 # Runs inside WSL with near-cli-rs 0.30.1. Testnet only.
 #
-# Usage: bash scripts/WO-02b-publish-testnet.sh fastfs
-#        bash scripts/WO-02b-publish-testnet.sh https://<host>/<path>/<file>.wasm
+# Usage: bash scripts/publish-sealed-testnet.sh fastfs
+#        bash scripts/publish-sealed-testnet.sh https://<host>/<path>/<file>.wasm
 set -euo pipefail
 
-HOST_ARG=${1:?usage: WO-02b-publish-testnet.sh fastfs | https://...}
+HOST_ARG=${1:?usage: publish-sealed-testnet.sh fastfs | https://...}
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 STATE="$REPO/packages/sealed/testnet.json"
 WORK=${KAAP_SEALED_WORK:-$HOME/kaap-sealed-testnet}

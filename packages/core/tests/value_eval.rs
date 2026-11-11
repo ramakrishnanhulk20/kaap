@@ -3,7 +3,7 @@
 // fields on the records whose label carries no description, prompt or hash code. It prints the
 // table and every record that differs, then fails below the work order's bars. It does not score
 // the codes of other modules, the risk floor or the description check, and it never judges
-// whether the key or the decoder is right where they differ; DISAGREEMENTS-WO-03a.md does that.
+// whether the key or the decoder is right where they differ; docs/answer-key-notes/value-decoder.md does that.
 
 mod common;
 

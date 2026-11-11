@@ -283,7 +283,7 @@ clock, so it never asks the model about a text.
 The finding codes, the risk and the verdict's other fields stay public, as on any verdict, because
 the guard reads them. So does the evidence record, which holds hashes and sizes, never text.
 
-`node scripts/WO-05b-text-roundtrip.mjs` runs the whole trip and three attacks on testnet, and
+`node scripts/text-roundtrip.mjs` runs the whole trip and three attacks on testnet, and
 `--local <wasm>` runs it against the local build.
 
 ## Eval mode
@@ -317,7 +317,7 @@ verdict key, whoever paid for it. The clock is a judge run's: `NEAR_BLOCK_TIMEST
 block both providers agree on. Without one, the answer is unverified (`no_clock`) and the scores are
 still printed.
 
-`node scripts/WO-05c-ai-eval.mjs --dry-run` builds the input of every answer-key record through
+`node scripts/ai-eval.mjs --dry-run` builds the input of every answer-key record through
 kaap-core (`evalInput` in packages/core-wasm, the scoreboards' own `input_of`, with the census price
 list) and prints how many fit. A record over 32 KiB gets its price table cut to the tokens its own
 analysis names (`evalInputTrimmed`), and only when kaap-core's whole analysis is the same with both
@@ -420,10 +420,10 @@ directories gave `bf7bb4f8...4f58` on 11 Nov 2026.
 - The local build under plain wasmtime, with recorded answers and a public test key (never
   published): `bash packages/sealed/run-local.sh`. It runs as the worker unless
   `NEAR_USER_ACCOUNT_ID` is set.
-- Publish a version: `bash scripts/WO-02b-publish-testnet.sh fastfs` or
-  `bash scripts/WO-02b-publish-testnet.sh https://<host>/<file>.wasm`. It checks the served sha256
+- Publish a version: `bash scripts/publish-sealed-testnet.sh fastfs` or
+  `bash scripts/publish-sealed-testnet.sh https://<host>/<file>.wasm`. It checks the served sha256
   before registering anything.
-- Run on testnet: `bash scripts/WO-02b-run-testnet.sh <dao> <proposal id> [--runs N] [--corrupt]`.
+- Run on testnet: `bash scripts/run-sealed-testnet.sh <dao> <proposal id> [--runs N] [--corrupt]`.
 
 ## What this does not defend against
 

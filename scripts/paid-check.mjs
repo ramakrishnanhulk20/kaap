@@ -7,8 +7,8 @@
 // packages/sealed/tools/check-output.mjs and must be signed by a key that is not the one Kaap's
 // guard accepts. Exit code 0 only when every call answered as above.
 //
-//   node scripts/WO-05e-paid-call.mjs
-//   node scripts/WO-05e-paid-call.mjs --version-key <sha256>
+//   node scripts/paid-check.mjs
+//   node scripts/paid-check.mjs --version-key <sha256>
 //     One HTTPS call pinned to that build with nothing attached, printing OutLayer's answer. Once a
 //     build is removed from the project this must be refused by OutLayer, exit 0; exit 1 if it ran.
 //
@@ -29,7 +29,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-const { REPO, TGAS, MILLI_NEAR, accountFor, burnt, call, events, refusal, returned, sleep, txLink, viewFinal } = await import('./WO-02c-setup-testnet.mjs');
+const { REPO, TGAS, MILLI_NEAR, accountFor, burnt, call, events, refusal, returned, sleep, txLink, viewFinal } = await import('./setup-demo-dao.mjs');
 
 const API = 'https://testnet-api.outlayer.ai';
 const OUTLAYER = 'outlayer.testnet';
@@ -248,7 +248,7 @@ async function paidRun(key) {
 }
 
 async function pinnedRun(key, sha) {
-  if (!/^[0-9a-f]{64}$/.test(sha ?? '')) throw new Error('usage: node scripts/WO-05e-paid-call.mjs --version-key <64 hex characters>');
+  if (!/^[0-9a-f]{64}$/.test(sha ?? '')) throw new Error('usage: node scripts/paid-check.mjs --version-key <64 hex characters>');
   const listed = (await viewFinal(OUTLAYER, 'list_versions', { project_id: builds.project_id })).map((v) => `${v.wasm_hash.slice(0, 8)}${v.is_active ? ' (active)' : ''}`);
   console.log(`WO-05e pinned call, ${new Date().toISOString()}: version_key ${sha}`);
   console.log(`versions listed on ${OUTLAYER}: ${listed.join(', ')}`);

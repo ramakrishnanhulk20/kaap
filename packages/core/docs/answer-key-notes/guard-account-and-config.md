@@ -1,4 +1,4 @@
-# WO-03b2: the guard account, other accounts that reject alone, and the earlier config
+# The guard account, other accounts that reject alone, and the earlier config
 
 ## The scoreboard did not move
 
@@ -14,7 +14,7 @@ in this order:
 | effects multiset (not held to a bar) | 118 | 129 |
 
 The eleven records that differ are the same eleven, for the same reasons, as in
-DISAGREEMENTS-WO-03b.md. The evaluation runner fills neither new input (`tests/common/mod.rs` sets
+policy-engine.md. The evaluation runner fills neither new input (`tests/common/mod.rs` sets
 both to `None`), so this is the "not known" path, which behaves exactly as before.
 
 mainnet:hh.sputnik-dao.near:4 and planted:65 still show both config flags as `"unknown"` on the

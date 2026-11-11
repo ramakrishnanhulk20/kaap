@@ -454,7 +454,7 @@ mod tests {
     }
 
     /// The NEAR Business role setup with the M1 owner and member in its places, as
-    /// scripts/WO-02c-setup-testnet.mjs filed it before the guard role was added.
+    /// scripts/setup-demo-dao.mjs filed it before the guard role was added.
     fn m1_before(state: &Value) -> Value {
         let mut policy = deployment("near-business-policy.json")["policy"].clone();
         for role in policy["roles"].as_array_mut().unwrap() {

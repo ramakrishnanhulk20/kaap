@@ -691,7 +691,7 @@ async fn check_label(dao: Arc<Dao>, label: &'static str) -> Result<LabelReport> 
     Ok(report)
 }
 
-/// The M1 testnet DAO's policy as scripts/WO-02c-setup-testnet.mjs `demoPolicy` builds it: the
+/// The M1 testnet DAO's policy as scripts/setup-demo-dao.mjs `demoPolicy` builds it: the
 /// saved NEAR Business template with the owner and the demo member in its places, plus a `guard`
 /// role holding the guard alone, VoteReject on every label but remove_member_from_role, threshold
 /// "1" on each. Returns the policy and the guard account.

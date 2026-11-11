@@ -48,7 +48,7 @@ A new version is a new contract. A DAO moves to it with one ordinary proposal th
 | Key deleted | https://testnet.nearblocks.io/txns/6qEFvNiz5Guw1w2XaA6cS36kkRVhAJbPTtijgPEcTssM, 0 access keys left |
 | Explorer | https://testnet.nearblocks.io/address/kaap-guard-1111072803.testnet |
 
-Every id and hash is also in `deployments/testnet.json`. Deploy again with `KAAP_ACCEPTED_KEY=ed25519:<key> KAAP_GUARD_OWNER=<owner> bash scripts/WO-02a-deploy-testnet.sh`.
+Every id and hash is also in `deployments/testnet.json`. Deploy again with `KAAP_ACCEPTED_KEY=ed25519:<key> KAAP_GUARD_OWNER=<owner> bash scripts/deploy-contracts-testnet.sh`.
 
 The first guard, `kaap-guard-1029061211.testnet` (code hash `77fyhhxdRnHzb8efe9HBYL8C3KcUpEbbRjLvrNyqoxbP`), was deployed on 29 Oct 2026 from commit `8818af0`, before the verdict format moved into `packages/verdict`. It is still on chain with no keys, and its record is kept in `deployments/testnet-2026-10-29.json`.
 

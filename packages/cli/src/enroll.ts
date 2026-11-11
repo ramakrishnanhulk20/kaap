@@ -178,7 +178,7 @@ export function render(r: EnrollReport): string {
     '',
     'cost',
     `  each proposal: the DAO's proposal bond, ${near(r.bondYocto)}, attached by whoever files it; Sputnik returns it when the proposal is approved or rejected, and keeps it if the proposal is removed`,
-    '  filing burnt about 3 Tgas, about 0.0003 NEAR, on testnet (PROOF-M1.md); each approver pays the gas of their own vote',
+    '  filing burnt about 3 Tgas, about 0.0003 NEAR, on testnet (PROOF.md); each approver pays the gas of their own vote',
     '  the enrolment call: the DAO attaches 0.01 NEAR to enroll; the guard keeps what its entry takes (0.0014 NEAR for a short name, at most about 0.0024) and sends the rest back in the same call. The vote that passes it runs it: 9.0 Tgas in all, about 0.0009 NEAR (packages/contracts/GAS.md)',
     '',
     `when ${r.drafts.length === 1 ? 'it has' : 'they have'} passed, check it on chain: ${arming}`,

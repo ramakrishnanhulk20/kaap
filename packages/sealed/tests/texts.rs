@@ -1,6 +1,6 @@
 //! The sealed text channel (C12, C26): the job's key pair, the encryption both ways, and whole runs
 //! with a planted text on real recorded answers. Not covered here: OutLayer's keystore and its `mac`
-//! (a stand-in here; the testnet run of `scripts/WO-05b-text-roundtrip.mjs` covers them), a real
+//! (a stand-in here; the testnet run of `scripts/text-roundtrip.mjs` covers them), a real
 //! model answer, and the Node side of the encryption, which that script's local run proves against
 //! the wasmtime build. The planted text is made up for these tests.
 

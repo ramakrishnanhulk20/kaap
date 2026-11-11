@@ -1,7 +1,7 @@
 # kaap-sealed on OutLayer testnet: runs, timing and cost
 
 Measured on 29 Oct 2026 between 05:37 and 05:45 UTC, from WSL on one machine, with
-`scripts/WO-02b-run-testnet.sh`. Every run went through `request_execution` on `outlayer.testnet`,
+`scripts/run-sealed-testnet.sh`. Every run went through `request_execution` on `outlayer.testnet`,
 paid in testnet NEAR, with all three resource limits written out (10,000,000,000 instructions,
 128 MB, 60 s) and 0.02 NEAR attached (the unused part is refunded in the same transaction).
 
@@ -117,7 +117,7 @@ model at all. The AI added the explanation and the second opinion.
 To see what Kaap checked before it wrote `verified`, with node and curl, no account and no key:
 
 ```
-bash scripts/WO-05a-evidence.sh 5VFpn1vQKnDJ5fYBvSivMRJqghBPLjD6u7DrRyZGLK8G
+bash scripts/ai-evidence.sh 5VFpn1vQKnDJ5fYBvSivMRJqghBPLjD6u7DrRyZGLK8G
 ```
 
 It reads the transaction's output from an archival RPC, hashes `kaap-verdict-v1\n` followed by the
@@ -174,7 +174,7 @@ says.
 
 ### The sealed text channel
 
-`node scripts/WO-05b-text-roundtrip.mjs` under Node 24: exit 0, `RESULT: pass`. This is the first
+`node scripts/text-roundtrip.mjs` under Node 24: exit 0, `RESULT: pass`. This is the first
 live use of `outlayer:encryption-keys`. The demo member filed proposal #10 on
 `kaap-dao-1029064008.testnet`
 ([EgtdYXJZ...](https://testnet.nearblocks.io/txns/EgtdYXJZF44dVrJGGkrP5hiwa5cE291T16th1XFcKGxz)),
@@ -204,7 +204,7 @@ transaction gas 0.0039836. The filing is not counted.
 
 ## Paid calls from a stranger
 
-Run on 11 Nov 2026 from 05:23 UTC, from WSL, with `node scripts/WO-05e-paid-call.mjs`, against the
+Run on 11 Nov 2026 from 05:23 UTC, from WSL, with `node scripts/paid-check.mjs`, against the
 active build `e1192b28...`. This section is on its own. Testnet money only: testnet NEAR from the
 faucet and `usdc.fakes.testnet`, whose own `mint` any testnet account may call once it has paid
 the token's storage deposit.
@@ -269,7 +269,7 @@ proofs were saved for re-checking offline.
 | `0099d7b7...ff49` | [remove_version 7ZCfunbc...](https://testnet.nearblocks.io/txns/7ZCfunbc3RheoREXJuiER7uxj7hokPuqm5JNMSZBeQpD) |
 | `73409203...ae87` | [remove_version 8DPDYdqR...](https://testnet.nearblocks.io/txns/8DPDYdqRjjHsmG8Aezo9M7mrkTVyDYYNhaMVTwM1ysxu) |
 
-Both signed by the project owner with `bash scripts/WO-05e-retire-versions.sh <sha256>`. Afterwards
+Both signed by the project owner with `bash scripts/retire-sealed-versions.sh <sha256>`. Afterwards
 `list_versions` names `e1192b28...` alone. Both stay in `testnet.json` with `retired: true`.
 
 - An HTTPS call naming either removed build in `version_key` answered HTTP 200 with
@@ -320,7 +320,7 @@ payment 0. Its evidence bundle was saved for re-checking offline.
 
 ### The sealed text channel
 
-`node scripts/WO-05b-text-roundtrip.mjs`: exit 0, `RESULT: pass`. The demo member filed proposal
+`node scripts/text-roundtrip.mjs`: exit 0, `RESULT: pass`. The demo member filed proposal
 #13 on `kaap-dao-1029064008.testnet`
 ([2MJB3m8A...](https://testnet.nearblocks.io/txns/2MJB3m8AHMx6pE5e6G7ZjJ7mbYQx4dwyQR8HDK3Kp4vH)),
 a sign request whose hash points to a text made up for the run. It is left open.

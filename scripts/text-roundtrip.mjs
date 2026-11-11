@@ -7,12 +7,12 @@
 // payload. Exit code 0 only when the text came back HASH_TEXT_DANGEROUS, the request carried nothing
 // but ciphertext, and every attack was refused, the last one as text_does_not_match.
 //
-//   node scripts/WO-05b-text-roundtrip.mjs
+//   node scripts/text-roundtrip.mjs
 //     Testnet, inside WSL, needing a published build that has this channel and refuses a text that
 //     matches no payload. Signs as the demo member (files one proposal) and the worker (6 runs).
 //     Keys are read from ~/.near-credentials/testnet and never printed. Spends about 0.01 testnet
 //     NEAR.
-//   node scripts/WO-05b-text-roundtrip.mjs --local <kaap-sealed-local.wasm>
+//   node scripts/text-roundtrip.mjs --local <kaap-sealed-local.wasm>
 //     The same trip against `bash packages/sealed/build.sh local` under plain wasmtime, on a recorded
 //     fixture edited to carry the planted proposal, with the test keys. Needs wasmtime 28
 //     (KAAP_WASMTIME, default ~/kaap-m0-outlayer/tools/wasmtime28). No account, no network.
@@ -173,7 +173,7 @@ function localTrip(wasm) {
 }
 
 async function testnetTrip() {
-  const { MILLI_NEAR, TGAS, accountFor, call, loadState, refusal, returned, txLink, viewFinal } = await import('./WO-02c-setup-testnet.mjs');
+  const { MILLI_NEAR, TGAS, accountFor, call, loadState, refusal, returned, txLink, viewFinal } = await import('./setup-demo-dao.mjs');
   const state = loadState();
   const dao = state.dao.account_id;
   const guard = state.guard.account_id;
@@ -210,7 +210,7 @@ const refused = (output) => {
 
 async function main() {
   const local = process.argv[2] === '--local';
-  if (local && !process.argv[3]) throw new Error('usage: node scripts/WO-05b-text-roundtrip.mjs [--local <kaap-sealed-local.wasm>]');
+  if (local && !process.argv[3]) throw new Error('usage: node scripts/text-roundtrip.mjs [--local <kaap-sealed-local.wasm>]');
   const trip = local ? localTrip(process.argv[3]) : await testnetTrip();
   const { dao, id, guard, verdictKey, text, run } = trip;
   console.log(`WO-05b round trip, ${new Date().toISOString()}, ${local ? 'local wasmtime build, test keys' : 'OutLayer testnet'}: ${dao} #${id}`);

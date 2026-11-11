@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 
 const OWN_REMOVAL: &str = "remove_member_from_role";
 
-/// The M1 testnet DAO's policy, rebuilt the way scripts/WO-02c-setup-testnet.mjs `demoPolicy`
+/// The M1 testnet DAO's policy, rebuilt the way scripts/setup-demo-dao.mjs `demoPolicy`
 /// builds it: the saved NEAR Business template with the owner and the demo member in its two
 /// places, plus a `guard` role holding the guard alone, VoteReject on the 16 labels other than
 /// remove_member_from_role, threshold "1" on each. Returns the policy and the guard account.
@@ -61,7 +61,7 @@ fn the_m1_policy_is_armed_on_every_label_but_its_own_removal() {
     assert_eq!(a.rejects_alone, all_but(&[OWN_REMOVAL]));
     assert_eq!(a.cannot_reject, vec![OWN_REMOVAL.to_string()]);
     assert!(a.extra_rights.is_empty(), "{:?}", a.extra_rights);
-    // Approver: transfer and call need 2 of 2 (PROOF-M1.md); nothing passes on one approval.
+    // Approver: transfer and call need 2 of 2 (PROOF.md); nothing passes on one approval.
     assert_eq!(a.approval_votes_needed["transfer"], 2);
     assert_eq!(a.approval_votes_needed["call"], 2);
     assert!(a.approval_votes_needed.values().all(|v| *v >= 2), "{:?}", a.approval_votes_needed);

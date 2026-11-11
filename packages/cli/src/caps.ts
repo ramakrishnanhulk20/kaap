@@ -53,7 +53,7 @@ export const MAX_SHOWN_TEXT = 2_000;
 
 /** How far `kaap verify` looks for the sealed run of a verdict, in blocks before and after the
  *  block the verdict was read at. Every run measured so far landed 4 to 6 blocks before that
- *  block (packages/sealed/RUNS.md, PROOF-M1.md), and a run is given at most 180 seconds, about
+ *  block (packages/sealed/RUNS.md, PROOF.md), and a run is given at most 180 seconds, about
  *  300 blocks, so 60 back covers a slow pickup without reading half an hour of chain. The verdict
  *  is read at the final block the job saw, which can trail the request by a block or two, hence
  *  the look ahead. A run outside the window is reported as not found, never guessed. */

@@ -37,7 +37,7 @@ export const RUN_DEPOSIT = 20n * 10n ** 21n;
 export const RUN_ATTEMPTS = 2;
 
 // All three limits written out on every run: an empty resource_limits object is never picked up
-// (OutLayer issue #31). The values scripts/WO-02b-run-testnet.sh and prove-m1 send.
+// (OutLayer issue #31). The values scripts/run-sealed-testnet.sh and scripts/prove.mjs send.
 const RESOURCE_LIMITS = { max_instructions: 10_000_000_000, max_memory_mb: 128, max_execution_seconds: 60 };
 
 const b64 = z.string().regex(/^[A-Za-z0-9+/]*={0,2}$/);

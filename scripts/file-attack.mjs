@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // Files M1's planted attack #17 on the demo treasury and then only watches: the running worker
-// (bash scripts/WO-06-run-local.sh) must notice it, have it judged, record the verdict and cast the
+// (bash scripts/run-worker-local.sh) must notice it, have it judged, record the verdict and cast the
 // veto with no help from here. Exit code 0 only when the proposal ends Rejected by the guard's
 // vote alone within the wait.
 //
 // Testnet only. Inside WSL, with Node 24 and near-api-js 7.4.0 at the repo root, while the worker
 // runs in another shell:
-//   node scripts/WO-06-file-attack.mjs
+//   node scripts/file-attack.mjs
 // It signs as the demo member (files the proposal) and one fresh sub-account of the member that
-// creates the payees, exactly as scripts/prove-m1.mjs does. Keys are read from
+// creates the payees, exactly as scripts/prove.mjs does. Keys are read from
 // ~/.near-credentials/testnet and never printed.
 
 import { readFileSync } from 'node:fs';
@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import {
   MILLI_NEAR, PublicKey, REPO, TGAS, accountFor, actions, blockAt, call, loadState, newSavedKey, refusal, returned, send, sleep,
   stamp, toNear, txLink, viewFinal,
-} from './WO-02c-setup-testnet.mjs';
+} from './setup-demo-dao.mjs';
 
 const ATTACK = 'planted:17';
 const ROOT_FUNDING = 100n * MILLI_NEAR;

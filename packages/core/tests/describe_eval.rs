@@ -5,7 +5,7 @@
 // bars. A second test runs every real record, the private second set included when it is
 // present, and fails if DESC_CONTRADICTS fires where the label is not `contradicts`. It does not
 // score effects, other modules' codes or `veto_allowed`, and it never judges whether the key or
-// the check is right where they differ; DISAGREEMENTS-WO-03c.md does that.
+// the check is right where they differ; docs/answer-key-notes/description-check.md does that.
 
 mod common;
 

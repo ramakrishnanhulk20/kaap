@@ -350,8 +350,8 @@ near-sandbox: pinned =0.3.16 as the order says; newest stable is 0.4.0 (publishe
 near-api, near-api-types: pinned =0.8.3 as the order says; newest stable is 0.8.7 (published 2026-10-28)
 near-sdk-env: held at 0.1.6 in Cargo.lock, because 0.1.7 and 0.1.8 need Rust 1.95 and the workspace pins 1.93.0
 
-== DONE MEANS 3: scripts/WO-02a-deploy-testnet.sh, run once, inside WSL with CARGO_TARGET_DIR=/home/ram/kaap-target-contracts
-$ bash scripts/WO-02a-deploy-testnet.sh
+== DONE MEANS 3: scripts/deploy-contracts-testnet.sh, run once, inside WSL with CARGO_TARGET_DIR=/home/ram/kaap-target-contracts
+$ bash scripts/deploy-contracts-testnet.sh
 Kaap testnet deploy, 2026-10-29 05:43:56 UTC
 accepted key: ed25519:GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB
   (the sandbox tests' public test key: anyone can sign with it, so this deploy is for testing only)

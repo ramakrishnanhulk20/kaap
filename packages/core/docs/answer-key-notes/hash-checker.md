@@ -1,4 +1,4 @@
-# WO-04 hash checker: where the code and the answer key differ
+# Hash checker: where the code and the answer key differ
 
 Run on 2 Nov 2026 with `cargo test -p kaap-core --test hash_eval -- --nocapture` over the 42 records a `sign` call or a hash text decides: the 32 real records whose kind calls `sign` on `v1.signer`, planted families i, j and k (26 to 34), and the auth control #62.
 

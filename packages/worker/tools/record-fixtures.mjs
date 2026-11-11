@@ -14,7 +14,7 @@ const RPC = 'https://rpc.testnet.fastnear.com';
 const DAO = 'kaap-dao-1029064008.testnet';
 
 const TXS = {
-  // M1 run 1: the sealed job's signed verdict on attack proposal #2 (PROOF-M1.md).
+  // M1 run 1: the sealed job's signed verdict on attack proposal #2 (PROOF.md).
   'run-ok': ['7vT7uwgwggGUc3CpNgLApgyjFS4s65KTfZTbMF2enx6T', 'kaap-worker-1029053612.testnet'],
   // WO-02b DONE MEANS 3: the job held because its two providers were made to disagree.
   'run-held': ['ACQcwBVxwAKDQZSf7p8oi8ZWTotrLVNAhb89vp4wWFfW', 'kaap-worker-1029053612.testnet'],

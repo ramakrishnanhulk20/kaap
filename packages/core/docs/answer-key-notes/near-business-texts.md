@@ -1,4 +1,4 @@
-# WO-04b honest NEAR Business texts: where the code, the order and the sources differ
+# Honest NEAR Business texts: where the code, the order and the sources differ
 
 Built on 2 Nov 2026. Trezu was read one file at a time through `gh api` at `NEAR-DevHub/trezu` main 7b063dd (30 Oct 2026). The verifier was read at `near/intents` main d340060 (21 Oct 2026). Mainnet was read with views only.
 

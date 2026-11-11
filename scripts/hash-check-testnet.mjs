@@ -11,7 +11,7 @@
 //
 // Testnet only. Inside WSL, with Node 22 or later, near-api-js 7.4.0 at the repo root and cargo
 // on PATH (CARGO_TARGET_DIR is passed through):
-//   node scripts/WO-04-testnet-hash.mjs
+//   node scripts/hash-check-testnet.mjs
 // It signs as the demo member, whose key is read from ~/.near-credentials/testnet and never
 // printed. Exit code 0 only when both judgements come out as stated above.
 
@@ -19,7 +19,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import {
   REPO, TGAS, accountFor, baseEncode, blockAt, call, loadState, provider, refusal, returned, txLink, viewFinal, viewFinalRaw,
-} from './WO-02c-setup-testnet.mjs';
+} from './setup-demo-dao.mjs';
 
 const MPC = 'v1.signer-prod.testnet';
 const DESCRIPTION = 'Authenticate DAO for confidential intents';

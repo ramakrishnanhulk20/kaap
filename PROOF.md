@@ -2,7 +2,7 @@
 
 Run on 11 Nov 2026 between 07:30 and 07:34 UTC, inside WSL, with Node 22.23.2 and near-api-js 7.4.0, against NEAR testnet (RPC `https://rpc.testnet.fastnear.com`) and the deployment made the same morning from commit `413a74a`. The four proposals were filed at testnet blocks 277184659, 277184718, 277184814 and 277184874.
 
-In one command, `node scripts/prove-m1.mjs` does the following:
+In one command, `node scripts/prove.mjs` does the following:
 
 1. A member of a real Sputnik DAO 3.2 treasury files planted attack #17: "Monthly salary payment to alice...", which in fact pays the lookalike account `a1ice...`.
 2. Kaap's sealed job on OutLayer reads the proposal at a final block from two RPC providers, judges it and signs a verdict.
@@ -23,7 +23,7 @@ It passed twice in a row, on fresh proposals each time (#1 and #2 in run 1, #3 a
 | No keys on the DAO | after setup, the DAO's only full-access key was [deleted](https://testnet.nearblocks.io/txns/GWAwWeDcpid7d2snZx2xY1t1qXvrFerztKgaZ7gJY2hZ), and the account now has 0 access keys, like a DAO made by the factory. Nobody, including us, can change its code or sign as it. Only its own approved proposals act for it. |
 | Guard | `kaap-guard-1111072803.testnet`, code hash `DrjaN1zVz4cxvvxbxhM6rVZsqy8SrBunmMbyeqbsr4R4` (sha256 `bf09d7bbb48f312eb4043bd7b585f3b02bbe9d8b7d5bc0bf31fec9319c663767`), owner `kaap-owner-1029061211.testnet`, [deploy and init](https://testnet.nearblocks.io/txns/DEta1bNNm4gRYLqhZJ2HfwDnVtz294dgyEyLfiQVzsK1), [key deleted](https://testnet.nearblocks.io/txns/6qEFvNiz5Guw1w2XaA6cS36kkRVhAJbPTtijgPEcTssM), no access keys |
 | Registry | `kaap-registry-1111072803.testnet`, code hash `3Kro1EgWDYAawFx8RHUwVGTKmJvp9bAUeRL65cwGAoZz` (sha256 `228c21366ffdaf58f31a6e3550fd9898bc9ae65d1182f7a9e84d2df3c07fb2c9`), [deploy and init](https://testnet.nearblocks.io/txns/53xJksmZUhokY6rVNzXNcnadxAUEaN1RWPkdhJwMwiT7), [key deleted](https://testnet.nearblocks.io/txns/GxMNoCaecyMRfF5k1dqtsxB4uCydKz8fUpzBkMm9gUF1), no access keys |
-| Built from | commit `413a74aa91256a8c8603d1f84df33fde64abbcd3`, with `cargo near build non-reproducible-wasm --locked` (cargo-near 0.22.0, Rust 1.93.0) as `scripts/WO-02a-deploy-testnet.sh` runs it. Built twice, in two separate target folders: both builds gave the two sha256 above, and each code hash on chain is that sha256 in base58. |
+| Built from | commit `413a74aa91256a8c8603d1f84df33fde64abbcd3`, with `cargo near build non-reproducible-wasm --locked` (cargo-near 0.22.0, Rust 1.93.0) as `scripts/deploy-contracts-testnet.sh` runs it. Built twice, in two separate target folders: both builds gave the two sha256 above, and each code hash on chain is that sha256 in base58. |
 | Sealed job | OutLayer project `kaap-worker-1029053612.testnet/kaap-sealed`, called by `kaap-worker-1029053612.testnet`, live build `bf7bb4f86fe7b1531946d8e5b5b7bab39d3e98a3a97ecab00dd9f0e4c4d34f58` |
 | Verdict key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN`. Setup checks that the guard's and the registry's `accepted_key()` both equal the key printed by the attested run [7HvniWe5...](https://testnet.nearblocks.io/txns/7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC) |
 | Text key | `09bc21bb...2f6a`, printed again by the live build in [DWRwVAcw...](https://testnet.nearblocks.io/txns/DWRwVAcwpoVo5yfMHVVmWRw4S9QGNNj9XVioMDjobXBW) and signed by the verdict key; its attestation names build `bf7bb4f8...4f58` |
@@ -36,8 +36,8 @@ Inside WSL, with Node 24, from the repo root:
 
 ```
 npm install --no-save --no-package-lock near-api-js@7.4.0
-node scripts/WO-02c-setup-testnet.mjs   # idempotent: on a set-up DAO it only checks
-node scripts/prove-m1.mjs               # exit code 0 only when every check below passes
+node scripts/setup-demo-dao.mjs   # idempotent: on a set-up DAO it only checks
+node scripts/prove.mjs            # exit code 0 only when every check below passes
 ```
 
 The member's and the worker's keys are read from `~/.near-credentials/testnet` and never printed. Each run makes a fresh sub-account of the member, funded by the member with 0.1 NEAR. That account creates the payees for that run, so `alice.sandbox` becomes `alice.<that account>` and the lookalike still differs by one character. A run does not use the faucet, which gives one account per machine every 11 hours or so.

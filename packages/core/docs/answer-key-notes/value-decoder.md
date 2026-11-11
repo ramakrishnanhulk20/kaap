@@ -1,4 +1,4 @@
-# WO-03a: where the value decoder and the answer key differ
+# Where the value decoder and the answer key differ
 
 From the final run of `cargo test -p kaap-core --test value_eval -- --nocapture` on 29 Oct 2026,
 over the 205 records of `eval/real` and `eval/planted` whose label holds only value-type effects.

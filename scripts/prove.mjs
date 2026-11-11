@@ -10,9 +10,9 @@
 // Exit code 0 only when the attack ends Rejected by the guard's vote alone, the replay is
 // refused with ERR_REPLAY, and the control is recorded with no critical finding and no vote.
 //
-// Testnet only. Run inside WSL after scripts/WO-02c-setup-testnet.mjs, with Node 24 and
+// Testnet only. Run inside WSL after scripts/setup-demo-dao.mjs, with Node 24 and
 // near-api-js 7.4.0 at the repo root:
-//   node scripts/prove-m1.mjs
+//   node scripts/prove.mjs
 // It signs as the demo member (files the proposals), the worker kaap-worker-1029053612.testnet
 // (the only caller whose verdicts the guard accepts, because OutLayer binds the signing key to
 // the caller) and one fresh sub-account of the member per run that creates the payees. Their keys are read
@@ -27,7 +27,7 @@ import {
   GUARD_ROLE, MILLI_NEAR, NETWORK, PublicKey, REPO, SPUTNIK_CODE_HASH, TGAS, accountFor, accountState, actions,
   blockAt, burnt, call, events, loadState, newSavedKey, refusal, returned, send, sleep, stamp, toNear, txLink,
   viewFinal, viewFinalRaw,
-} from './WO-02c-setup-testnet.mjs';
+} from './setup-demo-dao.mjs';
 
 const PLANTED = join(REPO, 'eval', 'planted', 'planted.jsonl');
 const CHECK_OUTPUT = join(REPO, 'packages', 'sealed', 'tools', 'check-output.mjs');
@@ -36,7 +36,7 @@ const ATTACK = 'planted:17';
 const CONTROL = 'planted:57';
 const OUTLAYER = 'outlayer.testnet';
 const DOMAIN = Buffer.from('kaap-verdict-v1\n');
-// Ten minutes, as scripts/WO-02b-run-testnet.sh asks: the guard's vote lands well inside it.
+// Ten minutes, as scripts/run-sealed-testnet.sh asks: the guard's vote lands well inside it.
 const EXPIRES_IN_MS = 600_000;
 // A payee account holds no key and no code; 0.01 NEAR keeps it well above its own storage cost.
 const PAYEE_FUNDING = 10n * MILLI_NEAR;
@@ -112,7 +112,7 @@ async function readAtFinal(id, timeoutMs = 60_000) {
 async function runSealedJob(worker, id) {
   const input = JSON.stringify({ v: 1, network: NETWORK, guard, dao, proposal_id: id, expires_in_ms: EXPIRES_IN_MS });
   // All three limits written out on every run: an empty resource_limits object is never picked
-  // up (OutLayer issue #31). The same values as scripts/WO-02b-run-testnet.sh.
+  // up (OutLayer issue #31). The same values as scripts/run-sealed-testnet.sh.
   const args = {
     source: { Project: { project_id: state.sealed.project_id, version_key: null } },
     input_data: input,
@@ -304,10 +304,10 @@ async function runCase(c, member, worker, acceptedKey, dir) {
 
 async function main() {
   console.log(`Kaap M1 proof on ${NETWORK}, ${new Date().toISOString()}`);
-  if (!dao || !memberId) throw new Error('no demo DAO in deployments/testnet.json: run scripts/WO-02c-setup-testnet.mjs first');
+  if (!dao || !memberId) throw new Error('no demo DAO in deployments/testnet.json: run scripts/setup-demo-dao.mjs first');
   const daoState = await accountState(dao);
   if (daoState?.code_hash !== SPUTNIK_CODE_HASH) throw new Error(`${dao} runs ${daoState?.code_hash}, not Sputnik 3.2`);
-  if (!(await viewFinal(guard, 'is_enrolled', { dao }))) throw new Error(`${dao} is not enrolled in ${guard}: run scripts/WO-02c-setup-testnet.mjs`);
+  if (!(await viewFinal(guard, 'is_enrolled', { dao }))) throw new Error(`${dao} is not enrolled in ${guard}: run scripts/setup-demo-dao.mjs`);
   const policy = await viewFinal(dao, 'get_policy');
   const guardRole = policy.roles.find((r) => r.name === GUARD_ROLE);
   if (JSON.stringify(guardRole?.kind) !== JSON.stringify({ Group: [guard] })) throw new Error(`${dao} has no guard role held by ${guard} alone`);

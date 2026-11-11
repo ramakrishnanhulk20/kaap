@@ -5,13 +5,13 @@
 # explanation hash matches, and every run printed the same key. Prints the block height the reads
 # were pinned to, and per-run timing and cost. Runs inside WSL with near-cli-rs 0.30.1.
 #
-# Usage: bash scripts/WO-02b-run-testnet.sh <dao> <proposal id> [--runs N] [--corrupt] [--guard <account>] [--label <name>]
+# Usage: bash scripts/run-sealed-testnet.sh <dao> <proposal id> [--runs N] [--corrupt] [--guard <account>] [--label <name>]
 #   --corrupt   sets the job's testnet-only test flag: the HTTPS read is corrupted, so the job
 #               must answer `held` with no signature
 #   --guard     the guard account the verdict names (default: the worker account itself)
 set -uo pipefail
 
-DAO=${1:?usage: WO-02b-run-testnet.sh <dao> <proposal id> [--runs N] [--corrupt] [--guard g] [--label l]}
+DAO=${1:?usage: run-sealed-testnet.sh <dao> <proposal id> [--runs N] [--corrupt] [--guard g] [--label l]}
 ID=${2:?proposal id}
 shift 2
 RUNS=3
@@ -32,7 +32,7 @@ done
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 STATE="$REPO/packages/sealed/testnet.json"
 TOOLS="$REPO/packages/sealed/tools"
-[[ -f "$STATE" ]] || { echo "no packages/sealed/testnet.json: run scripts/WO-02b-publish-testnet.sh first" >&2; exit 1; }
+[[ -f "$STATE" ]] || { echo "no packages/sealed/testnet.json: run scripts/publish-sealed-testnet.sh first" >&2; exit 1; }
 ACCOUNT=$(jq -r .account "$STATE")
 PROJECT=$(jq -r .project_id "$STATE")
 GUARD=${GUARD:-$ACCOUNT}
