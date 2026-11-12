@@ -39,8 +39,10 @@ COPY --from=packages /app/node_modules node_modules
 COPY --from=packages /app/packages/worker packages/worker
 COPY package.json ./
 COPY packages/worker/src packages/worker/src
+COPY packages/worker/start-on-host.sh packages/worker/start-on-host.sh
 # The watcher reads the sealed reader's text key from the deployment record.
 COPY deployments deployments
 COPY --from=bridge /src/packages/worker/bridge/target/wasm32-unknown-unknown/release/kaap_worker_bridge.wasm packages/worker/dist/kaap-worker-bridge.wasm
 EXPOSE 8787
-CMD ["node", "packages/worker/src/main.ts"]
+# Waits for the key file on the mounted disk, then runs the watcher.
+CMD ["sh", "packages/worker/start-on-host.sh"]
