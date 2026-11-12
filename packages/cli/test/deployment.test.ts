@@ -1,9 +1,9 @@
 // The chain of deployment records (deployment.ts): this clone's own two records in order; an earlier
 // record named outside deployments/, by `..`, by an absolute path or through a link, refused before
 // it is read, while the record that names it is still used; a chain longer than four followed no
-// further; a record named twice read once; and run hashes of 42 characters read, while one of 33
-// bytes is refused. It does not cover which record a command picks (the verify, check, enroll and
-// seal-text tests do).
+// further; a record named twice read once; run hashes of 42 characters read, while one of 33
+// bytes is refused; and an accepted key of 44 characters that spells 33 bytes refused. It does not
+// cover which record a command picks (the verify, check, enroll and seal-text tests do).
 
 import assert from 'node:assert/strict';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -97,5 +97,15 @@ test('a record whose runs have 42-character hashes is read, and one naming 33 by
   assert.equal(d.attestedRunTx, short);
   assert.equal(loadTextKey(root, d).runTx, short);
   write('z'.repeat(44));
+  assert.throws(() => loadDeployment(root, 'testnet'), NoDeployment);
+});
+
+test('an accepted key of 44 base58 characters that spells 33 bytes is refused, and a real key is read', () => {
+  const root = clone();
+  const { previous: _today, ...base } = TODAY;
+  const write = (key: unknown) => writeFileSync(join(root, 'deployments', 'testnet.json'), JSON.stringify({ ...base, accepted_key: key }));
+  write(TODAY['accepted_key']);
+  assert.equal(loadDeployment(root, 'testnet').recordedKey, TODAY['accepted_key']);
+  write(`ed25519:${'z'.repeat(44)}`);
   assert.throws(() => loadDeployment(root, 'testnet'), NoDeployment);
 });
