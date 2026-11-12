@@ -7,6 +7,7 @@
 // POST must carry the header x-kaap-demo, which a page on another site cannot send without this
 // route's leave, so no other site can press the button through its visitors' browsers.
 import { NextResponse } from 'next/server';
+import { callerOf } from '@/lib/caller';
 import { DemoRefused, demoIsOn, fileFakeTheft } from '@/lib/demo';
 
 export const runtime = 'nodejs';
@@ -38,7 +39,7 @@ export function GET() {
 export async function POST(request: Request) {
   if (request.headers.get('x-kaap-demo') !== '1') return refuse(400, 'bad_request', 'This button is pressed from the check page.');
   if (!demoIsOn()) return refuse(503, 'off', 'The live demo is not switched on here.');
-  const caller = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+  const caller = callerOf(request);
   if (!allowed(caller, Date.now())) return refuse(429, 'slow_down', 'That is two already. Try again in ten minutes, or read the recorded one.');
   try {
     return NextResponse.json({ ok: true, ...(await fileFakeTheft()) });

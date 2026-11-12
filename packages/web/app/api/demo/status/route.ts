@@ -4,6 +4,7 @@
 // The page asks every three seconds while a filing is in flight. Each answer is kept for a second
 // and a half, so many viewers of one filing cost one read, and a caller gets 90 asks a minute.
 import { NextResponse } from 'next/server';
+import { callerOf } from '@/lib/caller';
 import { DemoRefused, type DemoStatus, demoStatus } from '@/lib/demo';
 
 export const runtime = 'nodejs';
@@ -38,7 +39,7 @@ export async function GET(request: Request) {
   const now = Date.now();
   const hit = kept.get(id);
   if (hit && now - hit.at < KEEP_MS) return NextResponse.json({ ok: true, ...hit.status });
-  const caller = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+  const caller = callerOf(request);
   if (!allowed(caller, now)) return refuse(429, 'slow_down', 'That is a lot of asks. Try again in a minute.');
   try {
     const status = await demoStatus(id);

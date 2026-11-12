@@ -8,6 +8,7 @@
 // this process; on a host that runs several, each has its own.
 
 import { NextResponse } from 'next/server';
+import { callerOf } from '@/lib/caller';
 import { type CheckAnswer, type CheckAsk, CheckRefused, type SuppliedText, runCheck } from '@/lib/kaapCheck';
 
 export const runtime = 'nodejs';
@@ -76,7 +77,7 @@ async function answer(request: Request, ask: CheckAsk): Promise<NextResponse> {
   const hit = key === null ? undefined : kept.get(key);
   if (hit && now - hit.at < KEEP_MS) return NextResponse.json({ ok: true, ...hit.answer });
 
-  const caller = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+  const caller = callerOf(request);
   if (!allowed(caller, now)) return refuse(429, 'slow_down', 'That is a lot of checks. Try again in a minute.');
   if (running >= AT_ONCE) return refuse(503, 'busy', 'Kaap is reading for someone else. Try again in a few seconds.');
 
