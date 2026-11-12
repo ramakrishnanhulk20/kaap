@@ -89,9 +89,11 @@ export function loadKey(path: string, accountId: string, log: Logger): KeyPair {
   return keyPair;
 }
 
-/** Sends through one provider, one signing at a time: a nonce is only handed out once the
- *  previous transaction is in a block or has failed to get there, so two of the worker's own
- *  transactions can never race for one nonce or land out of order. */
+/** Sends through one provider. Signing and sending are separate jobs on one serial queue, so no
+ *  two signings ever hand out the same nonce, but a signing can run before the transaction signed
+ *  just before it has been sent: one signed later can reach a block first. The chain then refuses
+ *  the earlier one as a stale nonce, and the Submitter's re-sign path signs it again once under a
+ *  fresh nonce, so it still lands. */
 export class NearChain implements Chain {
   readonly accountId: string;
   readonly #signer: KeyPairSigner;

@@ -11,7 +11,7 @@ import { TGAS, formatNear, worstCase } from './near.ts';
 import { events, receiptBlock, refusal } from './outcome.ts';
 import type { LiveProposal, Problem, Reads } from './reads.ts';
 import type { ViewProvider } from './rpc.ts';
-import type { Store } from './store.ts';
+import type { JudgedRow, Store, VetoState } from './store.ts';
 import type { SubmitResult, Submitter } from './submit.ts';
 
 /** The guard's NatSpec asks for 300 Tgas: big kinds need it and what is not burnt comes back. */
@@ -29,21 +29,32 @@ const HISTORY_PAGE = 50;
  *  verdict the sealed program signed, so a longer history is read no further. */
 const HISTORY_PAGES = 10;
 
-/** The per-DAO signals one proposal's veto or record raises, each with the stored state that
- *  keeps it true. */
-const HELD_BY_PROPOSAL: ReadonlyArray<readonly [Signal, 'veto_state' | 'record_state', string]> = [
-  ['veto_held', 'veto_state', 'held'],
-  ['veto_refused', 'veto_state', 'refused'],
-  ['record_refused', 'record_state', 'refused'],
-];
+/** A proposal's own signals that stop mattering once it can no longer pass. A record with no
+ *  outcome is not one of them: it is sent again until final, whatever the proposal did. */
+const MOOT_WHEN_CLOSED: readonly Signal[] = ['run_no_answer', 'run_without_verdict', 'verdict_rejected', 'veto_held', 'veto_no_outcome', 'veto_refused', 'record_refused'];
+const VETO_SIGNALS: readonly Signal[] = ['veto_held', 'veto_no_outcome', 'veto_refused'];
+/** Veto states in which a proposal that passed means Kaap's veto was lost: held, capped,
+ *  refused, or sent with no outcome. */
+const LOST_FROM: ReadonlySet<VetoState> = new Set<VetoState>(['held', 'capped', 'refused', 'no_outcome', 'sent']);
 
-/** Clears each of those signals for `dao` once no proposal the worker still sees open (the rule
- *  of `Store.open`) is in the state that raised it. Called whenever a proposal of `dao` is seen
- *  leaving InProgress, whatever it moved to: a held or refused action stops mattering once its
- *  proposal can no longer pass. */
-export function clearClosed(store: Store, health: Health, network: string, dao: string): void {
-  const open = store.open(network, dao);
-  for (const [signal, column, state] of HELD_BY_PROPOSAL) if (!open.some((r) => r[column] === state)) health.clear(signal, dao);
+/** As `LOST_FROM`, for the actor itself, which only checks a verdict that calls for a veto: a
+ *  proposal that passed before that veto was ever sent is lost too. */
+const LOST_BEFORE_SENT: ReadonlySet<VetoState> = new Set<VetoState>([...LOST_FROM, 'none']);
+
+/** Settles proposal `row`, seen leaving InProgress for `status` (`row` as it was before the close
+ *  changed it). Whatever it moved to, every signal raised for it clears, since nothing it held up
+ *  can matter once it cannot pass. The exception is a proposal that passed while its veto was in
+ *  `lostFrom`: that veto was lost. Members hear so at once, the veto is marked not open so it is
+ *  never sent, and its veto signals are retired, never reported as recovered. */
+export function settleClosed(store: Store, health: Health, network: string, row: JudgedRow, status: string, lostFrom: ReadonlySet<VetoState> = LOST_FROM): void {
+  const { dao, proposal_id: id } = row;
+  const proposal = { dao, proposal: id };
+  if (status === 'Approved' && lostFrom.has(row.veto_state)) {
+    store.setVetoState(network, dao, id, 'not_open');
+    health.notice('veto_lost', dao, { proposal_id: id, was: row.veto_state, tx: store.spend(`veto:${network}:${dao}:${id}:${row.verdict_hash}`)?.tx_hash ?? null, verdict_hash: row.verdict_hash });
+    for (const signal of VETO_SIGNALS) health.retire(signal, proposal, 'veto_lost');
+  }
+  for (const signal of MOOT_WHEN_CLOSED) health.clear(signal, proposal);
 }
 
 export type Decision =
@@ -124,11 +135,14 @@ export class Actor {
   /** Decides on and, when the rule says so, sends the veto for one verdict. */
   async veto(dao: string, id: number, signed: Signed): Promise<VetoOutcome> {
     const { verdict } = signed;
-    const before = this.#store.judged(this.#s.network, dao, id)?.veto_state;
+    const before = this.#store.judged(this.#s.network, dao, id);
     const key = `veto:${this.#s.network}:${dao}:${id}:${verdict.verdict_hash}`;
+    const proposal = { dao, proposal: id };
     if (!verdict.vetoable) {
       this.#store.setVetoState(this.#s.network, dao, id, 'not_needed');
       this.#log.info('no_veto', { dao, proposal_id: id, why: 'the guard rule does not allow a veto', risk: verdict.risk, floor: verdict.floor, ai_status: verdict.ai_status });
+      // The current verdict asks for no veto, so what an earlier verdict's veto raised is moot.
+      for (const signal of VETO_SIGNALS) this.#health.clear(signal, proposal);
       return { kind: 'not_needed', why: 'not_vetoable' };
     }
     const live = await this.#gate(dao, id);
@@ -139,12 +153,12 @@ export class Actor {
         this.#store.setProposalStatus(this.#s.network, dao, id, 'Removed');
         this.#store.setVetoState(this.#s.network, dao, id, 'not_open');
         this.#log.info('no_veto', { dao, proposal_id: id, why: 'not_open', status: 'Removed' });
-        this.#settleClosed(dao);
+        if (before) this.#closed(before, 'Removed');
         return { kind: 'not_needed', why: 'not_open' };
       }
       this.#store.setVetoState(this.#s.network, dao, id, 'held');
       this.#log.error('refused', { what: 'veto', dao, proposal_id: id, reason: 'live state not agreed', problem: live });
-      this.#health.raise('veto_held', dao, { proposal_id: id, problem: live.kind, item: live.item });
+      this.#health.raise('veto_held', proposal, { problem: live.kind, item: live.item });
       return { kind: 'held', why: `${live.kind}: ${live.item}` };
     }
     this.#store.setProposalStatus(this.#s.network, dao, id, live.status);
@@ -152,14 +166,9 @@ export class Actor {
     if (d.act === 'none') {
       this.#store.setVetoState(this.#s.network, dao, id, d.why === 'not_open' ? 'not_open' : 'not_needed');
       this.#log.info('no_veto', { dao, proposal_id: id, why: d.why, status: live.status });
-      if (d.why === 'not_open') {
-        this.#settleClosed(dao);
-        // A sent veto that never got an answer on a proposal that then passed is the worst
-        // outcome Kaap has, so it gets its own critical alert, not a quiet "not needed".
-        if (live.status === 'Approved' && (before === 'no_outcome' || before === 'sent')) {
-          this.#health.notice('veto_lost', dao, { proposal_id: id, tx: this.#store.spend(key)?.tx_hash ?? null, verdict_hash: verdict.verdict_hash });
-        }
-      }
+      // A veto that a proposal passing beat is the worst outcome Kaap has, so it gets its own
+      // urgent alert, never a quiet "not needed".
+      if (d.why === 'not_open' && before) this.#closed(before, live.status);
       return { kind: 'not_needed', why: d.why };
     }
     if (d.act === 'rejudge') {
@@ -193,6 +202,13 @@ export class Actor {
         windowBlocks: SHORT_WINDOW_BLOCKS,
         kept: () => 0n,
       });
+    } catch (e) {
+      // An error while signing or sending holds the veto, which the worker looks at again on its
+      // next pass; any bytes already signed are sent again under the same key.
+      this.#store.setVetoState(this.#s.network, dao, id, 'held');
+      this.#log.error('refused', { what: 'veto', dao, proposal_id: id, reason: 'error while signing or sending', error: e });
+      this.#health.raise('veto_held', proposal, { problem: 'error' });
+      return { kind: 'held', why: 'error' };
     } finally {
       this.#caps.settle(key);
     }
@@ -200,21 +216,23 @@ export class Actor {
       // The vote may still land, or may never have reached the chain: the worker re-sends the same
       // bytes on its next pass until the outcome is final or the veto is no longer needed.
       this.#store.setVetoState(this.#s.network, dao, id, 'no_outcome');
-      this.#health.raise('veto_no_outcome', dao, { proposal_id: id, tx: res.hash });
+      this.#health.raise('veto_no_outcome', proposal, { tx: res.hash });
       return { kind: 'held', why: 'no_outcome' };
     }
     if (res.kind === 'not_sent') {
       this.#store.setVetoState(this.#s.network, dao, id, 'held');
-      this.#health.raise('veto_held', dao, { proposal_id: id, problem: res.kind });
+      this.#health.raise('veto_held', proposal, { problem: res.kind });
       return { kind: 'held', why: res.kind };
     }
-    // Every path below ends cast or refused, so this outcome is no longer missing.
-    this.#clearNoOutcome('veto_no_outcome', dao);
+    // Every path below ends cast or refused, so this veto is no longer held or missing an outcome.
+    this.#health.clear('veto_no_outcome', proposal);
+    this.#health.clear('veto_held', proposal);
     const code = refusal(res.outcome);
     // ERR_REPLAY means this verdict was already spent, for instance by a send whose answer was
     // lost; the guard's own record then says whether that vote landed.
     if (code === 'ERR_REPLAY' && (await this.#vetoResult(verdict.verdict_hash)) === 'Ok') {
       this.#store.setVetoState(this.#s.network, dao, id, 'cast');
+      this.#health.clear('veto_refused', proposal);
       this.#log.info('veto_cast', { dao, proposal_id: id, tx: res.hash, note: 'an earlier send of this verdict had already cast the vote' });
       return { kind: 'cast', tx: res.hash, seconds: null };
     }
@@ -222,7 +240,7 @@ export class Actor {
       this.#store.setVetoState(this.#s.network, dao, id, 'refused');
       this.#log.error('veto_refused_by_guard', { dao, proposal_id: id, code, tx: res.hash });
       if (code === 'ERR_EXPIRED') return { kind: 'rejudge', why: 'expired' };
-      this.#health.raise('veto_refused', dao, { proposal_id: id, code });
+      this.#health.raise('veto_refused', proposal, { code });
       return { kind: 'refused_by_guard', tx: res.hash, code };
     }
 
@@ -231,13 +249,25 @@ export class Actor {
     if (result !== 'Ok') {
       this.#store.setVetoState(this.#s.network, dao, id, 'refused');
       this.#log.error('veto_refused', { dao, proposal_id: id, veto_result: result, guard_event: evented ?? null, tx: res.hash });
-      this.#health.raise('veto_refused', dao, { proposal_id: id, veto_result: result });
+      this.#health.raise('veto_refused', proposal, { veto_result: result });
       return { kind: 'refused_by_dao', tx: res.hash };
     }
     this.#store.setVetoState(this.#s.network, dao, id, 'cast');
+    this.#health.clear('veto_refused', proposal);
     const seconds = await this.#secondsSinceFiled(res.outcome, dao, live.submissionTime);
     this.#log.info('veto_cast', { dao, proposal_id: id, tx: res.hash, guard_event: evented ?? null, veto_result: result, seconds_from_add_proposal: seconds });
     return { kind: 'cast', tx: res.hash, seconds };
+  }
+
+  /** This proposal's record step succeeded, so what its earlier sends raised is over. */
+  #recorded(proposal: { dao: string; proposal: number }): void {
+    this.#health.clear('record_no_outcome', proposal);
+    this.#health.clear('record_refused', proposal);
+  }
+
+  /** Whether one more veto, or registry write of `dao`, would pass the caps now; holds nothing. */
+  hasRoom(kind: 'veto' | 'record', dao: string): boolean {
+    return this.#caps.fits(kind, dao);
   }
 
   /** A resend of bytes already signed costs nothing new: the caps counted it when it was signed,
@@ -247,12 +277,12 @@ export class Actor {
     return row !== undefined && row.state !== 'rejected';
   }
 
-  /** For a proposal this actor just saw closed. Its status already left InProgress in the store,
-   *  so the re-judge watch will not see it close; the signals it held are settled here. A missing
-   *  veto outcome stops mattering too, however the proposal closed. */
-  #settleClosed(dao: string): void {
-    this.#clearNoOutcome('veto_no_outcome', dao);
-    clearClosed(this.#store, this.#health, this.#s.network, dao);
+  /** For a proposal this actor just saw closed, `row` as it was before this veto. Its status
+   *  already left InProgress in the store, so the re-judge watch will not see it close; it is
+   *  settled here. The actor only gets this far with a verdict that calls for a veto, so a
+   *  proposal that passed before its first veto went out is a lost veto too. */
+  #closed(row: JudgedRow, status: string): void {
+    settleClosed(this.#store, this.#health, this.#s.network, row, status, LOST_BEFORE_SENT);
   }
 
   /** Whether both providers agree, at one block, that proposal `id` of `dao` no longer exists.
@@ -260,13 +290,6 @@ export class Actor {
   async #deleted(dao: string, id: number): Promise<boolean> {
     const state = await this.#reads.watchState(dao, [id]);
     return state.kind === 'live' && state.asked.includes(id) && !state.proposals.some((p) => p.id === id);
-  }
-
-  /** Signals are kept per DAO, so one is cleared only once no proposal of that DAO is still
-   *  waiting for a missing outcome. */
-  #clearNoOutcome(signal: 'veto_no_outcome' | 'record_no_outcome', dao: string): void {
-    const waiting = this.#store.pendingActions(this.#s.network).some((r) => r.dao === dao && (signal === 'veto_no_outcome' ? r.veto_state : r.record_state) === 'no_outcome');
-    if (!waiting) this.#health.clear(signal, dao);
   }
 
   async #vetoResult(verdictHash: string): Promise<string | null> {
@@ -322,6 +345,7 @@ export class Actor {
    *  drained from the contract). Every verdict is recorded, vetoed or not. */
   async record(dao: string, id: number, signed: Signed): Promise<'recorded' | 'refused' | 'capped' | 'no_outcome'> {
     const key = `record:${this.#s.network}:${dao}:${id}:${signed.verdict.verdict_hash}`;
+    const proposal = { dao, proposal: id };
     const reserved = worstCase(RECORD_GAS, RECORD_DEPOSIT);
     const capped = this.#alreadySigned(key) ? null : this.#caps.record(dao, reserved, key);
     if (capped) {
@@ -350,19 +374,27 @@ export class Actor {
           return typeof entry?.storage_cost === 'string' && /^\d+$/.test(entry.storage_cost) ? BigInt(entry.storage_cost) : 0n;
         },
       });
+    } catch (e) {
+      // Its outcome is not known: bytes signed before the error may still land. The worker's
+      // next pass sends it again by its idempotency key, as for any record with no outcome.
+      this.#store.setRecordState(this.#s.network, dao, id, 'no_outcome');
+      this.#log.error('record_not_sent', { dao, proposal_id: id, error: e });
+      this.#health.raise('record_no_outcome', proposal, { problem: 'error' });
+      return 'no_outcome';
     } finally {
       this.#caps.settle(key);
     }
     if (res.kind === 'no_outcome') {
       // Re-sent with the same bytes on the worker's next pass, until its outcome is final.
       this.#store.setRecordState(this.#s.network, dao, id, 'no_outcome');
-      this.#health.raise('record_no_outcome', dao, { proposal_id: id, tx: res.hash });
+      this.#health.raise('record_no_outcome', proposal, { tx: res.hash });
       return 'no_outcome';
     }
     if (res.kind === 'not_sent') {
       this.#store.setRecordState(this.#s.network, dao, id, 'refused');
       this.#log.error('record_refused', { dao, proposal_id: id, reason: 'not_sent', detail: res.detail });
-      this.#health.raise('record_refused', dao, { proposal_id: id, detail: res.detail });
+      this.#health.clear('record_no_outcome', proposal);
+      this.#health.raise('record_refused', proposal, { detail: res.detail });
       return 'refused';
     }
     const code = refusal(res.outcome);
@@ -371,19 +403,20 @@ export class Actor {
     // recorded. The refusal alone is not taken for that: the registry's history must show it.
     if (code === 'ERR_DUPLICATE' && (await this.#registryHolds(dao, id, signed.verdict.verdict_hash))) {
       this.#store.setRecordState(this.#s.network, dao, id, 'recorded');
-      this.#clearNoOutcome('record_no_outcome', dao);
+      this.#recorded(proposal);
       this.#log.info('recorded', { dao, proposal_id: id, tx: res.hash, note: 'the registry already held this verdict' });
       return 'recorded';
     }
     if (code) {
       this.#store.setRecordState(this.#s.network, dao, id, 'refused');
       this.#log.error('record_refused', { dao, proposal_id: id, code, tx: res.hash });
-      this.#health.raise('record_refused', dao, { proposal_id: id, code });
+      this.#health.clear('record_no_outcome', proposal);
+      this.#health.raise('record_refused', proposal, { code });
       return 'refused';
     }
     const entry = events(res.outcome).find((e) => e.by === this.#s.registry && e.event === 'verdict_recorded')?.data[0] as { index?: unknown; storage_cost?: unknown } | undefined;
     this.#store.setRecordState(this.#s.network, dao, id, 'recorded');
-    this.#clearNoOutcome('record_no_outcome', dao);
+    this.#recorded(proposal);
     this.#log.info('recorded', { dao, proposal_id: id, tx: res.hash, registry_index: entry?.index ?? null, storage_near: typeof entry?.storage_cost === 'string' ? formatNear(BigInt(entry.storage_cost)) : null });
     return 'recorded';
   }

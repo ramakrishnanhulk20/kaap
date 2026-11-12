@@ -117,7 +117,7 @@ test('providers that disagree past the hold window raise guard degraded (C22)', 
   await s.worker.stop();
 });
 
-test('failed runs raise guard degraded, and the next verified verdict clears them', async () => {
+test('failed runs raise guard degraded, and the next verified verdict for that proposal clears them', async () => {
   const s = await started();
   s.chain.respond = () => null;
   assert.equal((await s.judge.judge(DAO, 4, 1)).kind, 'no_verdict');
@@ -125,9 +125,32 @@ test('failed runs raise guard degraded, and the next verified verdict clears the
   const { chat } = await s.delivered();
   assert.match(chat[0]!, /Degraded: The sealed judge did not answer a run[\s\S]*Degraded: A proposal could not be judged/);
 
-  s.chain.respond = () => runOutcome(sealedOutput(verdictFields(5, { expires_at_ms: s.c.now() + 600_000 }), s.key));
-  assert.equal((await s.judge.judge(DAO, 5, 1)).kind, 'verdict');
+  s.chain.respond = () => runOutcome(sealedOutput(verdictFields(4, { expires_at_ms: s.c.now() + 600_000 }), s.key));
+  assert.equal((await s.judge.judge(DAO, 4, 2)).kind, 'verdict');
   assert.equal(s.level(), 'healthy');
+  await s.worker.stop();
+});
+
+test('a signal for proposal 1 stays while proposal 2 gets a verdict', async () => {
+  const s = await started();
+  s.chain.respond = () => null;
+  assert.equal((await s.judge.judge(DAO, 1, 1)).kind, 'no_verdict');
+  // Signed with a key the guard does not accept, so the worker refuses the verdict.
+  s.chain.respond = () => runOutcome(sealedOutput(verdictFields(3, { expires_at_ms: s.c.now() + 600_000 }), testKey()));
+  assert.equal((await s.judge.judge(DAO, 3, 1)).kind, 'no_verdict');
+  s.chain.respond = () => runOutcome(sealedOutput(verdictFields(2, { expires_at_ms: s.c.now() + 600_000 }), s.key));
+  assert.equal((await s.judge.judge(DAO, 2, 1)).kind, 'verdict');
+
+  const raised = () => s.health.current().map((r) => `${r.signal} ${r.proposal}`).sort();
+  assert.deepEqual(raised(), ['run_no_answer 1', 'run_without_verdict 1', 'run_without_verdict 3', 'verdict_rejected 3'], "proposal 2's verdict clears nothing of 1 or 3");
+  assert.equal(s.level(), 'degraded');
+  // GET /status keeps its shape: one line per proposal that holds the signal.
+  const signals = statusReport(s.health, s.worker.watching(), { network: NETWORK, guard: GUARD }, s.c.now()).daos[0]!.signals.map((x) => x.signal).sort();
+  assert.deepEqual(signals, ['run_no_answer', 'run_without_verdict', 'run_without_verdict', 'verdict_rejected']);
+
+  s.chain.respond = () => runOutcome(sealedOutput(verdictFields(1, { expires_at_ms: s.c.now() + 600_000 }), s.key));
+  assert.equal((await s.judge.judge(DAO, 1, 2)).kind, 'verdict');
+  assert.deepEqual(raised(), ['run_without_verdict 3', 'verdict_rejected 3'], "1's own verdict clears 1's signals");
   await s.worker.stop();
 });
 

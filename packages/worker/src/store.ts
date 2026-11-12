@@ -8,7 +8,8 @@
 // subscription tokens are kept only as their SHA-256, so a copy of the file cannot redeem one.
 //
 // Never stored: hash texts, descriptions, keys, the bot token, alert texts, and a member's sealed
-// text or reply key in any form: a run that carries one keeps no signed bytes (C26).
+// text or reply key in any form: a run that carries one keeps no signed bytes (C26). A raised
+// health signal is kept as its name, DAO, proposal and time only, never its fields.
 
 import Database from 'better-sqlite3';
 
@@ -138,7 +139,19 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 ) STRICT;
+CREATE TABLE IF NOT EXISTS signals (
+  network TEXT NOT NULL,
+  signal TEXT NOT NULL,
+  dao TEXT NOT NULL,
+  proposal_id INTEGER NOT NULL,
+  since_ms INTEGER NOT NULL,
+  PRIMARY KEY (network, signal, dao, proposal_id)
+) STRICT;
 `;
+
+/** The proposal_id a signal about a whole DAO is kept under: no proposal has a negative id, and a
+ *  key column cannot hold NULL as one value. */
+const NO_PROPOSAL = -1;
 
 export type JudgedState = 'queued' | 'judging' | 'judged' | 'failed' | 'capped' | 'skipped';
 export type VetoState = 'none' | 'not_needed' | 'sent' | 'no_outcome' | 'cast' | 'refused' | 'held' | 'not_open' | 'capped';
@@ -376,6 +389,38 @@ export class Store {
     return this.db
       .prepare("SELECT * FROM judged WHERE network = ? AND verdict_b64 IS NOT NULL AND signature_b64 IS NOT NULL AND (veto_state IN ('sent', 'no_outcome') OR record_state IN ('sent', 'no_outcome')) ORDER BY proposal_id")
       .all(network) as JudgedRow[];
+  }
+
+  /** Proposals still open, by the rule of `open`, with a step that a cap, a failed run or a hold
+   *  stopped: a judgement that ended failed or capped, a veto held or capped, a record capped.
+   *  The worker takes each up again while its proposal stays open. */
+  stopped(network: string): JudgedRow[] {
+    return this.db
+      .prepare("SELECT * FROM judged WHERE network = ? AND (proposal_status = 'InProgress' OR proposal_status IS NULL) AND (state IN ('failed', 'capped') OR veto_state IN ('held', 'capped') OR record_state = 'capped') ORDER BY dao, proposal_id")
+      .all(network) as JudgedRow[];
+  }
+
+  /** Whether any proposal of `dao` still open, by the rule of `open`, has a step a cap stopped. */
+  stillCapped(network: string, dao: string): boolean {
+    return (
+      this.db
+        .prepare("SELECT 1 FROM judged WHERE network = ? AND dao = ? AND (proposal_status = 'InProgress' OR proposal_status IS NULL) AND (state = 'capped' OR veto_state = 'capped' OR record_state = 'capped') LIMIT 1")
+        .get(network, dao) !== undefined
+    );
+  }
+
+  /** Every health signal kept as raised, with when it was first raised. */
+  keptSignals(network: string): Array<{ signal: string; dao: string; proposal: number | null; since_ms: number }> {
+    const rows = this.db.prepare('SELECT signal, dao, proposal_id, since_ms FROM signals WHERE network = ? ORDER BY since_ms').all(network) as Array<{ signal: string; dao: string; proposal_id: number; since_ms: number }>;
+    return rows.map((r) => ({ signal: r.signal, dao: r.dao, proposal: r.proposal_id === NO_PROPOSAL ? null : r.proposal_id, since_ms: r.since_ms }));
+  }
+
+  keepSignal(network: string, signal: string, dao: string, proposal: number | null, sinceMs: number): void {
+    this.db.prepare('INSERT OR IGNORE INTO signals (network, signal, dao, proposal_id, since_ms) VALUES (?, ?, ?, ?, ?)').run(network, signal, dao, proposal ?? NO_PROPOSAL, sinceMs);
+  }
+
+  dropSignal(network: string, signal: string, dao: string, proposal: number | null): void {
+    this.db.prepare('DELETE FROM signals WHERE network = ? AND signal = ? AND dao = ? AND proposal_id = ?').run(network, signal, dao, proposal ?? NO_PROPOSAL);
   }
 
   run(key: string): RunRow | undefined {

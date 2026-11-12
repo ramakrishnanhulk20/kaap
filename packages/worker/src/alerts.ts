@@ -8,12 +8,13 @@
 // one Kaap builds to its own site. A last pass removes control, format, private-use and
 // unassigned characters, which covers zero-width and text-direction tricks.
 //
-// Sending: a critical verdict, a veto cast, a lost veto and "guard offline" go at once. Everything
-// else waits in a batch per DAO and per proposer (health changes batch per DAO), so a flood of
-// proposals from one account becomes one message. Batched messages are capped per chat per hour;
-// urgent ones are never capped or delayed. The queue lives in the store, so a restart loses no
-// verdict, veto or notice. Health changes an earlier process left queued are dropped at boot: they
-// describe that process's state, and the new one raises again whatever is still wrong.
+// Sending: a critical verdict, a veto cast, a veto that did not land, a lost veto and "guard
+// offline" go at once, each cause once. Everything else waits in a batch per DAO and per proposer
+// (health changes batch per DAO), so a flood of proposals from one account becomes one message.
+// Batched messages are capped per chat per hour; urgent ones are never capped or delayed. The queue lives in the store, so a restart loses no
+// verdict, veto or notice. Health changes an earlier process left queued are dropped at boot, save
+// the raising of a signal the store still keeps as raised: the new process takes those signals up
+// again without a new alert, and raises again whatever else is still wrong.
 
 import { ACCOUNT_ID } from './config.ts';
 import { ALL, SAYS, levelOf, type HealthEvent, type Notice, type Signal } from './health.ts';
@@ -36,6 +37,27 @@ const RETRY_MS = 30_000;
 const SEND_GAP_MS = 50;
 
 const STOP_LINE = 'Send /stop to stop Kaap alerts in this chat.';
+
+/** What a lost veto's message says happened to the vote, by the veto state it was lost from. */
+const LOST_AS = {
+  sent: "Kaap's reject vote got no result and the proposal has now passed.",
+  no_outcome: "Kaap's reject vote got no result and the proposal has now passed.",
+  held: 'Kaap held its veto and the proposal has now passed.',
+  capped: "A daily spending limit stopped Kaap's veto and the proposal has now passed.",
+  refused: "Kaap's veto was refused and the proposal has now passed.",
+  none: "The proposal passed before Kaap's veto went out.",
+} as const;
+type LostAs = keyof typeof LOST_AS;
+const lostAs = (was: unknown): LostAs | null => (typeof was === 'string' && Object.hasOwn(LOST_AS, was) ? (was as LostAs) : null);
+
+/** Why a veto did not land, by the veto state it ended in, as members read it. */
+const FAILED_AS = {
+  held: 'Kaap could not confirm the proposal on both RPC providers, or could not send its vote. It keeps trying.',
+  capped: 'Kaap reached a daily spending limit. It sends the vote once the limit has room.',
+  no_outcome: 'Its vote was sent but no result came back. Kaap keeps sending the same vote.',
+  refused: 'The guard or the DAO refused its vote.',
+} as const;
+export type VetoFailure = keyof typeof FAILED_AS;
 
 /** Removes every character of Unicode category C except the newline (controls, format characters
  *  such as zero-width spaces and joiners, text-direction overrides, the byte-order mark and soft
@@ -70,13 +92,16 @@ export function proposalLink(site: string | null, network: string, dao: string, 
 export type AlertBody =
   | { t: 'verdict'; id: number; risk: Risk; findings: string[]; vetoable: boolean; proposer: string | null }
   | { t: 'veto_cast'; id: number; seconds: number | null }
+  | { t: 'veto_failed'; id: number; why: VetoFailure }
   | { t: 'health'; change: 'raised' | 'cleared'; signal: Signal }
-  | { t: 'notice'; notice: Notice; id: number | null };
+  /** `was`: for a lost veto, the veto state it was lost from; null for any other notice. */
+  | { t: 'notice'; notice: Notice; id: number | null; was: LostAs | null };
 
 /** What the worker hands the alerts. */
 export interface AlertSink {
   verdict(dao: string, id: number, v: { risk: string; findings: string[]; vetoable: boolean; verdict_hash: string }, proposer: string | null): void;
   vetoCast(dao: string, id: number, seconds: number | null): void;
+  vetoFailed(dao: string, id: number, why: VetoFailure): void;
 }
 
 /** Bodies read back from the store are checked again before they reach a message (T8). */
@@ -92,8 +117,9 @@ function readBody(raw: string): AlertBody | null {
     return { t: 'verdict', id, risk: b.risk as Risk, findings: Array.isArray(b.findings) ? (b.findings as string[]) : [], vetoable: b.vetoable === true, proposer: typeof b.proposer === 'string' ? b.proposer : null };
   }
   if (b.t === 'veto_cast' && id !== null) return { t: 'veto_cast', id, seconds: typeof b.seconds === 'number' && Number.isFinite(b.seconds) ? b.seconds : null };
+  if (b.t === 'veto_failed' && id !== null && typeof b.why === 'string' && Object.hasOwn(FAILED_AS, b.why)) return { t: 'veto_failed', id, why: b.why as VetoFailure };
   if (b.t === 'health' && (b.change === 'raised' || b.change === 'cleared') && typeof b.signal === 'string' && b.signal in SAYS) return { t: 'health', change: b.change, signal: b.signal as Signal };
-  if (b.t === 'notice' && (b.notice === 'counter_gap' || b.notice === 'veto_lost')) return { t: 'notice', notice: b.notice, id };
+  if (b.t === 'notice' && (b.notice === 'counter_gap' || b.notice === 'veto_lost')) return { t: 'notice', notice: b.notice, id, was: lostAs(b.was) };
   return null;
 }
 
@@ -108,7 +134,13 @@ export function render(network: string, site: string | null, dao: string, bodies
   if (bodies.length === 1 && first.t === 'verdict' && first.risk === 'critical') {
     lines.push(`Kaap: CRITICAL risk on proposal ${first.id} of ${where}, filed by ${shownAccount(first.proposer)}.`);
     lines.push(`Findings: ${shownFindings(first.findings)}.`);
-    lines.push(first.vetoable ? "Kaap's guard is voting to reject it now." : 'The guard rule does not let Kaap veto this one. Review it before anyone approves it.');
+    // Sent before the vote's result is known, so it says only what is true now.
+    lines.push(first.vetoable ? 'Kaap is sending its veto now.' : 'The guard rule does not let Kaap veto this one. Review it before anyone approves it.');
+    const l = link(first.id);
+    if (l) lines.push(`Details: ${l}`);
+  } else if (first.t === 'veto_failed') {
+    lines.push(`Kaap: could not veto proposal ${first.id} of ${where}. ${FAILED_AS[first.why]}`);
+    lines.push('If you agree it is an attack, vote to reject it yourself.');
     const l = link(first.id);
     if (l) lines.push(`Details: ${l}`);
   } else if (first.t === 'veto_cast') {
@@ -117,7 +149,7 @@ export function render(network: string, site: string | null, dao: string, bodies
     const l = link(first.id);
     if (l) lines.push(`Details: ${l}`);
   } else if (first.t === 'notice' && first.notice === 'veto_lost') {
-    lines.push(`Kaap: veto lost on proposal ${first.id ?? '(unknown)'} of ${where}. Kaap's reject vote got no result and the proposal has now passed. Check the treasury now.`);
+    lines.push(`Kaap: veto lost on proposal ${first.id ?? '(unknown)'} of ${where}. ${LOST_AS[first.was ?? 'no_outcome']} Check the treasury now.`);
     const l = first.id !== null ? link(first.id) : null;
     if (l) lines.push(`Details: ${l}`);
   } else if (first.t === 'health' && first.change === 'raised' && levelOf(first.signal) === 'offline') {
@@ -206,12 +238,19 @@ export class Alerts implements AlertSink {
     this.#queue(dao, 'veto_cast', `veto_cast:${this.#s.network}:${dao}:${id}`, true, `proposal:${id}`, { t: 'veto_cast', id, seconds });
   }
 
+  /** A veto on a critical proposal that did not land: urgent, so never batched or capped. One
+   *  cause is one alert: the same proposal held again on the next pass, or refused again on a
+   *  re-judge, sends nothing more, while a new way of failing does. */
+  vetoFailed(dao: string, id: number, why: VetoFailure): void {
+    this.#queue(dao, 'veto_failed', `veto_failed:${this.#s.network}:${dao}:${id}:${why}`, true, `proposal:${id}`, { t: 'veto_failed', id, why });
+  }
+
   /** Turns a health change into an alert for the DAO it concerns, or every chat for ALL. */
   health(event: HealthEvent): void {
     if (event.kind === 'notice') {
       const id = typeof event.fields.proposal_id === 'number' ? event.fields.proposal_id : null;
       const lost = event.notice === 'veto_lost';
-      this.#queue(event.dao, 'notice', lost ? `veto_lost:${this.#s.network}:${event.dao}:${id}` : null, lost, lost ? `proposal:${id}` : 'health', { t: 'notice', notice: event.notice, id });
+      this.#queue(event.dao, 'notice', lost ? `veto_lost:${this.#s.network}:${event.dao}:${id}` : null, lost, lost ? `proposal:${id}` : 'health', { t: 'notice', notice: event.notice, id, was: lost ? lostAs(event.fields.was) : null });
       return;
     }
     const { signal, dao } = event.raised;
@@ -222,21 +261,27 @@ export class Alerts implements AlertSink {
   }
 
   /** Drops what an earlier process left queued that is no longer true. Run once at boot, before
-   *  this process queues anything. Health changes go, since this process's own Health starts
-   *  empty and raises again whatever is still wrong; so does a verdict on a proposal the worker
-   *  last saw closed, by the same rule as `Store.open`. A verdict on an open proposal, a veto
-   *  cast and a notice are facts that still hold, and stay. Returns how many were dropped. */
+   *  this process queues anything. A health change goes, unless it raised a signal the store
+   *  still keeps as raised: this process takes that signal up again without raising it anew, so
+   *  the queued alert is the one members get. Every other signal comes from live reads, which
+   *  this process raises again if it is still wrong. A verdict, or a veto that did not land, on a
+   *  proposal the worker last saw closed goes too, by the same rule as `Store.open`: nobody can
+   *  reject it any more, and one that passed is told as a lost veto. A verdict on an open
+   *  proposal, a veto cast and a notice are facts that still hold, and stay. Returns how many
+   *  were dropped. */
   dropStale(): number {
     const { store, log } = this.#d;
+    const kept = new Set(store.keptSignals(this.#s.network).map((k) => `${k.signal}|${k.dao}`));
     const health: number[] = [];
     const closed: number[] = [];
     for (const row of store.queuedAlerts(this.#s.network)) {
       if (row.kind === 'health') {
-        health.push(row.id);
+        const body = readBody(row.body);
+        if (!(body?.t === 'health' && body.change === 'raised' && kept.has(`${body.signal}|${row.dao}`))) health.push(row.id);
         continue;
       }
-      const body = row.kind === 'verdict' ? readBody(row.body) : null;
-      if (body?.t !== 'verdict') continue;
+      const body = row.kind === 'verdict' || row.kind === 'veto_failed' ? readBody(row.body) : null;
+      if (body?.t !== 'verdict' && body?.t !== 'veto_failed') continue;
       const status = store.judged(this.#s.network, row.dao, body.id)?.proposal_status ?? null;
       if (status !== null && status !== 'InProgress') closed.push(row.id);
     }

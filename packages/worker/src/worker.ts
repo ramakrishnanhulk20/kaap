@@ -3,7 +3,7 @@
 // hands it, so a quiet worker is a disarmed guard; everything that can stop it is logged loudly.
 // A member's sealed text (POST /texts) is judged here too, one proposal at a time like the rest.
 
-import type { Actor, Signed } from './act.ts';
+import type { Actor, Signed, VetoOutcome } from './act.ts';
 import type { AlertSink } from './alerts.ts';
 import { Bridge, type DecodedVerdict } from './bridge.ts';
 import { PER_STOPPED_ATTACK } from './caps.ts';
@@ -14,7 +14,7 @@ import type { Logger } from './log.ts';
 import { STORAGE_PRICE_PER_BYTE, formatNear } from './near.ts';
 import type { Reads } from './reads.ts';
 import type { RejudgeWatch } from './rejudge.ts';
-import { dayOf, type Store } from './store.ts';
+import type { JudgedRow, Store } from './store.ts';
 import { CounterWatch } from './watcher.ts';
 
 /** The worker raises "balance low" below the cost of 20 stopped attacks (C18). */
@@ -23,6 +23,11 @@ export const WORKER_FLOOR = 20n * PER_STOPPED_ATTACK;
  *  packages/contracts/GAS.md); callers pay all the gas. So 20 vetoes need 1,680 bytes. */
 export const GUARD_FLOOR = 20n * 84n * STORAGE_PRICE_PER_BYTE;
 export const DEFAULT_LAG_MS = 15_000;
+/** A failed judgement is tried again after this wait, doubled after every further failure up to
+ *  `RETRY_MAX_MS`, for as long as its proposal is open. A sealed run waits on OutLayer and the
+ *  chain for minutes at worst, so a faster retry would mostly pay for the same failure again. */
+export const RETRY_FIRST_MS = 60_000;
+export const RETRY_MAX_MS = 15 * 60_000;
 
 /** What became of one member's sealed text (POST /texts). */
 export type TextOutcome =
@@ -81,6 +86,9 @@ export class Worker {
   /** Every text being judged or acted on, so stop() can wait for them. */
   readonly #texts = new Set<Promise<void>>();
   readonly #timers: NodeJS.Timeout[] = [];
+  /** Retries so far per stopped step, `${dao}#${id}#judge|veto|record`, and when a failed
+   *  judgement may go again. Kept in memory: after a restart a stopped step is simply due at once. */
+  readonly #tries = new Map<string, { attempts: number; due: number }>();
   #running = 0;
   #idle: Array<() => void> = [];
   #stopped = false;
@@ -92,9 +100,11 @@ export class Worker {
     this.#bridge = deps.bridge ?? Bridge.load();
   }
 
-  /** Reads the guard, takes up every enrolled DAO (backfilling each one's open proposals the first
-   *  time), resumes anything a restart cut off, then starts the loops. */
+  /** Takes up the health signals the store kept, reads the guard, takes up every enrolled DAO
+   *  (backfilling each one's open proposals the first time), resumes anything a restart cut off,
+   *  then starts the loops. */
   async start(): Promise<void> {
+    this.#d.health.keepIn(this.#d.store, this.#s.network);
     await this.refreshGuard();
     if (!this.#d.acceptedKey.value) throw new Error('the guard key could not be read on both providers; the worker cannot check any verdict');
     await this.refreshEnrolled();
@@ -125,14 +135,17 @@ export class Worker {
   }
 
   /** One watch tick: re-sends what has no outcome yet, and only after that pass has finished,
-   *  re-judges what moved. A hung send can therefore delay that tick's re-judge, by at most the
-   *  send's window; the order is kept so a resumed veto always acts before a re-judge replaces
-   *  its verdict. */
+   *  re-judges what moved, then takes up every step a cap, a failed run or a hold stopped. A hung
+   *  send can therefore delay that tick's re-judge, by at most the send's window; the order is
+   *  kept so a resumed veto always acts before a re-judge replaces its verdict, and a stopped step
+   *  is only tried once the re-judge has read which proposals are still open. */
   watchTick(): Promise<void> {
     return this.#exclusive(async () => {
       await this.#resumeAll();
       if (this.#stopped) return;
       await Promise.all([...this.#watchers.keys()].map((dao) => this.#d.rejudge.pass(dao)));
+      if (this.#stopped) return;
+      await this.#retryStopped();
     });
   }
 
@@ -143,8 +156,9 @@ export class Worker {
 
   /** Raises "watcher lag" (guard offline) when neither provider has answered a DAO's counter
    *  for the lag window, and "provider silent" (guard degraded) when one of them has not; each
-   *  clears once the reads come back. A cap reached on an earlier UTC day is cleared too, since
-   *  every cap counts per day (C18, C29). */
+   *  clears once the reads come back. "Cap reached" clears once no proposal of the DAO still open
+   *  has a step a cap stopped: until then something is still waiting on the cap, whatever the
+   *  day (C18, C29). */
   sweep(): void {
     const { health, reads } = this.#d;
     const now = this.#d.now();
@@ -164,7 +178,7 @@ export class Worker {
         health.clear('provider_silent', dao);
       }
     }
-    for (const r of health.current()) if (r.signal === 'cap_reached' && dayOf(r.since) !== dayOf(now)) health.clear('cap_reached', r.dao);
+    for (const r of health.current()) if (r.signal === 'cap_reached' && !this.#d.store.stillCapped(this.#s.network, r.dao)) health.clear('cap_reached', r.dao);
   }
 
   /** Raises "balance low" for the worker below 20 stopped attacks and for the guard below the
@@ -352,7 +366,9 @@ export class Worker {
     });
   }
 
-  /** Judges one queued proposal, then vetoes (first, since it races the approvers) and records. */
+  /** Judges one queued proposal, then vetoes (first, since it races the approvers) and records.
+   *  A judgement that ends without a verdict, whatever stopped it, is left failed or capped for
+   *  the retry pass, never judging. */
   async process(dao: string, id: number): Promise<void> {
     const { store, judge, log } = this.#d;
     const net = this.#s.network;
@@ -360,24 +376,81 @@ export class Worker {
     if (!row || (row.state !== 'queued' && row.state !== 'judging')) return;
     const generation = row.generation;
     store.setJudgedState(net, dao, id, 'judging');
-    const j = await judge.judge(dao, id, generation);
+    let j: Judgement;
+    try {
+      j = await judge.judge(dao, id, generation);
+    } catch (e) {
+      log.error('judgement_failed', { dao, proposal_id: id, generation, error: e });
+      this.#d.health.raise('run_without_verdict', { dao, proposal: id }, { last: 'failed' });
+      j = { kind: 'no_verdict', attempts: 0, last: 'failed', detail: 'error', tx: null };
+    }
+    // A re-judge asked for while this run was out keeps its own, newer state.
+    const current = store.judged(net, dao, id)?.generation === generation;
     if (j.kind !== 'verdict') {
+      if (!current) return;
       store.setJudgedState(net, dao, id, j.kind === 'capped' ? 'capped' : 'failed');
+      if (j.kind === 'no_verdict') this.#failed(dao, id);
       return;
     }
-    if (store.judged(net, dao, id)?.generation !== generation) {
+    if (!current) {
       log.info('verdict_superseded', { dao, proposal_id: id, generation, why: 'a re-judge was asked for while this run was out' });
       return;
     }
+    this.#tries.delete(`${dao}#${id}#judge`);
     await this.#act(dao, id, row.reason, j);
+  }
+
+  /** Sets when a judgement that just failed may go again: 60 s after the first failure, doubled
+   *  after each retry that failed too, never more than 15 minutes. */
+  #failed(dao: string, id: number): void {
+    const key = `${dao}#${id}#judge`;
+    const tries = this.#tries.get(key) ?? { attempts: 0, due: 0 };
+    tries.due = this.#d.now() + Math.min(RETRY_FIRST_MS * 2 ** tries.attempts, RETRY_MAX_MS);
+    this.#tries.set(key, tries);
+  }
+
+  /** Counts and logs one more try of a stopped step, with its attempt number. */
+  #retried(dao: string, id: number, step: 'judge' | 'veto' | 'record', after: string): void {
+    const key = `${dao}#${id}#${step}`;
+    const tries = this.#tries.get(key) ?? { attempts: 0, due: 0 };
+    tries.attempts++;
+    this.#tries.set(key, tries);
+    this.#d.log.warn('step_retried', { step, dao, proposal_id: id, attempt: tries.attempts, after });
+  }
+
+  /** The actor's veto, with any error it throws turned into a held veto, so the retry pass takes
+   *  it up and the record that follows still goes out. */
+  async #veto(dao: string, id: number, signed: Signed): Promise<VetoOutcome> {
+    try {
+      return await this.#d.actor.veto(dao, id, signed);
+    } catch (e) {
+      this.#d.log.error('veto_failed', { dao, proposal_id: id, error: e });
+      this.#d.store.setVetoState(this.#s.network, dao, id, 'held');
+      this.#d.health.raise('veto_held', { dao, proposal: id }, { problem: 'error' });
+      return { kind: 'held', why: 'error' };
+    }
+  }
+
+  /** The actor's record, with any error it throws leaving the record for the resume pass, which
+   *  sends it again by its idempotency key. */
+  async #record(dao: string, id: number, signed: Signed): Promise<void> {
+    try {
+      await this.#d.actor.record(dao, id, signed);
+    } catch (e) {
+      this.#d.log.error('record_failed', { dao, proposal_id: id, error: e });
+      this.#d.store.setRecordState(this.#s.network, dao, id, 'no_outcome');
+      this.#d.health.raise('record_no_outcome', { dao, proposal: id }, { problem: 'error' });
+    }
   }
 
   /** Keeps a verdict as the proposal's current one, then vetoes (first, since it races the
    *  approvers) and records. The verdict is stored before the first wait, so a caller that does
    *  not wait for the veto still finds it kept. */
   async #act(dao: string, id: number, reason: string, j: Extract<Judgement, { kind: 'verdict' }>): Promise<void> {
-    const { store, actor } = this.#d;
+    const { store } = this.#d;
     const net = this.#s.network;
+    this.#tries.delete(`${dao}#${id}#veto`);
+    this.#tries.delete(`${dao}#${id}#record`);
     const v = j.verdict;
     store.setVerdict(net, dao, id, {
       verdict_b64: j.verdictB64,
@@ -396,13 +469,23 @@ export class Worker {
     });
     const signed = { verdict: v, verdictB64: j.verdictB64, signatureB64: j.signatureB64 };
     const alerted = this.#alertVerdict(dao, id, v);
-    const vetoed = await actor.veto(dao, id, signed);
-    if (vetoed.kind === 'cast') {
-      await alerted;
-      this.#d.alerts?.vetoCast(dao, id, vetoed.seconds);
-    }
-    await actor.record(dao, id, signed);
+    const vetoed = await this.#veto(dao, id, signed);
+    // The verdict's own alert goes first, so members read the news in the order it happened.
+    if (vetoed.kind !== 'not_needed') await alerted;
+    if (vetoed.kind === 'cast') this.#d.alerts?.vetoCast(dao, id, vetoed.seconds);
+    this.#vetoFailed(dao, id, vetoed);
+    await this.#record(dao, id, signed);
     if (vetoed.kind === 'rejudge') this.#rejudge(dao, id, reason, vetoed.why);
+  }
+
+  /** Tells members at once when a veto did not land: held, capped, sent with no outcome, or
+   *  refused (C27). Only a verdict that calls for a veto gets this far, and the guard rule allows
+   *  one on a critical risk only. A veto the guard refused as expired is not one of these: it
+   *  asks for a new judgement instead. The same cause again sends nothing more. */
+  #vetoFailed(dao: string, id: number, vetoed: VetoOutcome): void {
+    if (vetoed.kind !== 'held' && vetoed.kind !== 'refused_by_dao' && vetoed.kind !== 'refused_by_guard') return;
+    const state = this.#d.store.judged(this.#s.network, dao, id)?.veto_state;
+    if (state === 'held' || state === 'capped' || state === 'no_outcome' || state === 'refused') this.#d.alerts?.vetoFailed(dao, id, state);
   }
 
   /** Whether the sealed run's input for this text stays inside what the sealed program reads. */
@@ -483,7 +566,8 @@ export class Worker {
     if (reason.startsWith('rejudge:stale')) {
       this.#d.store.setVetoState(net, dao, id, 'held');
       this.#d.log.error('refused', { what: 'veto', dao, proposal_id: id, reason: 'fresh verdict still does not match the live state', why });
-      this.#d.health.raise('veto_held', dao, { proposal_id: id, why });
+      this.#d.health.raise('veto_held', { dao, proposal: id }, { why });
+      this.#d.alerts?.vetoFailed(dao, id, 'held');
       return;
     }
     this.#d.store.queueAgain(net, dao, id, `rejudge:stale:${why}`);
@@ -497,29 +581,92 @@ export class Worker {
    *  that judgement, and one asked for during a resume is judged straight after it. Always run
    *  through `#exclusive`. */
   async #resumeAll(): Promise<void> {
-    const { store, actor, log } = this.#d;
+    const { store, log } = this.#d;
     for (const row of store.pendingActions(this.#s.network)) {
       if (this.#stopped) return;
       const { dao, proposal_id: id } = row;
       const key = `${dao}#${id}`;
       if (this.#inFlight.has(key) || this.#queued.has(key)) continue;
-      let signed: Signed;
-      try {
-        signed = { verdict: this.#bridge.decodeVerdict(Buffer.from(row.verdict_b64!, 'base64')), verdictB64: row.verdict_b64!, signatureB64: row.signature_b64! };
-      } catch (e) {
-        log.error('resume_failed', { dao, proposal_id: id, why: 'the stored verdict does not decode', error: e });
-        continue;
-      }
+      const signed = this.#stored(row);
+      if (!signed) continue;
       this.#inFlight.add(key);
       try {
+        const veto = row.veto_state === 'sent' || row.veto_state === 'no_outcome';
+        const record = row.record_state === 'sent' || row.record_state === 'no_outcome';
         log.info('action_resumed', { dao, proposal_id: id, veto_state: row.veto_state, record_state: row.record_state, verdict_hash: row.verdict_hash });
-        const vetoed = row.veto_state === 'sent' || row.veto_state === 'no_outcome' ? await actor.veto(dao, id, signed) : null;
+        if (veto) this.#retried(dao, id, 'veto', row.veto_state);
+        const vetoed = veto ? await this.#veto(dao, id, signed) : null;
         if (vetoed?.kind === 'cast') this.#d.alerts?.vetoCast(dao, id, vetoed.seconds);
-        if (row.record_state === 'sent' || row.record_state === 'no_outcome') await actor.record(dao, id, signed);
+        if (vetoed) this.#vetoFailed(dao, id, vetoed);
+        if (record) this.#retried(dao, id, 'record', row.record_state);
+        if (record) await this.#record(dao, id, signed);
         if (vetoed?.kind === 'rejudge') this.#rejudge(dao, id, 'resumed', vetoed.why);
       } catch (e) {
         // The row is still pending, so the next pass sends it again.
         log.error('resume_failed', { dao, proposal_id: id, error: e });
+      } finally {
+        this.#free(key, dao, id);
+      }
+    }
+  }
+
+  /** The signed verdict a row keeps, or null, logged, when it does not decode. */
+  #stored(row: JudgedRow): Signed | null {
+    try {
+      return { verdict: this.#bridge.decodeVerdict(Buffer.from(row.verdict_b64!, 'base64')), verdictB64: row.verdict_b64!, signatureB64: row.signature_b64! };
+    } catch (e) {
+      this.#d.log.error('resume_failed', { dao: row.dao, proposal_id: row.proposal_id, why: 'the stored verdict does not decode', error: e });
+      return null;
+    }
+  }
+
+  /** Takes up again, while its proposal is open, every step a cap, a failed run or a hold stopped
+   *  (C21): a failed judgement once its wait is over, a capped one once the run cap has room, a
+   *  held veto on every pass since what held it may be gone, and a capped veto or record once its
+   *  cap has room. Each goes through the same caps as a first try (C29). A held veto whose verdict
+   *  expired meanwhile asks for a new judgement, as a veto the guard refused as expired does. A
+   *  proposal being judged or acted on right now is left to that. Always run through `#exclusive`. */
+  async #retryStopped(): Promise<void> {
+    const { store, judge, actor } = this.#d;
+    const net = this.#s.network;
+    const now = this.#d.now();
+    for (const row of store.stopped(net)) {
+      if (this.#stopped) return;
+      const { dao, proposal_id: id } = row;
+      const key = `${dao}#${id}`;
+      if (!this.#watchers.has(dao) || this.#inFlight.has(key) || this.#queued.has(key)) continue;
+      if (row.state === 'failed' || row.state === 'capped') {
+        const due = row.state === 'failed' ? (this.#tries.get(`${key}#judge`)?.due ?? 0) <= now : judge.hasRoom(dao);
+        if (!due) continue;
+        this.#retried(dao, id, 'judge', row.state);
+        // A new generation, so the attempts get fresh idempotency keys; the reason is kept, so a
+        // fresh verdict that is still stale is held rather than judged a third time.
+        store.queueAgain(net, dao, id, row.reason);
+        this.enqueue(dao, id);
+        continue;
+      }
+      if (row.state !== 'judged' || !row.verdict_b64 || !row.signature_b64) continue;
+      const veto = row.veto_state === 'held' || (row.veto_state === 'capped' && actor.hasRoom('veto', dao));
+      const record = row.record_state === 'capped' && actor.hasRoom('record', dao);
+      if (!veto && !record) continue;
+      const signed = this.#stored(row);
+      if (!signed) continue;
+      this.#inFlight.add(key);
+      try {
+        if (veto) {
+          this.#retried(dao, id, 'veto', row.veto_state);
+          const vetoed = await this.#veto(dao, id, signed);
+          if (vetoed.kind === 'cast') this.#d.alerts?.vetoCast(dao, id, vetoed.seconds);
+          this.#vetoFailed(dao, id, vetoed);
+          if (vetoed.kind === 'rejudge') this.#rejudge(dao, id, vetoed.why === 'expired' ? 'retried' : row.reason, vetoed.why);
+        }
+        if (record) {
+          this.#retried(dao, id, 'record', row.record_state);
+          await this.#record(dao, id, signed);
+        }
+      } catch (e) {
+        // The row is still stopped, so the next pass takes it up again; the rest of this pass goes on.
+        this.#d.log.error('retry_failed', { dao, proposal_id: id, error: e });
       } finally {
         this.#free(key, dao, id);
       }

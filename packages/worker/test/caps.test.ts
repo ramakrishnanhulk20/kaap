@@ -67,6 +67,21 @@ test('the per-DAO record cap refuses the next registry write', async () => {
   assert.equal(s.chain.calls('record').length, 1);
 });
 
+test('two records of one treasury started together against a cap of one give one record', async () => {
+  const store = new Store(':memory:', () => T0);
+  const s = setup(store, { runsPerDaoDay: 10, recordsPerDaoDay: 1, nearPerDay: 10n * NEAR }, () => T0);
+  const signed = (id: number) => {
+    const out = sealedOutput(verdictFields(id), s.key);
+    return { verdict: bridge.decodeVerdict(Buffer.from(out.verdict, 'base64')), verdictB64: out.verdict, signatureB64: out.signature };
+  };
+  // Each record waits on signing before its spend row is written, so both are checked first.
+  const got = await Promise.all([s.actor.record(DAO, 1, signed(1)), s.actor.record(DAO, 2, signed(2))]);
+  assert.deepEqual(got, ['recorded', 'capped']);
+  assert.equal(s.chain.calls('record').length, 1, 'the refused record was never signed');
+  assert.equal(await s.actor.record(DAO, 3, signed(3)), 'capped', 'once written, the record still counts');
+  assert.equal(await s.actor.record('other.sputnik.testnet', 1, signed(1)), 'recorded', "another treasury's cap is its own");
+});
+
 test('the global NEAR cap counts worst cases in flight and refuses what would cross it', () => {
   const store = new Store(':memory:', () => T0);
   const guard = new CapGuard(store, { runsPerDaoDay: 100, textRunsPerDaoDay: 100, recordsPerDaoDay: 100, nearPerDay: NEAR / 10n }, NETWORK);

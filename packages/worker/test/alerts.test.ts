@@ -123,7 +123,7 @@ test('alerts batch per DAO and per proposer, a critical verdict goes at once, an
   s.alerts.verdict(DAO, 11, verdict('critical', 'h11', ['DESC_CONTRADICTS', 'UNKNOWN_VALUE']), 'alice.testnet');
   await s.alerts.flush();
   assert.equal(s.telegram.sent.length, 1, 'the critical verdict did not wait for the batch');
-  assert.match(s.telegram.sent[0]!.text, /^Kaap: CRITICAL risk on proposal 11 of treasury\[\.\]sputnik\[\.\]testnet, filed by alice\[\.\]testnet\.\nFindings: DESC_CONTRADICTS, UNKNOWN_VALUE\.\nKaap's guard is voting to reject it now\./);
+  assert.match(s.telegram.sent[0]!.text, /^Kaap: CRITICAL risk on proposal 11 of treasury\[\.\]sputnik\[\.\]testnet, filed by alice\[\.\]testnet\.\nFindings: DESC_CONTRADICTS, UNKNOWN_VALUE\.\nKaap is sending its veto now\./);
   assert.match(s.telegram.sent[0]!.text, /\nSend \/stop to stop Kaap alerts in this chat\.$/, 'every message says how to stop them');
 
   s.c.advance(49_999);
@@ -146,6 +146,27 @@ test('alerts batch per DAO and per proposer, a critical verdict goes at once, an
   await s.alerts.flush();
   assert.equal(s.telegram.sent.length, 3);
   assert.equal(events(s.lines(), 'alert_sent').length, 3);
+});
+
+test('the first critical alert no longer claims the guard is voting', () => {
+  const text = render(NETWORK, SITE, DAO, critical('alice.testnet'));
+  assert.match(text, /\nKaap is sending its veto now\.\n/, 'what is true before the vote is known');
+  assert.doesNotMatch(text, /voting|rejected|reject it now/);
+});
+
+test('each way a veto can fail to land has its own fixed sentence, and asks members to reject the proposal themselves', () => {
+  const said: Record<string, RegExp> = {
+    held: /Kaap could not confirm the proposal on both RPC providers, or could not send its vote\. It keeps trying\./,
+    capped: /Kaap reached a daily spending limit\. It sends the vote once the limit has room\./,
+    no_outcome: /Its vote was sent but no result came back\. Kaap keeps sending the same vote\./,
+    refused: /The guard or the DAO refused its vote\./,
+  };
+  for (const [why, reason] of Object.entries(said)) {
+    const text = render(NETWORK, SITE, DAO, [{ t: 'veto_failed', id: 7, why } as AlertBody]);
+    assert.match(text, /^Kaap: could not veto proposal 7 of treasury\[\.\]sputnik\[\.\]testnet\. /, why);
+    assert.match(text, reason, why);
+    assert.match(text, /\nIf you agree it is an attack, vote to reject it yourself\.\nDetails: https:\/\/kaap\.example\/testnet\/treasury\.sputnik\.testnet\/7\n/, why);
+  }
 });
 
 test('batched messages are capped per chat per hour; urgent ones never are', async () => {

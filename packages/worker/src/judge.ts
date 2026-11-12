@@ -28,7 +28,7 @@ import type { Logger } from './log.ts';
 import { MIN_GAS_PRICE, TGAS, worstCase } from './near.ts';
 import { events, logs, refusal, successValue, type TxOutcome } from './outcome.ts';
 import { TEXT_RUN_PREFIX, type RunState, type Store } from './store.ts';
-import type { SubmitResult, Submitter } from './submit.ts';
+import type { SubmitRequest, SubmitResult, Submitter } from './submit.ts';
 
 export const RUN_GAS = 300n * TGAS;
 /** What every run attaches (packages/sealed/RUNS.md); OutLayer keeps its charge and refunds the rest. */
@@ -197,7 +197,7 @@ export class Judge {
       let res: SubmitResult;
       try {
         if (!seen) this.#store.addRun({ idempotency_key: key, network: this.#s.network, dao, proposal_id: id, generation, attempt });
-        res = await this.#submitter.submit({
+        res = await this.#submitSafely({
           key,
           kind: 'run',
           dao,
@@ -220,11 +220,13 @@ export class Judge {
       if (result.state === 'answered') {
         this.#store.finishRun(key, 'answered', null);
         this.#log.info('verdict', { dao, proposal_id: id, generation, attempt, risk: result.verdict.risk, floor: result.verdict.floor, findings: result.verdict.findings, ai_status: result.verdict.ai_status, vetoable: result.verdict.vetoable, read_at_block: result.verdict.block_height, verdict_hash: result.verdict.verdict_hash, run_tx: result.tx, sealed_text: text !== undefined });
-        // A verdict that verified under the guard's current key shows the sealed judge works and
-        // that the guard and the sealed job agree on the key again.
-        this.#health.clear('run_no_answer', dao);
-        this.#health.clear('run_without_verdict', dao);
-        this.#health.clear('verdict_rejected', dao);
+        // This proposal has its verdict, so what its earlier runs raised is over; another
+        // proposal's signals wait for their own. A verdict that verified under the guard's
+        // current key also shows the guard and the sealed job agree on the key again.
+        const proposal = { dao, proposal: id };
+        this.#health.clear('run_no_answer', proposal);
+        this.#health.clear('run_without_verdict', proposal);
+        this.#health.clear('verdict_rejected', proposal);
         this.#health.clear('accepted_key_changed', ALL);
         // The key is one setting for every DAO: missing in one run means missing for all, and a
         // run it reached means it is back. A sealed explanation says neither.
@@ -239,7 +241,7 @@ export class Judge {
       // errs on the side of spending less.
       if (res.kind === 'no_outcome' && !res.taken) this.#submitter.release(key, 'never taken: the receiver shard stayed busy, and this run attempt is finished');
       this.#log.warn('run_without_verdict', { dao, proposal_id: id, generation, attempt, state: result.state, detail: result.detail, run_tx: result.tx, retry: attempt < RUN_ATTEMPTS && result.state !== 'refused' });
-      if (result.state === 'no_answer') this.#health.raise('run_no_answer', dao, { proposal_id: id, attempt });
+      if (result.state === 'no_answer') this.#health.raise('run_no_answer', { dao, proposal: id }, { attempt });
       // A refused input is refused again, so it is not worth a second payment.
       if (result.state === 'refused') break;
     }
@@ -247,8 +249,28 @@ export class Judge {
     const state = last && last.state !== 'answered' ? last.state : 'failed';
     // A text the sealed program refused is the sender's fault, not a sign the judge is down, and
     // anyone may send one; raising it would let a stranger mark any DAO degraded.
-    if (!(text && state === 'refused')) this.#health.raise('run_without_verdict', dao, { proposal_id: id, last: state });
+    if (!(text && state === 'refused')) this.#health.raise('run_without_verdict', { dao, proposal: id }, { last: state });
     return { kind: 'no_verdict', attempts: RUN_ATTEMPTS, last: state, detail, tx: last?.tx ?? null };
+  }
+
+  /** Whether one more proposal run of `dao` would pass the caps now; holds nothing. */
+  hasRoom(dao: string): boolean {
+    return this.#caps.fits('run', dao);
+  }
+
+  /** A submit whose error (a provider down while the nonce or block hash is read, say) ends this
+   *  attempt like a run that was never sent, so the judgement finishes failed instead of leaving
+   *  its proposal judging. Only the error's name is kept: its message could quote the arguments,
+   *  which for a text run carry the ciphertext. Bytes signed before the error keep their
+   *  reservation under the NEAR cap for the day, which errs on the side of spending less. */
+  async #submitSafely(req: SubmitRequest): Promise<SubmitResult> {
+    try {
+      return await this.#submitter.submit(req);
+    } catch (e) {
+      const name = e instanceof Error ? e.name : 'unknown';
+      this.#log.error('run_not_sent', { dao: req.dao, proposal_id: req.proposalId, key: req.key, error: name });
+      return { kind: 'not_sent', detail: `error while signing or sending (${name})` };
+    }
   }
 
   /** Reads one final request_execution outcome. Every field of the job's output is checked like
@@ -273,7 +295,7 @@ export class Judge {
     if (parsed.status !== 'ok') return { state: parsed.status === 'held' ? 'held' : parsed.status === 'refused' ? 'refused' : 'failed', detail: parsed.reason.replace(/[^\x20-\x7e]/g, '?'), tx };
 
     const reject = (detail: string): Attempt => {
-      this.#health.raise('verdict_rejected', dao, { proposal_id: id, detail });
+      this.#health.raise('verdict_rejected', { dao, proposal: id }, { detail });
       return { state: 'failed', detail, tx };
     };
     const accepted = this.#acceptedKey();

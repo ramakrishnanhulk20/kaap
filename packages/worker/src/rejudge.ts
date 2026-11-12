@@ -7,10 +7,11 @@
 // The last values seen are kept in the store, so a change made while the worker was down is still
 // caught on the next pass. On a DAO's first pass the open verdicts' own pins stand in for them.
 //
-// The same pass is where the worker sees a tracked proposal close, so it also settles the signals
-// a held or refused action raised for it (C18: a signal clears once its cause is gone).
+// The same pass is where the worker sees a tracked proposal close, so it also settles that
+// proposal's own signals (C18: a signal clears once its cause is gone), and reports a veto that a
+// proposal passing beat as lost.
 
-import { clearClosed } from './act.ts';
+import { settleClosed } from './act.ts';
 import type { Bridge } from './bridge.ts';
 import type { Health } from './health.ts';
 import type { Logger } from './log.ts';
@@ -79,7 +80,6 @@ export class RejudgeWatch {
 
     const statuses = new Map(live.proposals.map((p) => [p.id, p]));
     const asked = new Set(live.asked);
-    let closed = false;
     for (const t of tracked) {
       const p = statuses.get(t.proposal_id);
       if (!p) {
@@ -88,11 +88,10 @@ export class RejudgeWatch {
         if (asked.has(t.proposal_id)) {
           this.#store.setProposalStatus(this.#network, dao, t.proposal_id, 'Removed');
           this.#log.info('proposal_gone', { dao, proposal_id: t.proposal_id, why: 'neither provider returns it: Sputnik deletes a removed proposal' });
-          closed = true;
+          settleClosed(this.#store, this.#health, this.#network, t, 'Removed');
         }
         continue;
       }
-      if (p.status !== 'InProgress') closed = true;
       if (firstPass && p.status === 'InProgress' && t.receivers_hash !== null) {
         let accounts: string[] = [];
         try {
@@ -105,8 +104,9 @@ export class RejudgeWatch {
       }
       if (p.status === 'Failed' && t.proposal_status !== 'Failed') fired.add('failed');
       if (p.status !== t.proposal_status) this.#store.setProposalStatus(this.#network, dao, t.proposal_id, p.status);
+      // Every tracked row was last seen open, so any other status is this proposal closing.
+      if (p.status !== 'InProgress') settleClosed(this.#store, this.#health, this.#network, t, p.status);
     }
-    if (closed) clearClosed(this.#store, this.#health, this.#network, dao);
 
     if (fired.size === 0) return [];
     const why = [...fired].sort();

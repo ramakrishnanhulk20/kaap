@@ -242,9 +242,9 @@ const raisedBy: Array<[Signal, (s: ReturnType<typeof setup>) => Promise<void>]> 
   [
     'veto_held',
     async (s) => {
+      // The providers keep disagreeing, so every pass that looks at the held veto holds it again.
       s.b.proposals.set(2, proposalText(2, { receiver: 'mallory.testnet' }));
       assert.equal((await s.actor.veto(DAO, 2, s.signed)).kind, 'held');
-      s.b.proposals.set(2, proposalText(2));
     },
   ],
   [
@@ -264,7 +264,7 @@ const raisedBy: Array<[Signal, (s: ReturnType<typeof setup>) => Promise<void>]> 
 ];
 
 for (const [signal, raise] of raisedBy) {
-  test(`${signal} stays raised while the proposal is open and clears when it leaves InProgress, whatever the status`, async () => {
+  test(`${signal} stays raised while the proposal is open and leaves when it leaves InProgress, whatever the status, never as recovered for a lost veto`, async () => {
     for (const status of ['Approved', 'Rejected', 'Expired', 'Moved', 'Failed', 'Removed']) {
       const s = setup();
       await raise(s);
@@ -276,7 +276,10 @@ for (const [signal, raise] of raisedBy) {
       await s.worker.watchTick();
       await s.worker.stop();
       assert.equal(s.health.has(signal, DAO), false, status);
-      assert.equal(events(s.lines, 'guard_recovered').filter((l) => l.signal === signal).length, 1, status);
+      // A veto still held or refused when its proposal passed was lost, which is never a recovery.
+      const lost = status === 'Approved' && signal !== 'record_refused';
+      assert.equal(events(s.lines, 'guard_recovered').filter((l) => l.signal === signal).length, lost ? 0 : 1, status);
+      assert.equal(events(s.lines, 'veto_lost').length, lost ? 1 : 0, status);
       assert.equal(s.row().proposal_status, status);
     }
   });
