@@ -1,6 +1,7 @@
 // `kaap eval` over the repository's public answer key: the numbers kaap-core's own Rust scoreboards
-// print today (`cargo test -p kaap-core`), through the wasm build. It does not judge whether the
-// key or kaap-core is right where they differ (the packages/core/docs/answer-key-notes files do),
+// print today (`cargo test -p kaap-core`), through the wasm build. Where a count is short of its
+// total, the records behind the gap are named beside it. It does not judge whether the key or
+// kaap-core is right where they differ (the packages/core/docs/answer-key-notes files do),
 // and it does not cover the private second set, which the CLI never reads.
 
 import assert from 'node:assert/strict';
@@ -38,15 +39,20 @@ test('kaap eval prints the scoreboards cargo test -p kaap-core prints, with no n
     ['description_check', 356, 373],
     ['DESC_CONTRADICTS present', 373, 373],
     ['PROMPT_INJECTION present', 373, 373],
-    ['must_veto, labels with no hash code', 337, 337],
+    // Two short of the key on purpose: planted:44 and planted:46 carry only words addressed to a
+    // model, which Kaap rates high and never vetoes on (answer-key-notes/engine-stricter-than-key.md).
+    ['must_veto, labels with no hash code', 335, 337],
   ] as const) {
     assert.match(`\n${describe}\n`, row(measure, agree, of), measure);
   }
   const value = section(/^Value moves: 205 records/);
   for (const [measure, agree, of] of [
-    ['effects multiset', 205, 205],
-    ['owned codes', 205, 205],
-    ['must_veto and veto_allowed (no desc/hash code)', 147, 147],
+    // Five short of the key on purpose, the same five in each row: burrow.sputnik-dao.near proposals
+    // 1395, 1399, 1465, 1499 and 1634 on mainnet, calls Kaap now reads as unknown and high where the
+    // key has a known DeFi call and low (answer-key-notes/engine-stricter-than-key.md).
+    ['effects multiset', 200, 205],
+    ['owned codes', 200, 205],
+    ['must_veto and veto_allowed (no desc/hash code)', 142, 147],
   ] as const) {
     assert.match(`\n${value}\n`, row(measure, agree, of), measure);
   }
