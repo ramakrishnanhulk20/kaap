@@ -83,6 +83,11 @@ const ROWS: Row[] = [
     ),
   },
   {
+    what: 'The always-on watcher',
+    live: false,
+    proof: <>Built and tested, but not hosted yet. In the stopped theft above, a script played its part.</>,
+  },
+  {
     what: 'Mainnet',
     live: false,
     proof: <>Kaap reads any mainnet treasury today. Its guard votes only on {proof.network} so far.</>,
