@@ -1,3 +1,2 @@
-# Built by `npm run build`: the TypeScript output and kaap-core's wasm with its wasm-bindgen glue.
+# The TypeScript output. The wasm folder is committed, so a clone runs with Node alone.
 dist/
-wasm/

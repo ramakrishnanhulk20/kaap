@@ -13,7 +13,8 @@
   },
   "scripts": {
     "build:wasm": "bash ../core-wasm/build.sh wasm",
-    "build": "npm run build:wasm && tsc -p tsconfig.json",
+    "build:ts": "tsc -p tsconfig.json",
+    "build": "npm run build:wasm && npm run build:ts",
     "test": "npm run build && node --test --test-concurrency=1 \"dist/test/*.test.js\""
   },
   "dependencies": {
