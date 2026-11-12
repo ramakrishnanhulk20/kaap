@@ -24,6 +24,16 @@ Then open http://localhost:3000. It needs no environment variable and no key.
 
 One thing is switched off without a key: the "try it yourself" button. It files with `KAAP_DEMO_FILER_KEY`, an access key that NEAR limits to filing a request on the demo treasury. `scripts/setup-demo-filer.mjs` makes one and writes it to `.env.local` here; on a host it is a secret setting. Without it the button says the live demo is not switched on.
 
+The routes limit each caller, and by default they tell no caller from another: everyone shares one count. On a host whose proxy writes the caller's address into `X-Real-IP` over whatever the caller sent, as Vercel's and Railway's do, set `KAAP_SITE_PROXY=x-real-ip` and callers are counted apart.
+
+## Tests
+
+```bash
+npm test
+```
+
+Four tests of the try-it button's limits: one caller's share of presses, and the deadline on a filing. The pages have none.
+
 ## Where the numbers come from
 
 Nothing on a screen is typed by hand.

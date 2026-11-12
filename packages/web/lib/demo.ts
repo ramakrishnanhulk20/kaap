@@ -16,11 +16,17 @@
 
 import { Account, JsonRpcProvider, KeyPair, KeyPairSigner, actions, baseEncode } from 'near-api-js';
 import proof from '@/data/proof.json';
+import { withDeadline } from '@/lib/deadline';
 
 // dRPC first: its free tier held every burst tried on 12 Nov 2026, and Kaap's watcher does not
 // lean on fastnear, so this page's reads never compete with the watcher's.
 const RPCS = ['https://near-testnet.drpc.org', 'https://rpc.testnet.fastnear.com'];
 const RPC_TIMEOUT_MS = 6_000;
+/** The longest one filing may take, reads and send together. The NEAR library sets no time
+ *  limit of its own and asks a silent provider again and again. */
+const FILE_DEADLINE_MS = 25_000;
+/** How long this process answers with the filing it has just made, without asking the chain. */
+const JUST_FILED_MS = 15_000;
 const WATCHER_TIMEOUT_MS = 3_000;
 const TGAS = 10n ** 12n;
 
@@ -61,14 +67,15 @@ export const demoIsOn = () => tryIt !== null && Boolean(process.env.KAAP_DEMO_FI
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** One contract view at the final block, from the first provider that answers. A contract's own
- *  refusal (no such proposal) is returned as null and not asked again. */
-async function view(account: string, method: string, args: unknown): Promise<unknown> {
+/** One contract view, from the first provider that answers: at the final block, or with
+ *  `optimistic` at the newest state the provider has. A contract's own refusal (no such proposal)
+ *  is returned as null and not asked again. */
+async function view(account: string, method: string, args: unknown, finality: 'final' | 'optimistic' = 'final'): Promise<unknown> {
   const body = JSON.stringify({
     jsonrpc: '2.0',
     id: 'kaap',
     method: 'query',
-    params: { request_type: 'call_function', finality: 'final', account_id: account, method_name: method, args_base64: Buffer.from(JSON.stringify(args)).toString('base64') },
+    params: { request_type: 'call_function', finality, account_id: account, method_name: method, args_base64: Buffer.from(JSON.stringify(args)).toString('base64') },
   });
   for (const url of RPCS) {
     try {
@@ -105,24 +112,34 @@ function asFiling(raw: unknown): Filing | null {
   return { id, status, submittedMs: Number(BigInt(submitted) / 1_000_000n), votes: cast };
 }
 
+/** The demo's own filings among the treasury's newest requests. Read at the newest state, not
+ *  the final one, so a filing counts from about a second after it is sent: these reads only
+ *  choose whether a press files, and what a page shows as decided is read at final. They come
+ *  from one provider, so a provider that answers short lets a press through that should have
+ *  waited; the watcher's own daily cap on sealed runs is the bound that does not rest on it. */
 async function recentFilings(): Promise<Filing[]> {
-  const last = await view(dao, 'get_last_proposal_id', {});
+  const last = await view(dao, 'get_last_proposal_id', {}, 'optimistic');
   if (typeof last !== 'number' || !Number.isSafeInteger(last) || last < 0) throw new DemoRefused('chain_unreachable', 'The demo treasury gave an answer Kaap could not read.');
   const from = Math.max(0, last - LOOK_BACK);
-  const page = await view(dao, 'get_proposals', { from_index: from, limit: LOOK_BACK });
+  const page = await view(dao, 'get_proposals', { from_index: from, limit: LOOK_BACK }, 'optimistic');
   if (!Array.isArray(page)) throw new DemoRefused('chain_unreachable', 'The demo treasury gave an answer Kaap could not read.');
   return page.map(asFiling).filter((f): f is Filing => f !== null);
 }
 
 let filing: Promise<{ id: number; tx: string | null; already: boolean }> | null = null;
+/** The filing this process made last, for the moment before any provider shows it. */
+let justFiled: { id: number; at: number } | null = null;
+
+const inFlightAt = (now: number) => (f: Filing) => f.status === 'InProgress' && now - f.submittedMs < IN_FLIGHT_MS;
 
 async function fileOne(): Promise<{ id: number; tx: string | null; already: boolean }> {
   const secret = process.env.KAAP_DEMO_FILER_KEY;
   if (tryIt === null || !secret) throw new DemoRefused('off', 'The live demo is not switched on here.');
 
   const now = Date.now();
+  if (justFiled !== null && now - justFiled.at < JUST_FILED_MS) return { id: justFiled.id, tx: null, already: true };
   const recent = await recentFilings();
-  const inFlight = recent.filter((f) => f.status === 'InProgress' && now - f.submittedMs < IN_FLIGHT_MS).at(-1);
+  const inFlight = recent.filter(inFlightAt(now)).at(-1);
   if (inFlight) return { id: inFlight.id, tx: null, already: true };
   if (recent.filter((f) => now - f.submittedMs < DAY_MS).length >= DAILY_CAP) {
     throw new DemoRefused('daily_cap', `The demo has run ${DAILY_CAP} times in the last day, which is its limit. The recorded one below works at any time.`);
@@ -140,29 +157,34 @@ async function fileOne(): Promise<{ id: number; tx: string | null; already: bool
 
   const provider = new JsonRpcProvider({ url: RPCS[0] as string });
   const account = new Account(tryIt.account, provider, signer);
+  const proposal = { description: tryIt.description, kind: tryIt.kind };
+  const send = async () => {
+    const built = await account.createTransaction({ receiverId: dao, actions: [actions.functionCall('add_proposal', { proposal }, 30n * TGAS, 0n)], publicKey });
+    const signed = await signer.signTransaction(built);
+    return { tx: baseEncode(signed.txHash), outcome: (await provider.sendTransactionUntil(signed.signedTransaction, 'EXECUTED_OPTIMISTIC')) as unknown };
+  };
   let tx: string;
   let outcome: unknown;
   try {
-    const built = await account.createTransaction({
-      receiverId: dao,
-      actions: [actions.functionCall('add_proposal', { proposal: { description: tryIt.description, kind: tryIt.kind } }, 30n * TGAS, 0n)],
-      publicKey,
-    });
-    const signed = await signer.signTransaction(built);
-    tx = baseEncode(signed.txHash);
-    outcome = await provider.sendTransactionUntil(signed.signedTransaction, 'EXECUTED_OPTIMISTIC');
+    ({ tx, outcome } = await withDeadline(send(), FILE_DEADLINE_MS));
   } catch (error) {
     console.error('demo filing failed', error instanceof Error ? error.name : 'unknown');
+    // Another server process may have sent the same filing at the same moment and used this
+    // key's turn, or this send may have landed after all. Either way that filing is the one to show.
+    const landed = (await recentFilings().catch(() => [] as Filing[])).filter(inFlightAt(Date.now())).at(-1);
+    if (landed) return { id: landed.id, tx: null, already: true };
     throw new DemoRefused('not_filed', 'The request could not be filed on testnet. Nothing was decided.');
   }
   const value = isRecord(outcome) && isRecord(outcome.status) ? outcome.status.SuccessValue : undefined;
   const id = typeof value === 'string' ? Number(Buffer.from(value, 'base64').toString('utf8')) : Number.NaN;
   if (!Number.isSafeInteger(id) || id < 0) throw new DemoRefused('not_filed', 'The request was sent, but the treasury did not confirm it. Nothing was decided.');
+  justFiled = { id, at: Date.now() };
   return { id, tx: TX_HASH.test(tx) ? tx : null, already: false };
 }
 
 /** Files the prepared fake theft, or names the one already in flight. One at a time in this
- *  process: a second press while the first is being sent gets the same answer. */
+ *  process: a second press while the first is being sent gets the same answer. Two server
+ *  processes pressed at the same instant can still both file; each filing counts toward the day. */
 export function fileFakeTheft(): Promise<{ id: number; tx: string | null; already: boolean }> {
   filing ??= fileOne().finally(() => {
     filing = null;
