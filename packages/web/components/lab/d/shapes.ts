@@ -1,6 +1,7 @@
-// Turns the two pictures the ink forms (the hash, then what it does) into clouds of target points.
-// Each picture is drawn in black on a hidden canvas and sampled on a coarse grid, so the dots that
-// fill it look stippled, never solid.
+// Turns the two pictures the ink forms (the hash, then what it does) into clouds of target cells.
+// Each picture is drawn in black on a hidden canvas the size of the art zone and every filled pixel
+// becomes one cell. The engine deals the cells out to the dots, more than one dot to a cell when
+// there are plenty of dots, so the letters come out dense but still stippled.
 
 export interface Cloud {
   x: Float32Array;
@@ -17,37 +18,30 @@ export interface ShapeInput {
   width: number;
   height: number;
   compact: boolean;
+  // Lowest y a shape may reach, so nothing formed ever sits under the caption.
+  clearTop: number;
   hash: string;
   phrase: string;
   monoFamily: string;
   displayFamily: string;
 }
 
-const STEP = 3;
 const ROW_PITCH = 1.05;
 const LINE_PITCH = 1;
 const LONGEST_LINE = 14;
-const RING_WIDER = 1.16;
-const RING_TALLER = 1.34;
-const RING_THICKNESS = 5;
+const HASH_COLUMNS = 16;
+const RING_WIDER = 1.22;
+const RING_TALLER = 1.4;
+const RING_THICKNESS = 6;
+const RING_SPARE = 8;
+const FILLED = 110;
 const TAU = Math.PI * 2;
 
-interface Frame {
+interface Box {
   cx: number;
   cy: number;
-  targetWidth: number;
-  maxHeight: number;
-}
-
-// The block sits at 62 percent across and 42 percent down (centred on small screens). The height
-// limit keeps a tall block, such as the 8 by 8 hash on a phone, inside the canvas.
-function frameFor(input: ShapeInput): Frame {
-  return {
-    cx: input.width * (input.compact ? 0.5 : 0.62),
-    cy: input.height * 0.42,
-    targetWidth: input.width * (input.compact ? 0.86 : 0.58),
-    maxHeight: input.height * 0.84 - 16,
-  };
+  maxWide: number;
+  maxTall: number;
 }
 
 function breakLines(text: string): string[] {
@@ -75,11 +69,11 @@ function sample(ctx: CanvasRenderingContext2D): Cloud {
   const { data } = ctx.getImageData(0, 0, width, height);
   const xs: number[] = [];
   const ys: number[] = [];
-  for (let y = 0; y < height; y += STEP) {
-    for (let x = 0; x < width; x += STEP) {
-      if (data[(y * width + x) * 4 + 3] > 127) {
-        xs.push(Math.min(x + Math.random() * STEP, width));
-        ys.push(Math.min(y + Math.random() * STEP, height));
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] > FILLED) {
+        xs.push(x);
+        ys.push(y);
       }
     }
   }
@@ -91,46 +85,69 @@ function sample(ctx: CanvasRenderingContext2D): Cloud {
   return { x: Float32Array.from(order, (i) => xs[i]), y: Float32Array.from(order, (i) => ys[i]) };
 }
 
-// Draws centred rows of text so the whole block is as wide as the frame asks, then shrinks it if it
-// would be taller than the canvas allows. Returns the box the text really fills.
+// Draws centred rows of text as large as the box allows and returns the box the text really fills.
+// A tighter height limit than the box's own can be passed in when the ring needs room around it.
 function drawBlock(
   ctx: CanvasRenderingContext2D,
-  frame: Frame,
+  box: Box,
+  tallest: number,
+  widest: number,
   rows: string[],
   font: (size: number) => string,
   pitch: number,
 ): { width: number; height: number } {
   ctx.font = font(100);
-  const widest = Math.max(...rows.map((row) => ctx.measureText(row).width)) / 100;
-  const glyphHeight = ctx.measureText('H').actualBoundingBoxAscent / 100;
-  const heightPerSize = (rows.length - 1) * pitch + glyphHeight;
-  const size = Math.min(frame.targetWidth / widest, frame.maxHeight / heightPerSize);
+  const rowWidth = Math.max(...rows.map((row) => ctx.measureText(row).width)) / 100;
+  const ascent = Math.max(...rows.map((row) => ctx.measureText(row).actualBoundingBoxAscent)) / 100;
+  const tallPerSize = (rows.length - 1) * pitch + ascent;
+  const size = Math.max(4, Math.min(widest / rowWidth, tallest / tallPerSize));
 
   ctx.font = font(size);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
-  const top = frame.cy - (heightPerSize * size) / 2;
+  const top = box.cy - (tallPerSize * size) / 2;
   rows.forEach((row, index) => {
-    ctx.fillText(row, frame.cx, top + glyphHeight * size + index * pitch * size);
+    ctx.fillText(row, box.cx, top + ascent * size + index * pitch * size);
   });
-  return { width: widest * size, height: heightPerSize * size };
+  return { width: rowWidth * size, height: tallPerSize * size };
 }
 
 export function buildShapes(input: ShapeInput): Shapes {
-  const frame = frameFor(input);
-  const ctx = hiddenCanvas(input.width, input.height);
+  const { width, height, compact } = input;
+  const box: Box = {
+    cx: width * (compact ? 0.5 : 0.6),
+    cy: height * 0.5,
+    maxWide: width * (compact ? 0.9 : 0.6),
+    maxTall: height * 0.78,
+  };
+  const clearTall = 2 * (box.cy - input.clearTop);
+  const ctx = hiddenCanvas(width, height);
 
-  const columns = input.compact ? 8 : 16;
-  const hashRows = Array.from({ length: Math.ceil(input.hash.length / columns) }, (_, row) =>
-    input.hash.slice(row * columns, (row + 1) * columns),
+  const hashRows = Array.from({ length: Math.ceil(input.hash.length / HASH_COLUMNS) }, (_, row) =>
+    input.hash.slice(row * HASH_COLUMNS, (row + 1) * HASH_COLUMNS),
   );
-  drawBlock(ctx, frame, hashRows, (size) => `700 ${size}px ${input.monoFamily}, monospace`, ROW_PITCH);
+  drawBlock(
+    ctx,
+    box,
+    Math.min(box.maxTall, clearTall),
+    box.maxWide,
+    hashRows,
+    (size) => `700 ${size}px ${input.monoFamily}, monospace`,
+    ROW_PITCH,
+  );
   const hash = sample(ctx);
 
+  // The phrase must leave room for a ring that is wider and taller than it and still ends 8px short of
+  // every edge of the zone, so the room around the box centre decides the largest the phrase can be.
+  const edge = RING_SPARE + RING_THICKNESS / 2;
+  const roomWide = 2 * (Math.min(box.cx, width - box.cx) - edge);
+  const roomTall = 2 * (Math.min(box.cy, height - box.cy) - edge);
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-  const box = drawBlock(
+  const text = drawBlock(
     ctx,
-    frame,
+    box,
+    Math.min(height * 0.74, clearTall, roomTall / RING_TALLER),
+    Math.min(box.maxWide, roomWide / RING_WIDER),
     breakLines(input.phrase.toUpperCase()),
     (size) => `800 ${size}px ${input.displayFamily}, sans-serif`,
     LINE_PITCH,
@@ -140,7 +157,7 @@ export function buildShapes(input: ShapeInput): Shapes {
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.lineWidth = RING_THICKNESS;
   ctx.beginPath();
-  ctx.ellipse(frame.cx, frame.cy, (box.width * RING_WIDER) / 2, (box.height * RING_TALLER) / 2, 0, 0, TAU);
+  ctx.ellipse(box.cx, box.cy, (text.width * RING_WIDER) / 2, (text.height * RING_TALLER) / 2, 0, 0, TAU);
   ctx.stroke();
   const ring = sample(ctx);
 

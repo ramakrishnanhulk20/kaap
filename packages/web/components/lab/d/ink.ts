@@ -1,10 +1,16 @@
-import { buildShapes, type Shapes } from './shapes';
+import { buildShapes, type Cloud, type Shapes } from './shapes';
 
 export type Phase = 'flow' | 'hash' | 'meaning';
 
 export interface InkConfig {
   canvas: HTMLCanvasElement;
-  listenOn: HTMLElement;
+  // The box that holds the canvas. Its height is set here: the art zone plus the soft tail below it.
+  frame: HTMLElement;
+  section: HTMLElement;
+  // The label. The art zone ends 24px above its top edge.
+  anchor: HTMLElement;
+  // The caption box. Shapes never reach up into it.
+  caption: HTMLElement;
   hash: string;
   phrase: string;
   still: boolean;
@@ -12,139 +18,293 @@ export interface InkConfig {
 }
 
 const START_DELAY_MS = 600;
-const LOOP_SECONDS = 15;
+const LOOP_SECONDS = 16;
 const GATHER_AT = 4;
-const MEANING_AT = 8;
-const RELEASE_AT = 12.5;
+const GATHER_FOR = 1.4;
+const MOVE_AT = 8.5;
+const MOVE_FOR = 1.4;
+const RELEASE_AT = 13.5;
+const RELEASE_FOR = 1.5;
+const HASH_CAPTION_FROM = 4.6;
+const MEANING_CAPTION_FROM = 9.4;
+const STILL_LOOP_TIME = 12;
 
-const WIDE_COUNT = 14000;
-const SMALL_COUNT = 6000;
-const INK_SHARE = 0.86;
-const INK_OPACITY = 0.55;
-const ACCENT_OPACITY = 0.8;
-const LEFTOVER_OPACITY = 0.3;
+const ZONE_GAP = 24;
+const FADE_TAIL = 240;
+const CAPTION_GAP = 8;
 
-// Velocities are in pixels per frame at 60 frames a second, and every step is scaled by how many
-// 60ths of a second really passed, so a fast screen does not change the picture.
-const FLOW_SPEED = 22 / 60;
-const FLOW_EASE = 0.04;
-const SPRING = 0.06;
-const DAMPING = 0.82;
-const JITTER = 0.35;
-const PUSH_RADIUS = 90;
-const PUSH_ACCEL = 900 / 3600;
-const LEVEL_EASE = 0.08;
+const WIDE_COUNT = 220000;
+const SMALL_COUNT = 70000;
+const GATHER_SHARE = 0.55;
+const MAX_DOTS_PER_CELL = 3;
+const LEFTOVER_OPACITY = 0.35;
+const OTHER_RIBBON_ACCENT = 0.06;
 
-// Flowing dots live on a strip a little wider than the canvas. A dot that leaves re-enters from the
-// opposite side, and the field can push dots outward on both seams at once; with no strip they would
-// pile up on the visible edge, with it they do their shuffling out of sight.
-const MARGIN = 24;
+const PUSH_RADIUS = 110;
+const PUSH_DISTANCE = 46;
+const POINTER_EASE = 0.18;
+const POINTER_RAMP_SECONDS = 0.15;
+const POINTER_FADE_SECONDS = 0.6;
+
+const FLOATS_PER_DOT = 8;
+const BYTES_PER_DOT = FLOATS_PER_DOT * 4;
 
 type Rgb = [number, number, number];
 
-type Shape = 0 | 1 | 2;
+const num = (value: number) => value.toFixed(4);
+
+const VERTEX = `#version 300 es
+precision highp float;
+
+layout(location = 0) in vec4 a_flow;
+layout(location = 1) in vec4 a_look;
+layout(location = 2) in vec4 a_goal;
+layout(location = 3) in vec4 a_state;
+
+uniform vec2 u_canvas;
+uniform vec2 u_zone;
+uniform float u_time;
+uniform float u_loop;
+uniform float u_dpr;
+uniform vec3 u_pointer;
+uniform vec3 u_ink;
+uniform vec3 u_accent;
+
+out vec4 v_colour;
+
+const float DRIFT[4] = float[4](0.012, -0.009, 0.016, -0.006);
+const float BASE[4] = float[4](0.26, 0.62, 0.45, 0.88);
+const float AMP[4] = float[4](0.16, 0.15, 0.22, 0.13);
+const float FREQ[4] = float[4](0.0030, 0.0041, 0.0022, 0.0052);
+const float SHIFT[4] = float[4](0.0, 1.9, 3.7, 5.1);
+
+// How far a dot has got through one move, 0 to 1. Each dot starts a little later than the one
+// before it, by its own phase, so a crowd arrives and leaves as a wave.
+float settle(float start, float length, float phase) {
+  float p = clamp(((u_loop - start) / length - phase * 0.35) / 0.65, 0.0, 1.0);
+  return p * p * (3.0 - 2.0 * p);
+}
+
+void main() {
+  float u = a_flow.x;
+  float v = a_flow.y;
+  float phase = a_flow.z;
+  int r = int(a_flow.w + 0.5);
+  float t = u_time;
+  float h = u_zone.y;
+
+  float x = fract(u + t * DRIFT[r]) * (u_zone.x + 200.0) - 100.0;
+  float centre = h * (BASE[r]
+    + AMP[r] * sin(x * FREQ[r] + SHIFT[r] + t * 0.11)
+    + 0.5 * AMP[r] * sin(x * FREQ[r] * 2.3 + SHIFT[r] * 1.7 - t * 0.07));
+  float thick = h * (0.045 + 0.075 * (0.5 + 0.5 * sin(x * 0.0049 + SHIFT[r] * 2.0 + t * 0.05)));
+  float y = centre + v * thick;
+  x += 6.0 * sin(phase * 40.0 + y * 0.031 + t * 0.9);
+  y += 6.0 * sin(phase * 53.0 + x * 0.027 + t * 0.7);
+  vec2 flow = vec2(x, y);
+
+  float gather = settle(${num(GATHER_AT)}, ${num(GATHER_FOR)}, phase);
+  float move = settle(${num(MOVE_AT)}, ${num(MOVE_FOR)}, phase);
+  float release = settle(${num(RELEASE_AT)}, ${num(RELEASE_FOR)}, phase);
+  float hasHash = a_state.x;
+  float hasPhrase = a_state.y;
+  float noHash = a_state.z;
+  float noPhrase = a_state.w;
+
+  float toHash = hasHash * gather * (1.0 - move);
+  float toPhrase = hasPhrase * move * (1.0 - release);
+  float held = clamp(toHash + toPhrase, 0.0, 1.0);
+
+  // Flow, then into the hash, then on to the meaning (or back to the flow for a dot with no place
+  // in it), then released.
+  vec2 pos = mix(flow, a_goal.xy, hasHash * gather);
+  pos = mix(pos, mix(flow, a_goal.zw, hasPhrase), move);
+  pos = mix(pos, flow, release);
+  pos += held * vec2(
+    0.3 * sin(t * 23.0 + phase * 113.0) + 0.3 * sin(t * 31.0 + phase * 47.0),
+    0.3 * sin(t * 19.0 + phase * 71.0) + 0.3 * sin(t * 29.0 + phase * 89.0)
+  );
+
+  vec2 away = pos - u_pointer.xy;
+  float d = length(away);
+  if (u_pointer.z > 0.0 && d < ${num(PUSH_RADIUS)}) {
+    float s = 1.0 - d / ${num(PUSH_RADIUS)};
+    vec2 dir = d > 0.001 ? away / d : vec2(0.0, -1.0);
+    pos += dir * s * s * ${num(PUSH_DISTANCE)} * u_pointer.z;
+  }
+
+  float tail = 1.0 - smoothstep(0.0, ${num(FADE_TAIL)}, pos.y - h);
+  float profile = exp(-0.5 * v * v * 0.6);
+  float body = mix(profile, 1.0, held);
+  float dim = 1.0 - ${num(1 - LEFTOVER_OPACITY)} * clamp(noHash * gather * (1.0 - move) + noPhrase * move * (1.0 - release), 0.0, 1.0);
+  float alpha = a_look.y * body * dim * tail;
+
+  vec3 rgb = mix(u_ink, u_accent, a_look.z);
+  v_colour = vec4(rgb * alpha, alpha);
+  gl_PointSize = a_look.x * u_dpr;
+  gl_Position = vec4(pos.x / u_canvas.x * 2.0 - 1.0, 1.0 - pos.y / u_canvas.y * 2.0, 0.0, 1.0);
+  if (alpha < 0.004) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+}
+`;
+
+const FRAGMENT = `#version 300 es
+precision highp float;
+
+in vec4 v_colour;
+out vec4 outColour;
+
+void main() {
+  float r = length(gl_PointCoord * 2.0 - 1.0);
+  if (r > 1.0) discard;
+  outColour = v_colour * (1.0 - smoothstep(0.7, 1.0, r));
+}
+`;
+
+const UNIFORMS = ['u_canvas', 'u_zone', 'u_time', 'u_loop', 'u_dpr', 'u_pointer', 'u_ink', 'u_accent'] as const;
+
+interface Gpu {
+  gl: WebGL2RenderingContext;
+  program: WebGLProgram;
+  vao: WebGLVertexArrayObject;
+  flowBuffer: WebGLBuffer;
+  goalBuffer: WebGLBuffer;
+  uniforms: Record<(typeof UNIFORMS)[number], WebGLUniformLocation | null>;
+}
 
 interface Dots {
   count: number;
-  x: Float32Array;
-  y: Float32Array;
-  vx: Float32Array;
-  vy: Float32Array;
-  radius: Float32Array;
+  // Per dot, eight numbers that never change: place along its ribbon, offset across it, phase, ribbon
+  // number, then size, opacity, colour flag and a spare.
+  flow: Float32Array;
   accent: Uint8Array;
-  // -1 for a spare dot dimmed while a picture forms, 0 while flowing, 1 while sitting in a picture.
-  level: Float32Array;
-  hashX: Float32Array;
-  hashY: Float32Array;
-  meanX: Float32Array;
-  meanY: Float32Array;
-  hasHash: Uint8Array;
-  hasMean: Uint8Array;
-  alpha: Float32Array;
 }
 
-function createDots(count: number, width: number, height: number): Dots {
-  const dots: Dots = {
-    count,
-    x: new Float32Array(count),
-    y: new Float32Array(count),
-    vx: new Float32Array(count),
-    vy: new Float32Array(count),
-    radius: new Float32Array(count),
-    accent: new Uint8Array(count),
-    level: new Float32Array(count),
-    hashX: new Float32Array(count),
-    hashY: new Float32Array(count),
-    meanX: new Float32Array(count),
-    meanY: new Float32Array(count),
-    hasHash: new Uint8Array(count),
-    hasMean: new Uint8Array(count),
-    alpha: new Float32Array(count),
-  };
-  const inkCount = Math.round(count * INK_SHARE);
+const normal = () => {
+  const radius = Math.sqrt(-2 * Math.log(1 - Math.random()));
+  return Math.max(-4, Math.min(4, radius * Math.cos(Math.PI * 2 * Math.random())));
+};
+
+function createDots(count: number): Dots {
+  const flow = new Float32Array(count * FLOATS_PER_DOT);
+  const accent = new Uint8Array(count);
   for (let i = 0; i < count; i++) {
-    dots.x[i] = Math.random() * (width + 2 * MARGIN) - MARGIN;
-    dots.y[i] = Math.random() * (height + 2 * MARGIN) - MARGIN;
-    dots.radius[i] = 0.6 + Math.random() * 0.8;
-    dots.accent[i] = i < inkCount ? 0 : 1;
+    const ribbon = Math.floor(Math.random() * 4);
+    const isAccent = ribbon === 2 || Math.random() < OTHER_RIBBON_ACCENT;
+    const o = i * FLOATS_PER_DOT;
+    flow[o] = Math.random();
+    flow[o + 1] = normal();
+    flow[o + 2] = Math.random();
+    flow[o + 3] = ribbon;
+    flow[o + 4] = 1 + Math.random() * 0.9;
+    flow[o + 5] = 0.25 + Math.random() * 0.5;
+    flow[o + 6] = isAccent ? 1 : 0;
+    accent[i] = isAccent ? 1 : 0;
   }
-  return dots;
+  return { count, flow, accent };
 }
 
-// Ink dots take the hash points and the phrase points. Accent dots take the ring points.
-function dealTargets(dots: Dots, shapes: Shapes) {
+// How many dots can share one cell of a picture: as many as the crowd allows, up to a small limit.
+function dotsPerCell(dots: number, cells: number): number {
+  if (cells === 0) return 0;
+  return Math.max(1, Math.min(MAX_DOTS_PER_CELL, Math.floor(dots / cells)));
+}
+
+function aim(out: Float32Array, at: number, cloud: Cloud, index: number) {
+  out[at] = cloud.x[index] + Math.random();
+  out[at + 1] = cloud.y[index] + Math.random();
+}
+
+// Per dot, eight numbers: where it goes for the hash, where it goes for the meaning, then four flags:
+// has a hash place, has a meaning place, wants one but the picture ran out of cells (hash), the same
+// for the meaning. Only the first 55 percent of the dots ever gather. Ink dots take the hash and the
+// phrase, accent dots take the ring.
+function dealGoals(dots: Dots, shapes: Shapes | null): Float32Array {
+  const out = new Float32Array(dots.count * FLOATS_PER_DOT);
+  if (!shapes) return out;
+  const eligible = Math.floor(dots.count * GATHER_SHARE);
+  let inkEligible = 0;
+  for (let i = 0; i < eligible; i++) if (!dots.accent[i]) inkEligible++;
+  const accentEligible = eligible - inkEligible;
+
+  const hashCells = shapes.hash.x.length;
+  const phraseCells = shapes.phrase.x.length;
+  const ringCells = shapes.ring.x.length;
+  const hashReach = hashCells * dotsPerCell(inkEligible, hashCells);
+  const phraseReach = phraseCells * dotsPerCell(inkEligible, phraseCells);
+  const ringReach = ringCells * dotsPerCell(accentEligible, ringCells);
+
   let inkSeen = 0;
   let accentSeen = 0;
-  for (let i = 0; i < dots.count; i++) {
+  for (let i = 0; i < eligible; i++) {
+    const o = i * FLOATS_PER_DOT;
     if (dots.accent[i]) {
       const k = accentSeen++;
-      dots.hasHash[i] = 0;
-      dots.hasMean[i] = k < shapes.ring.x.length ? 1 : 0;
-      if (dots.hasMean[i]) {
-        dots.meanX[i] = shapes.ring.x[k];
-        dots.meanY[i] = shapes.ring.y[k];
+      if (k < ringReach) {
+        aim(out, o + 2, shapes.ring, k % ringCells);
+        out[o + 5] = 1;
+      } else {
+        out[o + 7] = 1;
       }
     } else {
       const k = inkSeen++;
-      dots.hasHash[i] = k < shapes.hash.x.length ? 1 : 0;
-      if (dots.hasHash[i]) {
-        dots.hashX[i] = shapes.hash.x[k];
-        dots.hashY[i] = shapes.hash.y[k];
+      if (k < hashReach) {
+        aim(out, o, shapes.hash, k % hashCells);
+        out[o + 4] = 1;
+      } else {
+        out[o + 6] = 1;
       }
-      dots.hasMean[i] = k < shapes.phrase.x.length ? 1 : 0;
-      if (dots.hasMean[i]) {
-        dots.meanX[i] = shapes.phrase.x[k];
-        dots.meanY[i] = shapes.phrase.y[k];
+      if (k < phraseReach) {
+        aim(out, o + 2, shapes.phrase, k % phraseCells);
+        out[o + 5] = 1;
+      } else {
+        out[o + 7] = 1;
       }
     }
   }
+  return out;
+}
+
+// Offset of an element from the top of an ancestor, ignoring transforms (the entrance animation
+// lifts the label 24px while it fades in, which must not move the art zone).
+function topWithin(element: HTMLElement, ancestor: HTMLElement): number {
+  let top = 0;
+  let node: HTMLElement | null = element;
+  while (node && node !== ancestor) {
+    top += node.offsetTop;
+    node = node.offsetParent as HTMLElement | null;
+  }
+  return top;
 }
 
 /** Starts the ink on a canvas. Returns the function that stops it and removes every listener. */
 export function startInk(config: InkConfig): () => void {
-  const { canvas, listenOn, still } = config;
-  const ctx = canvas.getContext('2d')!;
+  const { canvas, frame, section, anchor, caption, still } = config;
+  const noop = () => undefined;
+
   const startedAt = performance.now();
+  const compactQuery = window.matchMedia('(max-width: 639.98px)');
 
   let disposed = false;
+  let gpu: Gpu | null = null;
   let width = 0;
-  let height = 0;
+  let zoneHeight = 0;
   let ratio = 1;
   let dots: Dots | null = null;
   let shapes: Shapes | null = null;
+  let goals: Float32Array | null = null;
   let fontsReady = false;
+  let started = false;
+  let inView = true;
   let inkColour: Rgb = [0, 0, 0];
   let accentColour: Rgb = [0, 0, 0];
-  let image: ImageData | null = null;
   let phase: Phase = 'flow';
   let raf = 0;
-  let loopTimer = 0;
+  let startTimer = 0;
   let layoutTimer = 0;
-  let running = false;
-  let lastFrame = 0;
-  let loopClock = 0;
+  let lastNow = 0;
   let flowClock = 0;
-  const pointer = { x: 0, y: 0, active: false };
+  let loopClock = 0;
+  const pointer = { x: 0, y: 0, goalX: 0, goalY: 0, strength: 0, active: false };
 
   const setPhase = (next: Phase) => {
     if (next === phase) return;
@@ -152,7 +312,6 @@ export function startInk(config: InkConfig): () => void {
     config.onPhase(next);
   };
 
-  // Any CSS colour, turned into numbers by painting it on a one pixel canvas.
   const toRgb = (css: string): Rgb => {
     const probe = document.createElement('canvas');
     probe.width = 1;
@@ -178,234 +337,194 @@ export function startInk(config: InkConfig): () => void {
     };
   };
 
-  const rebuildShapes = () => {
-    if (!dots || !fontsReady || !width || !height) return;
+  const compile = (gl: WebGL2RenderingContext, type: number, source: string): WebGLShader | null => {
+    const shader = gl.createShader(type);
+    if (!shader) return null;
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      console.error(gl.getShaderInfoLog(shader));
+      gl.deleteShader(shader);
+      return null;
+    }
+    return shader;
+  };
+
+  const buildGpu = (): Gpu | null => {
+    const gl = canvas.getContext('webgl2', {
+      alpha: true,
+      premultipliedAlpha: true,
+      antialias: false,
+      depth: false,
+      stencil: false,
+      powerPreference: 'high-performance',
+    });
+    if (!gl) return null;
+    const vertex = compile(gl, gl.VERTEX_SHADER, VERTEX);
+    const fragment = compile(gl, gl.FRAGMENT_SHADER, FRAGMENT);
+    const program = gl.createProgram();
+    if (!vertex || !fragment || !program) return null;
+    gl.attachShader(program, vertex);
+    gl.attachShader(program, fragment);
+    gl.linkProgram(program);
+    gl.deleteShader(vertex);
+    gl.deleteShader(fragment);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      console.error(gl.getProgramInfoLog(program));
+      return null;
+    }
+
+    const vao = gl.createVertexArray();
+    const flowBuffer = gl.createBuffer();
+    const goalBuffer = gl.createBuffer();
+    if (!vao || !flowBuffer || !goalBuffer) return null;
+    gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, flowBuffer);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 4, gl.FLOAT, false, BYTES_PER_DOT, 0);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 4, gl.FLOAT, false, BYTES_PER_DOT, 16);
+    gl.bindBuffer(gl.ARRAY_BUFFER, goalBuffer);
+    gl.enableVertexAttribArray(2);
+    gl.vertexAttribPointer(2, 4, gl.FLOAT, false, BYTES_PER_DOT, 0);
+    gl.enableVertexAttribArray(3);
+    gl.vertexAttribPointer(3, 4, gl.FLOAT, false, BYTES_PER_DOT, 16);
+    gl.bindVertexArray(null);
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.disable(gl.DEPTH_TEST);
+    gl.clearColor(0, 0, 0, 0);
+
+    const uniforms = {} as Gpu['uniforms'];
+    for (const name of UNIFORMS) uniforms[name] = gl.getUniformLocation(program, name);
+    return { gl, program, vao, flowBuffer, goalBuffer, uniforms };
+  };
+
+  const uploadFlow = () => {
+    if (!gpu || !dots) return;
+    gpu.gl.bindBuffer(gpu.gl.ARRAY_BUFFER, gpu.flowBuffer);
+    gpu.gl.bufferData(gpu.gl.ARRAY_BUFFER, dots.flow, gpu.gl.STATIC_DRAW);
+  };
+
+  const uploadGoals = () => {
+    if (!gpu || !goals) return;
+    gpu.gl.bindBuffer(gpu.gl.ARRAY_BUFFER, gpu.goalBuffer);
+    gpu.gl.bufferData(gpu.gl.ARRAY_BUFFER, goals, gpu.gl.STATIC_DRAW);
+  };
+
+  const render = (flow: number, loop: number) => {
+    if (!gpu || !dots || !width || !zoneHeight || gpu.gl.isContextLost()) return;
+    const { gl, uniforms } = gpu;
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.useProgram(gpu.program);
+    gl.uniform2f(uniforms.u_canvas, width, zoneHeight + FADE_TAIL);
+    gl.uniform2f(uniforms.u_zone, width, zoneHeight);
+    gl.uniform1f(uniforms.u_time, flow);
+    gl.uniform1f(uniforms.u_loop, loop);
+    gl.uniform1f(uniforms.u_dpr, ratio);
+    gl.uniform3f(uniforms.u_pointer, pointer.x, pointer.y, pointer.strength);
+    gl.uniform3f(uniforms.u_ink, inkColour[0] / 255, inkColour[1] / 255, inkColour[2] / 255);
+    gl.uniform3f(uniforms.u_accent, accentColour[0] / 255, accentColour[1] / 255, accentColour[2] / 255);
+    gl.bindVertexArray(gpu.vao);
+    gl.drawArrays(gl.POINTS, 0, dots.count);
+    gl.bindVertexArray(null);
+  };
+
+  const redraw = () => {
+    if (still) render(STILL_LOOP_TIME, STILL_LOOP_TIME);
+    else render(flowClock, loopClock);
+  };
+
+  const rebuildGoals = () => {
+    if (!dots || !fontsReady || !width || !zoneHeight) return;
     const { mono, display } = families();
     shapes = buildShapes({
       width,
-      height,
-      compact: window.matchMedia('(max-width: 639.98px)').matches,
+      height: zoneHeight,
+      compact: compactQuery.matches,
+      clearTop: topWithin(caption, frame) + caption.offsetHeight + CAPTION_GAP,
       hash: config.hash,
       phrase: config.phrase,
       monoFamily: mono,
       displayFamily: display,
     });
-    dealTargets(dots, shapes);
-  };
-
-  // Work out each dot's position, its opacity step, and nothing else. Drawing is a separate pass.
-  const step = (dt: number, t: number, shape: Shape) => {
-    if (!dots) return;
-    const d = dots;
-    const k = dt * 60;
-    const flowEase = 1 - Math.pow(1 - FLOW_EASE, k);
-    const damp = Math.pow(DAMPING, k);
-    const pull = SPRING * k;
-    const levelEase = 1 - Math.pow(1 - LEVEL_EASE, k);
-    const push = PUSH_ACCEL * k;
-    const shake = JITTER * Math.sqrt(k);
-    const pushOn = pointer.active;
-    const t07 = t * 0.07;
-    const t05 = t * 0.05;
-    const t03 = t * 0.03;
-    const t04 = t * 0.04;
-
-    for (let i = 0; i < d.count; i++) {
-      let x = d.x[i];
-      let y = d.y[i];
-      let vx = d.vx[i];
-      let vy = d.vy[i];
-      const accent = d.accent[i];
-
-      const seated = shape === 1 ? d.hasHash[i] : shape === 2 ? d.hasMean[i] : 0;
-      let wanted = 0;
-      if (seated) wanted = 1;
-      else if (shape === 2 || (shape === 1 && !accent)) wanted = -1;
-      d.level[i] += (wanted - d.level[i]) * levelEase;
-
-      if (pushOn) {
-        const dx = x - pointer.x;
-        const dy = y - pointer.y;
-        const near = dx * dx + dy * dy;
-        if (near < PUSH_RADIUS * PUSH_RADIUS && near > 0.0001) {
-          const dist = Math.sqrt(near);
-          const strength = (push * (1 - dist / PUSH_RADIUS)) / dist;
-          vx += dx * strength;
-          vy += dy * strength;
-        }
-      }
-
-      if (seated) {
-        const tx = shape === 1 ? d.hashX[i] : d.meanX[i];
-        const ty = shape === 1 ? d.hashY[i] : d.meanY[i];
-        vx += (tx - x) * pull;
-        vy += (ty - y) * pull;
-        vx *= damp;
-        vy *= damp;
-        x += vx * k + (Math.random() - 0.5) * 2 * shake;
-        y += vy * k + (Math.random() - 0.5) * 2 * shake;
-      } else {
-        const angle =
-          2.2 * Math.sin(x * 0.0021 + t07) + 1.7 * Math.cos(y * 0.0027 - t05) + 1.3 * Math.sin((x + y) * 0.0016 + t03);
-        vx += (Math.cos(angle) * FLOW_SPEED - vx) * flowEase;
-        vy += (Math.sin(angle) * FLOW_SPEED - vy) * flowEase;
-        x += vx * k;
-        y += vy * k;
-        if (x < -MARGIN) x += width + 2 * MARGIN;
-        else if (x > width + MARGIN) x -= width + 2 * MARGIN;
-        if (y < -MARGIN) y += height + 2 * MARGIN;
-        else if (y > height + MARGIN) y -= height + 2 * MARGIN;
-      }
-
-      d.x[i] = x;
-      d.y[i] = y;
-      d.vx[i] = vx;
-      d.vy[i] = vy;
-
-      const ribbon = Math.min(
-        1,
-        Math.max(0, 0.15 + 1.1 * (0.5 + 0.5 * Math.sin(x * 0.004 + 1.3 * Math.sin(y * 0.003 + t04)))),
-      );
-      const own = accent ? ACCENT_OPACITY : INK_OPACITY;
-      const level = d.level[i];
-      const alpha =
-        level >= 0
-          ? own * (ribbon + (1 - ribbon) * level)
-          : (own + (LEFTOVER_OPACITY - own) * -level) * ribbon;
-      const unseen = x < -2 || x > width + 2 || y < -2 || y > height + 2;
-      d.alpha[i] = unseen ? 0 : alpha;
-    }
-  };
-
-  // Each dot is written straight into a pixel buffer, which is then sent to the canvas in one call.
-  // Thousands of tiny arcs through the canvas drawing calls cost far more than this on a laptop GPU.
-  const draw = () => {
-    if (!dots || !image) return;
-    const d = dots;
-    const pixels = image.data;
-    const stride = image.width;
-    const rows = image.height;
-    pixels.fill(0);
-
-    for (let i = 0; i < d.count; i++) {
-      const alpha = d.alpha[i];
-      if (alpha <= 0.004) continue;
-      const rgb = d.accent[i] ? accentColour : inkColour;
-      const cx = d.x[i] * ratio;
-      const cy = d.y[i] * ratio;
-      const rr = d.radius[i] * ratio;
-      const x0 = Math.max(0, Math.floor(cx - rr - 1));
-      const x1 = Math.min(stride - 1, Math.ceil(cx + rr + 1));
-      const y0 = Math.max(0, Math.floor(cy - rr - 1));
-      const y1 = Math.min(rows - 1, Math.ceil(cy + rr + 1));
-      for (let py = y0; py <= y1; py++) {
-        const dy = py + 0.5 - cy;
-        let o = (py * stride + x0) * 4;
-        for (let px = x0; px <= x1; px++, o += 4) {
-          const dx = px + 0.5 - cx;
-          let cover = rr + 0.5 - Math.sqrt(dx * dx + dy * dy);
-          if (cover <= 0) continue;
-          if (cover > 1) cover = 1;
-          const source = cover * alpha;
-          const below = pixels[o + 3] / 255;
-          if (below === 0) {
-            pixels[o] = rgb[0];
-            pixels[o + 1] = rgb[1];
-            pixels[o + 2] = rgb[2];
-            pixels[o + 3] = source * 255;
-          } else {
-            const keep = below * (1 - source);
-            const total = source + keep;
-            pixels[o] = (rgb[0] * source + pixels[o] * keep) / total;
-            pixels[o + 1] = (rgb[1] * source + pixels[o + 1] * keep) / total;
-            pixels[o + 2] = (rgb[2] * source + pixels[o + 2] * keep) / total;
-            pixels[o + 3] = total * 255;
-          }
-        }
-      }
-    }
-    ctx.putImageData(image, 0, 0);
-  };
-
-  // The still picture: only the dots that belong to the phrase and its ring, each on its point.
-  const drawStill = () => {
-    if (!dots || !shapes) return;
-    const d = dots;
-    for (let i = 0; i < d.count; i++) {
-      if (d.hasMean[i]) {
-        d.x[i] = d.meanX[i];
-        d.y[i] = d.meanY[i];
-        d.alpha[i] = d.accent[i] ? ACCENT_OPACITY : INK_OPACITY;
-      } else {
-        d.alpha[i] = 0;
-      }
-    }
-    draw();
+    goals = dealGoals(dots, shapes);
+    uploadGoals();
   };
 
   const layout = () => {
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
+    const nextWidth = section.clientWidth;
+    const nextZone = Math.max(60, Math.round(topWithin(anchor, section) - ZONE_GAP));
     const nextRatio = Math.min(window.devicePixelRatio || 1, 2);
-    if (!w || !h || (dots && w === width && h === height && nextRatio === ratio)) return;
+    const wanted = compactQuery.matches ? SMALL_COUNT : WIDE_COUNT;
+    if (!nextWidth || (dots?.count === wanted && nextWidth === width && nextZone === zoneHeight && nextRatio === ratio)) {
+      return;
+    }
+    width = nextWidth;
+    zoneHeight = nextZone;
     ratio = nextRatio;
-    canvas.width = Math.round(w * ratio);
-    canvas.height = Math.round(h * ratio);
-    image = ctx.createImageData(canvas.width, canvas.height);
-
-    const compact = window.matchMedia('(max-width: 639.98px)').matches;
-    const wanted = compact ? SMALL_COUNT : WIDE_COUNT;
+    frame.style.height = `${zoneHeight + FADE_TAIL}px`;
+    canvas.width = Math.round(width * ratio);
+    canvas.height = Math.round((zoneHeight + FADE_TAIL) * ratio);
     if (!dots || dots.count !== wanted) {
-      dots = createDots(wanted, w, h);
-    } else if (width && height) {
-      for (let i = 0; i < dots.count; i++) {
-        dots.x[i] = ((dots.x[i] + MARGIN) * (w + 2 * MARGIN)) / (width + 2 * MARGIN) - MARGIN;
-        dots.y[i] = ((dots.y[i] + MARGIN) * (h + 2 * MARGIN)) / (height + 2 * MARGIN) - MARGIN;
-      }
+      dots = createDots(wanted);
+      // Empty goals until the fonts are in, so the first frames have a full buffer to read.
+      goals = dealGoals(dots, null);
+      uploadFlow();
+      uploadGoals();
     }
-    width = w;
-    height = h;
-    rebuildShapes();
-    if (still) drawStill();
-    else if (!running) {
-      step(0, 0, 0);
-      draw();
-    }
+    rebuildGoals();
+    redraw();
   };
 
-  const frame = (now: number) => {
-    raf = requestAnimationFrame(frame);
-    const dt = Math.min(Math.max((now - lastFrame) / 1000, 0), 0.05);
-    lastFrame = now;
-    loopClock = (loopClock + dt) % LOOP_SECONDS;
+  const shouldRun = () => started && inView && !document.hidden && !disposed && !!gpu && !still;
+
+  const frameLoop = (now: number) => {
+    raf = requestAnimationFrame(frameLoop);
+    const dt = Math.min(Math.max((now - lastNow) / 1000, 0), 0.05);
+    lastNow = now;
     flowClock += dt;
-    const shape: Shape = loopClock < GATHER_AT ? 0 : loopClock < MEANING_AT ? 1 : loopClock < RELEASE_AT ? 2 : 0;
-    setPhase(shape === 0 ? 'flow' : shape === 1 ? 'hash' : 'meaning');
-    step(dt, flowClock, shape);
-    draw();
+    loopClock = (loopClock + dt) % LOOP_SECONDS;
+    if (pointer.active) {
+      pointer.strength = Math.min(1, pointer.strength + dt / POINTER_RAMP_SECONDS);
+      const ease = 1 - Math.pow(1 - POINTER_EASE, dt * 60);
+      pointer.x += (pointer.goalX - pointer.x) * ease;
+      pointer.y += (pointer.goalY - pointer.y) * ease;
+    } else {
+      pointer.strength = Math.max(0, pointer.strength - dt / POINTER_FADE_SECONDS);
+    }
+    setPhase(
+      loopClock >= HASH_CAPTION_FROM && loopClock < MOVE_AT
+        ? 'hash'
+        : loopClock >= MEANING_CAPTION_FROM && loopClock < RELEASE_AT
+          ? 'meaning'
+          : 'flow',
+    );
+    render(flowClock, loopClock);
   };
 
-  const startLoop = () => {
-    running = true;
-    lastFrame = performance.now();
-    raf = requestAnimationFrame(frame);
-  };
-
-  const onVisibility = () => {
-    if (!running) return;
-    if (document.hidden) {
+  const sync = () => {
+    if (shouldRun()) {
+      if (!raf) {
+        lastNow = performance.now();
+        raf = requestAnimationFrame(frameLoop);
+      }
+    } else if (raf) {
       cancelAnimationFrame(raf);
       raf = 0;
-    } else if (!raf) {
-      lastFrame = performance.now();
-      raf = requestAnimationFrame(frame);
     }
   };
 
   const place = (event: PointerEvent) => {
     const box = canvas.getBoundingClientRect();
-    pointer.x = event.clientX - box.left;
-    pointer.y = event.clientY - box.top;
+    pointer.goalX = event.clientX - box.left;
+    pointer.goalY = event.clientY - box.top;
+    if (!pointer.active && pointer.strength <= 0.001) {
+      pointer.x = pointer.goalX;
+      pointer.y = pointer.goalY;
+    }
     pointer.active = true;
   };
   const release = () => {
@@ -415,68 +534,109 @@ export function startInk(config: InkConfig): () => void {
     if (event.pointerType !== 'mouse') pointer.active = false;
   };
 
-  const themeWatcher = new MutationObserver(() => {
-    readColours();
-    if (still) drawStill();
-  });
-  const sizeWatcher = new ResizeObserver(() => {
+  const queueLayout = () => {
     window.clearTimeout(layoutTimer);
     layoutTimer = window.setTimeout(layout, 100);
+  };
+
+  const themeWatcher = new MutationObserver(() => {
+    readColours();
+    redraw();
+  });
+  const sizeWatcher = new ResizeObserver(queueLayout);
+  const viewWatcher = new IntersectionObserver((entries) => {
+    inView = entries[entries.length - 1].isIntersecting;
+    sync();
   });
 
+  const onLost = (event: Event) => {
+    event.preventDefault();
+    gpu = null;
+    sync();
+  };
+  const onRestored = () => {
+    gpu = buildGpu();
+    uploadFlow();
+    uploadGoals();
+    redraw();
+    sync();
+  };
+
   readColours();
+  gpu = buildGpu();
+  if (!gpu) return noop;
+  canvas.addEventListener('webglcontextlost', onLost);
+  canvas.addEventListener('webglcontextrestored', onRestored);
   layout();
   themeWatcher.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-  sizeWatcher.observe(canvas);
+  sizeWatcher.observe(section);
+  window.addEventListener('resize', queueLayout);
   if (!still) {
-    listenOn.addEventListener('pointermove', place, { passive: true });
-    listenOn.addEventListener('pointerdown', place, { passive: true });
-    listenOn.addEventListener('pointerleave', release, { passive: true });
-    listenOn.addEventListener('pointerup', releaseTouch, { passive: true });
-    listenOn.addEventListener('pointercancel', release, { passive: true });
+    viewWatcher.observe(section);
+    section.addEventListener('pointermove', place, { passive: true });
+    section.addEventListener('pointerdown', place, { passive: true });
+    section.addEventListener('pointerleave', release, { passive: true });
+    section.addEventListener('pointerup', releaseTouch, { passive: true });
+    section.addEventListener('pointercancel', release, { passive: true });
     window.addEventListener('scroll', release, { passive: true });
-    document.addEventListener('visibilitychange', onVisibility);
+    document.addEventListener('visibilitychange', sync);
   }
 
   // The shapes need the real fonts. If they are slow, give up waiting after three seconds and use
   // whatever the browser has.
   const { mono, display } = families();
-  const waitForFonts = Promise.race([
+  Promise.race([
     Promise.all([
       document.fonts.load(`700 40px ${mono}`, config.hash),
       document.fonts.load(`800 40px ${display}`, config.phrase.toUpperCase()),
     ]),
     new Promise((resolve) => window.setTimeout(resolve, 3000)),
-  ]);
-  waitForFonts
+  ])
     .catch(() => undefined)
     .then(() => {
       if (disposed) return;
       fontsReady = true;
-      rebuildShapes();
+      rebuildGoals();
+      redraw();
       if (still) {
-        drawStill();
         phase = 'meaning';
         config.onPhase('meaning');
         return;
       }
-      loopTimer = window.setTimeout(startLoop, Math.max(0, START_DELAY_MS - (performance.now() - startedAt)));
+      startTimer = window.setTimeout(
+        () => {
+          started = true;
+          sync();
+        },
+        Math.max(0, START_DELAY_MS - (performance.now() - startedAt)),
+      );
     });
 
   return () => {
     disposed = true;
-    running = false;
     cancelAnimationFrame(raf);
-    window.clearTimeout(loopTimer);
+    raf = 0;
+    window.clearTimeout(startTimer);
     window.clearTimeout(layoutTimer);
     themeWatcher.disconnect();
     sizeWatcher.disconnect();
-    listenOn.removeEventListener('pointermove', place);
-    listenOn.removeEventListener('pointerdown', place);
-    listenOn.removeEventListener('pointerleave', release);
-    listenOn.removeEventListener('pointerup', releaseTouch);
-    listenOn.removeEventListener('pointercancel', release);
+    viewWatcher.disconnect();
+    window.removeEventListener('resize', queueLayout);
+    canvas.removeEventListener('webglcontextlost', onLost);
+    canvas.removeEventListener('webglcontextrestored', onRestored);
+    section.removeEventListener('pointermove', place);
+    section.removeEventListener('pointerdown', place);
+    section.removeEventListener('pointerleave', release);
+    section.removeEventListener('pointerup', releaseTouch);
+    section.removeEventListener('pointercancel', release);
     window.removeEventListener('scroll', release);
-    document.removeEventListener('visibilitychange', onVisibility);
+    document.removeEventListener('visibilitychange', sync);
+    if (gpu && !gpu.gl.isContextLost()) {
+      gpu.gl.deleteBuffer(gpu.flowBuffer);
+      gpu.gl.deleteBuffer(gpu.goalBuffer);
+      gpu.gl.deleteVertexArray(gpu.vao);
+      gpu.gl.deleteProgram(gpu.program);
+    }
+    gpu = null;
   };
 }

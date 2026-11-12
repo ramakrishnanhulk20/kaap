@@ -13,6 +13,7 @@ const BUTTON =
 
 export default function HeroD() {
   const sectionRef = useRef<HTMLElement>(null);
+  const labelRef = useRef<HTMLParagraphElement>(null);
   const still = useStill();
 
   const rise = (position: number) => ({
@@ -27,23 +28,24 @@ export default function HeroD() {
       style={{ '--hero-h': 'max(calc(100svh - var(--bar, 56px)), 720px)' } as CSSProperties}
       className="relative min-h-[var(--hero-h)] overflow-hidden bg-bg text-ink"
     >
-      <InkCanvas section={sectionRef} still={still} />
+      <InkCanvas section={sectionRef} label={labelRef} still={still} />
 
       <p className="sr-only">
         Proposal #{proposalId} says &quot;{description}&quot;. It asks members to sign a hash. Kaap reads the text behind
         it: {sentence} Verdict: {withText.riskFloor}.
       </p>
 
-      <div className="relative mx-auto max-w-[1100px] px-6 pt-[calc(var(--hero-h)_*_0.46)] pb-14 max-sm:px-5 max-sm:pt-[300px]">
+      <div className="relative mx-auto max-w-[1100px] px-6 pt-[calc(var(--hero-h)_*_0.38)] pb-14 max-sm:px-5 max-sm:pt-[300px]">
         <motion.p
+          ref={labelRef}
           {...rise(0)}
-          className="flex items-baseline gap-[10px] font-mono text-[12px] font-medium uppercase tracking-[0.08em] text-muted"
+          className="-ml-2 flex w-fit items-baseline gap-[10px] rounded-md bg-bg/85 px-2 py-1 font-mono text-[12px] font-medium uppercase tracking-[0.08em] text-muted backdrop-blur-sm"
         >
           <span aria-hidden="true" className="size-2 shrink-0 bg-accent" />
           NEAR TREASURIES · SPUTNIK DAO · A GUARD THAT CAN ONLY SAY NO
         </motion.p>
 
-        <h1 className="mt-[18px] font-grotesk text-[clamp(2.75rem,7.6vw,6.85rem)] font-bold uppercase leading-[0.96] tracking-[-0.025em] text-ink">
+        <h1 className="mt-[18px] font-grotesk text-[clamp(2.75rem,7vw,6.2rem)] font-bold uppercase leading-[0.96] tracking-[-0.025em] text-ink">
           <motion.span {...rise(1)} className="block">
             Stops a theft.
           </motion.span>
@@ -71,7 +73,7 @@ export default function HeroD() {
 
         <motion.div
           {...rise(4)}
-          className="mx-auto mt-14 max-w-[560px] text-center font-body text-[16.5px] leading-[1.6] text-muted max-sm:mx-0 max-sm:max-w-none max-sm:text-left"
+          className="mx-auto mt-9 max-w-[560px] text-center font-body text-[16.5px] leading-[1.6] text-muted max-sm:mx-0 max-sm:max-w-none max-sm:text-left"
         >
           <p>
             NEAR treasuries approve payments that show only a hash. Kaap reads each one, tells members in plain words
