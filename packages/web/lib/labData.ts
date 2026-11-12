@@ -16,13 +16,17 @@ const SEVERITY_ORDER = ['intents_key_change', 'sign_request'];
 
 const word = (value: unknown) => (typeof value === 'string' ? value : '');
 
-/** One plain sentence about the most severe effect, with the engine's own values in fixed words. */
-export function effectSentence(effects: Effect[]): string {
+const mostSevere = (effects: Effect[]): Effect | undefined => {
   const rank = (effect: Effect) => {
     const place = SEVERITY_ORDER.indexOf(effect.type);
     return place === -1 ? SEVERITY_ORDER.length : place;
   };
-  const worst = [...effects].sort((a, b) => rank(a) - rank(b))[0];
+  return [...effects].sort((a, b) => rank(a) - rank(b))[0];
+};
+
+/** One plain sentence about the most severe effect, with the engine's own values in fixed words. */
+export function effectSentence(effects: Effect[]): string {
+  const worst = mostSevere(effects);
   if (!worst) return '';
 
   if (worst.type === 'intents_key_change') {
@@ -37,6 +41,14 @@ export function effectSentence(effects: Effect[]): string {
     const path = word(worst.path);
     if (signer && path) return `Asks ${signer} to sign a hash for ${path}.`;
   }
+  return worst.type;
+}
+
+/** A short phrase for the most severe effect, from its kind alone: no account, key or amount. */
+function phraseFor(effects: Effect[]): string {
+  const worst = mostSevere(effects);
+  if (!worst) return '';
+  if (worst.type === 'intents_key_change' && worst.op === 'add') return "Adds a key to the treasury's funds";
   return worst.type;
 }
 
@@ -59,3 +71,4 @@ export const withoutText = reading(analyses.withoutText);
 export const withText = reading(analyses.withText);
 export const effects: Effect[] = analyses.withText.effects;
 export const sentence = effectSentence(effects);
+export const effectPhrase = phraseFor(effects);

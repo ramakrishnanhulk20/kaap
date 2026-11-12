@@ -6,9 +6,11 @@ import { useSyncExternalStore } from 'react';
 import HeroA from './HeroA';
 import HeroB from './HeroB';
 import HeroC from './HeroC';
+import HeroD from './HeroD';
 import ThemeToggle from './ThemeToggle';
 
 const DIRECTIONS = [
+  { id: 'd', label: 'D  Ink', Hero: HeroD },
   { id: 'a', label: 'A  Redacted', Hero: HeroA },
   { id: 'b', label: 'B  The thread', Hero: HeroB },
   { id: 'c', label: 'C  The lens', Hero: HeroC },
@@ -34,7 +36,7 @@ function useStill() {
 
 export default function LabShell() {
   const asked = useSearchParams().get('d');
-  const chosen: DirectionId = DIRECTIONS.some((direction) => direction.id === asked) ? (asked as DirectionId) : 'a';
+  const chosen: DirectionId = DIRECTIONS.some((direction) => direction.id === asked) ? (asked as DirectionId) : 'd';
   const still = useStill();
   const { Hero } = DIRECTIONS.find((direction) => direction.id === chosen)!;
 
@@ -53,7 +55,7 @@ export default function LabShell() {
         <div
           role="tablist"
           aria-label="Hero direction"
-          className="grid h-full grid-cols-3 max-sm:col-span-2 max-sm:row-start-2 sm:flex"
+          className="grid h-full grid-cols-4 max-sm:col-span-2 max-sm:row-start-2 sm:flex"
         >
           {DIRECTIONS.map(({ id, label }) => {
             const active = id === chosen;
@@ -64,7 +66,7 @@ export default function LabShell() {
                 role="tab"
                 aria-selected={active}
                 onClick={() => choose(id)}
-                className={`relative h-full whitespace-pre px-4 font-mono text-[13px] transition-colors duration-150 ease-out hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${
+                className={`relative h-full whitespace-pre px-4 font-mono text-[13px] max-sm:px-0 max-sm:text-[11px] transition-colors duration-150 ease-out hover:text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${
                   active ? 'text-ink after:absolute after:inset-x-3 after:bottom-0 after:h-[2px] after:bg-accent' : 'text-muted'
                 }`}
               >

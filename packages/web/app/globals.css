@@ -54,6 +54,22 @@
   --accent: #3f7a00;
 }
 
+[data-direction="d"] {
+  --bg: #0E0E0F;
+  --ink: #EDEDED;
+  --muted: #9A9A98;
+  --line: #262628;
+  --accent: #F5B800;
+}
+
+[data-theme="light"] [data-direction="d"] {
+  --bg: #ECECEA;
+  --ink: #111111;
+  --muted: #5A5A58;
+  --line: #D5D5D2;
+  --accent: #D99A00;
+}
+
 :root {
   --grain-opacity: 0.07;
 }
