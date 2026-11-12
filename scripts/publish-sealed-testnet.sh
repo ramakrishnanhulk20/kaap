@@ -8,7 +8,9 @@
 #      means the file is already served there (a host the operator approved);
 #   4. downloads the URL and stops unless the served bytes have the build's sha256, because a run
 #      whose wasm cannot be fetched is not refused, it hangs about 200 blocks (seen 24 Oct 2026);
-#   5. registers it: create_project the first time, add_version (set active) after that.
+#   5. registers it: create_project the first time, add_version (set active) after that, then
+#      records the build in packages/sealed/testnet.json only once the project read back from the
+#      chain names it active. A read that fails stops the run; it never counts as "no project".
 # Runs inside WSL with near-cli-rs 0.30.1. Testnet only.
 #
 # Usage: bash scripts/publish-sealed-testnet.sh fastfs
@@ -24,6 +26,8 @@ PROJECT_NAME=kaap-sealed
 mkdir -p "$WORK"
 command -v near >/dev/null || { echo "near-cli-rs is not on PATH" >&2; exit 1; }
 command -v jq >/dev/null || { echo "jq is not on PATH" >&2; exit 1; }
+# shellcheck source=scripts/lib/sealed-project.sh
+. "$REPO/scripts/lib/sealed-project.sh"
 
 echo "== 1. build"
 bash "$REPO/packages/sealed/build.sh" release "$WORK/kaap-sealed.wasm" | grep -E '^(size_bytes|sha256|manifest sections|local paths)'
@@ -42,10 +46,12 @@ else
     save-to-legacy-keychain network-config testnet create > "$WORK/create-account.log" 2>&1 \
     || { tail -n 20 "$WORK/create-account.log" >&2; exit 1; }
   echo "created $ACCOUNT (key in ~/.near-credentials/testnet only)"
+fi
+[[ -f "$HOME/.near-credentials/testnet/$ACCOUNT.json" ]] || { echo "no key for $ACCOUNT in ~/.near-credentials/testnet" >&2; exit 1; }
+if [[ ! -f "$STATE" ]]; then
   jq -n --arg a "$ACCOUNT" --arg p "$ACCOUNT/$PROJECT_NAME" \
     '{network:"testnet", account:$a, project_id:$p, contract:"outlayer.testnet", versions:[]}' > "$STATE"
 fi
-[[ -f "$HOME/.near-credentials/testnet/$ACCOUNT.json" ]] || { echo "no key for $ACCOUNT in ~/.near-credentials/testnet" >&2; exit 1; }
 
 echo "== 3. host"
 if [[ "$HOST_ARG" == "fastfs" ]]; then
@@ -90,31 +96,27 @@ echo "served sha256 matches: $SHA"
 
 echo "== 5. register"
 SOURCE=$(jq -nc --arg u "$URL" --arg h "$SHA" '{WasmUrl:{url:$u, hash:$h, build_target:"wasm32-wasip2"}}')
-EXISTS=$(near contract call-function as-read-only "$CONTRACT" get_project json-args "$(jq -nc --arg p "$ACCOUNT/$PROJECT_NAME" '{project_id:$p}')" \
-  network-config testnet now 2>/dev/null | grep -c '"uuid"' || true)
-if [[ "$EXISTS" == "0" ]]; then
-  METHOD=create_project
+METHOD=$(registration_method "$CONTRACT" "$ACCOUNT/$PROJECT_NAME") \
+  || { echo "STOP: could not tell whether $ACCOUNT/$PROJECT_NAME exists on $CONTRACT. Nothing registered; check the testnet RPC and run again." >&2; exit 1; }
+if [[ "$METHOD" == "create_project" ]]; then
   ARGS=$(jq -nc --arg n "$PROJECT_NAME" --argjson s "$SOURCE" '{name:$n, source:$s}')
   # Storage deposit is about 0.0074 NEAR; the contract refunds the rest.
   DEPOSIT='0.1 NEAR'
 else
-  METHOD=add_version
   ARGS=$(jq -nc --arg n "$PROJECT_NAME" --argjson s "$SOURCE" '{project_name:$n, source:$s, set_active:true}')
   DEPOSIT='0.05 NEAR'
 fi
 near contract call-function as-transaction "$CONTRACT" "$METHOD" json-args "$ARGS" prepaid-gas '100.0 Tgas' \
   attached-deposit "$DEPOSIT" sign-as "$ACCOUNT" network-config testnet sign-with-legacy-keychain send \
   > "$WORK/register.log" 2>&1 || { tail -n 30 "$WORK/register.log" >&2; exit 1; }
-TX=$(sed 's/\x1b\[[0-9;]*m//g' "$WORK/register.log" | grep -m1 -oE 'Transaction ID: [1-9A-HJ-NP-Za-km-z]{40,50}' | awk '{print $3}')
+TX=$(sed 's/\x1b\[[0-9;]*m//g' "$WORK/register.log" | grep -m1 -oE 'Transaction ID: [1-9A-HJ-NP-Za-km-z]{40,50}' | awk '{print $3}' || true)
 grep -m3 -E 'Project created|Version added' "$WORK/register.log" | sed 's/\x1b\[[0-9;]*m//g' || true
+if ! [[ "$TX" =~ ^[1-9A-HJ-NP-Za-km-z]{43,44}$ ]]; then
+  echo "STOP: $METHOD was sent, but near-cli printed no transaction id. packages/sealed/testnet.json not changed; see $WORK/register.log and check get_project for $ACCOUNT/$PROJECT_NAME on $CONTRACT." >&2
+  exit 1
+fi
 echo "$METHOD tx: https://testnet.nearblocks.io/txns/$TX"
 
-PROJECT=$(near contract call-function as-read-only "$CONTRACT" get_project json-args "$(jq -nc --arg p "$ACCOUNT/$PROJECT_NAME" '{project_id:$p}')" \
-  network-config testnet now 2>/dev/null | sed -n '/^{/,/^}/p')
-echo "project: $(echo "$PROJECT" | jq -c '{project_id, uuid, active_version}')"
-TMP=$(mktemp)
-jq --arg sha "$SHA" --arg url "$URL" --arg tx "$TX" --arg m "$METHOD" --arg uuid "$(echo "$PROJECT" | jq -r .uuid)" \
-  --arg size "$(stat -c%s "$WASM")" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  '.uuid = $uuid | .active_version = $sha | .versions += [{sha256:$sha, bytes:($size|tonumber), url:$url, registered_by:$m, tx:$tx, at:$at, retired:false}]' \
-  "$STATE" > "$TMP" && mv "$TMP" "$STATE"
+record_registration "$STATE" "$CONTRACT" "$ACCOUNT/$PROJECT_NAME" "$SHA" "$URL" "$TX" "$METHOD" "$(stat -c%s "$WASM")" \
+  || { echo "STOP: $METHOD went through (https://testnet.nearblocks.io/txns/$TX), but the project read back from $CONTRACT did not confirm this build as active (reason above), so packages/sealed/testnet.json was not changed. Check get_project for $ACCOUNT/$PROJECT_NAME, then add the build to the file." >&2; exit 1; }
 echo "state: packages/sealed/testnet.json"

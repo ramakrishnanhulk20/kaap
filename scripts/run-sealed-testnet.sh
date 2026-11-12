@@ -65,7 +65,13 @@ for n in $(seq 1 "$RUNS"); do
     FAILED=1
     continue
   fi
-  node "$TOOLS/run-report.mjs" "$TX" "$ACCOUNT" "$OUT/$n.summary.json" "$OUT/$n.output.json" > /dev/null
+  # A failed read-back writes nothing, so the run is failed here rather than checked against an
+  # output file a past run under the same --label left behind.
+  if ! node "$TOOLS/run-report.mjs" "$TX" "$ACCOUNT" "$OUT/$n.summary.json" "$OUT/$n.output.json" > /dev/null; then
+    echo "run $n: could not read transaction $TX back from the testnet RPC; see https://testnet.nearblocks.io/txns/$TX"
+    FAILED=1
+    continue
+  fi
   WALL=$((end - start))
   TMP=$(mktemp)
   jq --argjson w "$WALL" --argjson c "$cli" '.wall_ms = $w | .cli_exit = $c' "$OUT/$n.summary.json" > "$TMP" && mv "$TMP" "$OUT/$n.summary.json"

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Deploys kaap-guard and kaap-registry to fresh, faucet-funded testnet accounts. Each contract's
 # init runs in the same transaction as its deploy, then the account's only full-access key is
-# deleted, so nobody, including us, can ever change the code. Prints the account ids, the code
+# deleted, so nobody, including us, can ever change the code. The run stops unless two independent
+# RPC providers both list no access key on the account afterwards. Prints the account ids, the code
 # hashes and explorer links.
 #
 # Testnet only. Run inside WSL (or any Linux shell) from anywhere in the repo:
 #   bash scripts/deploy-contracts-testnet.sh
-# Needs cargo-near 0.22.0, near-cli-rs 0.30.1 and python3. The testnet faucet pays for every
+# Needs cargo-near 0.22.0, near-cli-rs 0.30.1, python3 and curl. The testnet faucet pays for every
 # account, so no wallet or funds are needed.
 #
 # Optional settings, read from the environment or from .env:
@@ -19,6 +20,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
+# shellcheck source=scripts/lib/access-keys.sh
+. "$ROOT/scripts/lib/access-keys.sh"
 
 if [ -f .env ]; then
   set -a
@@ -41,7 +44,7 @@ case "$DEPLOY" in
   guard | registry | both) ;;
   *) echo "KAAP_DEPLOY must be guard, registry or both, not '$DEPLOY'" >&2; exit 1 ;;
 esac
-for tool in cargo-near near python3 sha256sum; do
+for tool in cargo-near near python3 curl sha256sum; do
   command -v "$tool" >/dev/null || { echo "missing tool: $tool" >&2; exit 1; }
 done
 mkdir -p "$OUT"
@@ -91,18 +94,25 @@ view() {
 
 # Deploys, runs init, deletes the full-access key and checks that no key is left.
 deploy() {
-  local id="$1" wasm="$2" init_args="$3" deploy_tx key delete_tx keys_left
+  local id="$1" wasm="$2" init_args="$3" deploy_tx key delete_tx
   deploy_tx="$(run_near contract deploy "$id" use-file "$wasm" \
     with-init-call new json-args "$init_args" prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' \
     network-config "$NETWORK" sign-with-legacy-keychain send)"
   key="$(public_key_of "$id")"
   delete_tx="$(run_near account delete-keys "$id" public-keys "$key" \
     network-config "$NETWORK" sign-with-legacy-keychain send)"
-  keys_left="$(near account list-keys "$id" network-config "$NETWORK" now 2>&1 | tee -a "$LOG" | grep -c 'ed25519:' || true)"
-  if [ "$keys_left" != "0" ]; then
-    echo "$id still has $keys_left access key(s) after the delete; stopping" >&2
-    exit 1
-  fi
+  # A provider's final block can trail the delete by a few seconds, so the check is asked again
+  # for a short while. Only an empty key list from both providers ends the wait as a pass.
+  local tries=0 why
+  until why="$(no_access_keys_left "$id" "$LOG" 2>&1)"; do
+    tries=$((tries + 1))
+    if [ "$tries" -ge 6 ]; then
+      echo "$why" >&2
+      echo "stopping: the check that $id has no access key left did not pass after the key delete ($(link_tx "$delete_tx")). Check its keys at $(link_account "$id"); full log: $LOG" >&2
+      exit 1
+    fi
+    sleep 5
+  done
   DEPLOY_TX="$deploy_tx"
   DELETE_TX="$delete_tx"
 }

@@ -21,8 +21,10 @@
 // keyed run with broken attestation and is proven by the transport tests in packages/sealed/tests.
 // The local run proves Node and Rust agree on the bytes, not that OutLayer's keystore behaves.
 //
-// The planted text is made up here. It is never printed, and the run fails if it shows in what the
-// job printed or logged.
+// The planted text is made up here and never printed. The run fails if the text, its note, the JSON
+// it travels in, or the text as base64 shows in the verdict the job printed. With --local, the job's
+// stderr from the key run and the verdict run is searched as well. On testnet nothing the job logged
+// is read back, so only the printed verdict is searched there.
 
 import { spawnSync } from 'node:child_process';
 import {

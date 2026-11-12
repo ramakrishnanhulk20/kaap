@@ -23,6 +23,8 @@ LOGS=${KAAP_SEALED_WORK:-$HOME/kaap-sealed-testnet}
 mkdir -p "$LOGS"
 command -v near >/dev/null || { echo "near-cli-rs is not on PATH" >&2; exit 1; }
 [[ "$(jq -r .network "$STATE")" == "testnet" && "$CONTRACT" == "outlayer.testnet" ]] || { echo "$STATE is not the testnet record" >&2; exit 1; }
+# remove_version acts on the signer's own project by name, so the project read must be that one.
+[[ -n "$NAME" && "$NAME" != */* && "$PROJECT" == "$ACCOUNT/$NAME" ]] || { echo "$STATE names project $PROJECT, which is not $ACCOUNT's own" >&2; exit 1; }
 [[ -f "$HOME/.near-credentials/testnet/$ACCOUNT.json" ]] || { echo "no key for $ACCOUNT in ~/.near-credentials/testnet" >&2; exit 1; }
 
 view() {
@@ -31,11 +33,13 @@ view() {
 
 # Sets ACTIVE and VERSIONS from the chain. Called only as a plain statement, so its exit stops the
 # script: an answer that does not list the active build is a failed read, never "already removed".
+# A full page of 100 may not be every build, and a build past it would read as already removed.
 read_versions() {
   ACTIVE=$(view get_project "$(jq -nc --arg p "$PROJECT" '{project_id:$p}')" | jq -r .active_version) || ACTIVE=""
-  VERSIONS=$(view list_versions "$(jq -nc --arg p "$PROJECT" '{project_id:$p, from_index:0, limit:100}')" | jq -r '.[].wasm_hash') || VERSIONS=""
+  VERSIONS=$(view list_versions "$(jq -nc --arg p "$PROJECT" '{project_id:$p, from_index:0, limit:100}')" \
+    | jq -r 'if type == "array" and length < 100 then .[].wasm_hash else error("not a list of under 100 builds") end') || VERSIONS=""
   if ! [[ "$ACTIVE" =~ ^[0-9a-f]{64}$ ]] || ! grep -qx "$ACTIVE" <<<"$VERSIONS"; then
-    echo "STOP: could not read $PROJECT and its versions from $CONTRACT" >&2
+    echo "STOP: could not read $PROJECT and its versions from $CONTRACT (a failed read, or 100 or more builds, which is more than one page)" >&2
     exit 1
   fi
 }
@@ -74,7 +78,10 @@ for SHA in "$@"; do
     exit 1
   fi
   TMP=$(mktemp)
-  jq --arg s "$SHA" '(.versions[] | select(.sha256 == $s) | .retired) = true' "$STATE" > "$TMP" && mv "$TMP" "$STATE"
+  # Two plain statements: in `jq && mv` a failed jq would not stop the script, and the line below
+  # would still claim the mark.
+  jq --arg s "$SHA" '(.versions[] | select(.sha256 == $s) | .retired) = true' "$STATE" > "$TMP"
+  mv "$TMP" "$STATE"
   echo "marked ${SHA:0:8} retired in packages/sealed/testnet.json"
 done
 read_versions
