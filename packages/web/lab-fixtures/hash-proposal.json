@@ -1,0 +1,146 @@
+{
+  "source": "Every value in this file is a saved answer from NEAR testnet or from the Kaap engine, and none was typed by hand.",
+  "reads": {
+    "proposal": {
+      "network": "testnet",
+      "rpc": "https://rpc.testnet.fastnear.com",
+      "account": "kaap-dao-1111072928.testnet",
+      "method": "get_proposal {\"id\":7}",
+      "block_height": 277321646,
+      "block_hash": "7Hww7JiJFE9sfquiQidj2FjTz3kbG6GqauqMTe9UTJZi",
+      "block_timestamp_ns": "1794462498059818291",
+      "date": "2026-11-12T05:48:19.531Z"
+    },
+    "text": {
+      "taken_from": "deployments\\demo-hash-text.json",
+      "filed_tx": "8yzyLUo3KYifzGxxMh3Azi7Qu5PiULasEcA5V42mmzg",
+      "filed_at_block": 277321553,
+      "checked_with": "nep413Hash from packages/core-wasm/pkg",
+      "hashes_to_payload_on_chain": true,
+      "hashes_to_payload_in_file": true,
+      "date": "2026-11-12T05:48:19.531Z"
+    },
+    "analysis": {
+      "engine": "analyze from packages/core-wasm/pkg",
+      "decoder_version": "0.1.0",
+      "date": "2026-11-12T05:48:19.531Z"
+    },
+    "registry": {
+      "network": "testnet",
+      "rpc": "https://rpc.testnet.fastnear.com",
+      "account": "kaap-registry-1111072803.testnet",
+      "method": "latest {\"network\":\"testnet\",\"dao\":\"kaap-dao-1111072928.testnet\",\"proposal_id\":7}",
+      "block_height": 277321647,
+      "block_hash": "3ytdhKHK7JazeqG6A3gbfd4asXfcoMdXV6rTuaCaqXQJ",
+      "date": "2026-11-12T05:48:19.531Z"
+    }
+  },
+  "proposal": {
+    "id": 7,
+    "proposer": "kaap-member-1029064001.testnet",
+    "description": "Authenticate DAO for confidential intents",
+    "kind": {
+      "FunctionCall": {
+        "receiver_id": "v1.signer-prod.testnet",
+        "actions": [
+          {
+            "method_name": "sign",
+            "args": "eyJyZXF1ZXN0Ijp7InBhdGgiOiJrYWFwLWRhby0xMTExMDcyOTI4LnRlc3RuZXQiLCJwYXlsb2FkX3YyIjp7IkVkZHNhIjoiZmNjY2QxNWU3Y2ZjZDg0ODlhODZjMTEwZjNlNDY2YzY2YmIxMmJjYTZhMzJmZjVlZDAxNTFmMjFkNWQxMGM3ZiJ9LCJkb21haW5faWQiOjF9fQ==",
+            "deposit": "1",
+            "gas": "15000000000000"
+          }
+        ]
+      }
+    },
+    "status": "InProgress",
+    "vote_counts": {},
+    "votes": {},
+    "submission_time": "1794462446539533808",
+    "last_actions_log": [
+      {
+        "block_height": "277321553"
+      }
+    ]
+  },
+  "payload_hash_hex": "fcccd15e7cfcd8489a86c110f3e466c66bb12bca6a32ff5ed0151f21d5d10c7f",
+  "text": {
+    "message": "{\"signer_id\":\"kaap-dao-1111072928.testnet\",\"deadline\":\"2026-11-19T05:47:23.917Z\",\"intents\":[{\"intent\":\"add_public_key\",\"public_key\":\"ed25519:5ASfrukKB4z2oA1bUfQUD5xSc5vuzArLJydBhBTmFNzM\"}]}",
+    "nonce": "d6+zmX7K5ICgx3PI/RLOM5SyCdvLRJR+ZuV8/cE/K8M=",
+    "recipient": "intents.near",
+    "standard": "nep413"
+  },
+  "analysis_without_text": {
+    "analysis": {
+      "description_check": "vague",
+      "effects": [
+        {
+          "domain_id": 1,
+          "mpc": "v1.signer-prod.testnet",
+          "path": "kaap-dao-1111072928.testnet",
+          "payload_hash": "fcccd15e7cfcd8489a86c110f3e466c66bb12bca6a32ff5ed0151f21d5d10c7f",
+          "text_source": null,
+          "text_standard": null,
+          "text_supplied": false,
+          "type": "sign_request"
+        }
+      ],
+      "findings": [
+        {
+          "code": "HASH_UNVERIFIED",
+          "severity": "unknown"
+        }
+      ],
+      "must_veto": false,
+      "risk_floor": "high",
+      "veto_allowed": false
+    },
+    "description": {
+      "agreements": [],
+      "contradictions": [],
+      "injection": false
+    },
+    "kind_label": "call"
+  },
+  "analysis_with_text": {
+    "analysis": {
+      "description_check": "vague",
+      "effects": [
+        {
+          "domain_id": 1,
+          "mpc": "v1.signer-prod.testnet",
+          "path": "kaap-dao-1111072928.testnet",
+          "payload_hash": "fcccd15e7cfcd8489a86c110f3e466c66bb12bca6a32ff5ed0151f21d5d10c7f",
+          "text_source": "planted",
+          "text_standard": "nep413",
+          "text_supplied": true,
+          "type": "sign_request"
+        },
+        {
+          "op": "add",
+          "public_key": "ed25519:5ASfrukKB4z2oA1bUfQUD5xSc5vuzArLJydBhBTmFNzM",
+          "type": "intents_key_change"
+        }
+      ],
+      "findings": [
+        {
+          "code": "HASH_TEXT_DANGEROUS",
+          "severity": "critical"
+        },
+        {
+          "code": "INTENTS_KEY_CHANGE",
+          "severity": "high"
+        }
+      ],
+      "must_veto": true,
+      "risk_floor": "critical",
+      "veto_allowed": true
+    },
+    "description": {
+      "agreements": [],
+      "contradictions": [],
+      "injection": false
+    },
+    "kind_label": "call"
+  },
+  "registry_record": null
+}

@@ -25,9 +25,11 @@ node_modules/
 target/
 .next/
 .next-verify/
+packages/web/.next-verify-*/
 dist/
 coverage/
 *.log
 
 # Internal build plan: not public
 work-orders/
+packages/web/AGENTS.md
