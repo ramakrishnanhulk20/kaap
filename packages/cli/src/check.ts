@@ -5,7 +5,7 @@
 // (C31). It is advisory: the AI and the guard run only in Kaap's sealed program.
 
 import { Held, Reader } from './chain.js';
-import type { CheckAnalysis, Core, History } from './core.js';
+import type { CheckAnalysis, Core, History, SuppliedText } from './core.js';
 import { recognise } from './dao.js';
 import { type Deployment, enrolledDeployment, NoDeployment } from './deployment.js';
 import { historyBefore, policyBefore, readAll } from './history.js';
@@ -35,6 +35,9 @@ export interface CheckRequest {
   dao: string;
   id: number | null;
   network: Network;
+  /** A text offered as the words behind the proposal's signed hash. Without one, a hash-only
+   *  request reads as unverified. */
+  text?: SuppliedText;
 }
 
 export interface CheckReport {
@@ -128,6 +131,7 @@ export async function check(deps: Deps & { repoRoot: string }, request: CheckReq
     dao_version: dao.version,
     block_timestamp_ns: head.timestampNs,
     ...(guard === null ? {} : { guard_account: guard }),
+    ...(request.text === undefined ? {} : { supplied_text: request.text }),
   });
 
   const report: CheckReport = {

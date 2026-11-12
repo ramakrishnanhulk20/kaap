@@ -135,6 +135,18 @@ export interface AnalyzeInput {
   block_timestamp_ns: string | null;
   /** Kaap's guard account, so a change to the roles that hold it is named (C17). */
   guard_account?: string;
+  /** The text said to be behind a signed hash. kaap-core reads it only as far as it hashes to a
+   *  payload the proposal asks to sign (C6). */
+  supplied_text?: SuppliedText;
+}
+
+/** A text offered for a hash-only request: the message, its 32-byte nonce in base64, the
+ *  recipient it names, and which signing standard it follows. */
+export interface SuppliedText {
+  message: string;
+  nonce: string;
+  recipient: string;
+  standard: 'nep413' | 'nep461';
 }
 
 export class Core {
