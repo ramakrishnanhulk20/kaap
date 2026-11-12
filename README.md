@@ -55,7 +55,7 @@ A treasury adopts Kaap with two of its own requests: one adds a role named `guar
 | Sealed reader | OutLayer project `kaap-worker-1029053612.testnet/kaap-sealed` | Live on testnet, running inside Intel TDX |
 | A theft stopped | Request #1 of the demo treasury | [filed](https://testnet.nearblocks.io/txns/GaQuPteeaiPAqjow7ezLC7f2HqxbBHv53erE1N4C7g9A), [read in sealed hardware](https://testnet.nearblocks.io/txns/az5yNU7xixz2Qwrt8g4pNhygJTpceRqHJTK2zv7NF3J), [recorded](https://testnet.nearblocks.io/txns/2T8fbLoy9gkFkbLThTMPsbRCf4RckfZVMVBvwvfqePmy), [rejected by the guard](https://testnet.nearblocks.io/txns/AWWzynnmDdCYaKeSJA66Kr3h7DxW6ni9Sh6uHtH6v4M9) |
 | The check, the site and the docs | `packages/web`, `packages/cli` | Built. The check reads any Sputnik DAO on mainnet or testnet with no key |
-| Always-on watcher | `packages/worker` | Built and tested, not hosted. In the recorded run a script played its part |
+| Always-on watcher | `packages/worker` | Live since 12 Nov 2026 as one container on Railway, watching the demo treasury: [its status page](https://watcher-production-2350aa2a.up.railway.app/status). It runs on free RPC providers |
 | Next guard version | `packages/contracts/guard` | Written and tested, not deployed. It adds a 24-hour wait on key changes and a strict mode |
 | Mainnet | | Not deployed. Kaap reads mainnet treasuries and does nothing else there |
 
@@ -168,7 +168,7 @@ flowchart LR
   AI["NEAR AI Cloud<br/>sealed model"]
   ONECLICK["1Click price list<br/>(mainnet runs only)"]
   subgraph Ours["Kaap services and tools"]
-    W["Worker<br/>(built, not hosted yet)"]
+    W["Worker<br/>(hosted on Railway)"]
     DB[("SQLite store")]
     CLI["kaap CLI<br/>(no keys)"]
     WEB["Web app: /check, /docs, /api/check<br/>(built, not hosted yet)"]
@@ -277,7 +277,7 @@ flowchart TB
 - One sentence on what a request will really do, for all of Sputnik's proposal kinds: payments, contract calls, rule changes, upgrades, sign requests.
 - A check of the description against the effects. "Pays alice" on a request that pays `a1ice` is a contradiction.
 - A reading of hash-only requests once the words behind the hash are supplied, with proof that the words match the hash.
-- A sealed channel for those words: `kaap seal-text` encrypts them so only the sealed reader can open them. It goes through the watcher, so it has no public address until the watcher is hosted.
+- A sealed channel for those words: `kaap seal-text` encrypts them so only the sealed reader can open them. It goes through the watcher's `POST /texts`. The sealed reader's side of that channel has run live (`packages/sealed/RUNS.md`); the watcher's side is covered by its tests, and no text has been sent through the hosted watcher yet.
 
 **For the treasury**
 - A guard that can only reject. It holds no funds and cannot approve, pay or change a rule.
@@ -327,6 +327,8 @@ NEAR has no contract verification service like Etherscan's, so `kaap verify` doe
 [PROOF.md](PROOF.md) is the record of `node scripts/prove.mjs` on 11 Nov 2026: a member files a disguised payment, the sealed reader judges it, the verdict is recorded, the guard rejects it, a replay of the same verdict is refused, and an honest payment passes through untouched. It passed twice in a row on fresh requests.
 
 On 12 Nov 2026 the watcher itself ran against the same deployment and got four more fake thefts rejected with no script's help, two of them filed from the site's button. One of those votes was held for almost eight minutes because a free RPC provider stopped answering, and PROOF.md says exactly what happened. It also holds the output of `scripts/check-demo-filer.mjs`, which attacks the button's key five ways.
+
+Later that day the watcher moved to its host. There it rejected a fifth fake theft, filed from the site's button, in about 44 seconds. A live attack on its per-caller limit, `scripts/attack-caller-limit.mjs`, then found a real hole: the watcher believed an address header that the host's proxy does not vouch for. It was closed within the hour, and PROOF.md shows the attack's output before and after.
 
 Those scripts sign with Kaap's own testnet keys, so in another clone they stop with "no key". The commands in "Try it in two minutes" check what those runs left on chain, and need none.
 
@@ -515,7 +517,7 @@ What you still have to trust, and what Kaap does not do:
 - **Speed.** The veto has to land before enough approvers sign. A treasury whose rules let one signature execute a request leaves no time for any guard.
 - **Unreadable requests.** A hash nobody explains is flagged, not vetoed.
 - **No independent audit** has been done.
-- **Not hosted.** No treasury is being watched around the clock today.
+- **One small host.** The watcher is one container on Railway, watching one treasury, the demo one. It has run there since 12 Nov 2026 only, nobody is on call for it, and no real treasury is enrolled.
 
 The limits page in the docs, [packages/web/content/docs/trust/limits.mdx](packages/web/content/docs/trust/limits.mdx), goes through each of these.
 

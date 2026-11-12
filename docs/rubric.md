@@ -29,7 +29,8 @@ The README's "NEAR tools used" table lists each NEAR tool with the files that us
 | The contracts are locked | `scripts/deploy-contracts-testnet.sh` | `verify`, lines "guard keys" and "registry keys" | [guard key deleted](https://testnet.nearblocks.io/txns/6qEFvNiz5Guw1w2XaA6cS36kkRVhAJbPTtijgPEcTssM), [registry key deleted](https://testnet.nearblocks.io/txns/GxMNoCaecyMRfF5k1dqtsxB4uCydKz8fUpzBkMm9gUF1) |
 | The rule port matches Sputnik's own code | `packages/core/src/policy/sputnik.rs` | `cargo test -p kaap-core-diff`, which runs both against the same inputs in a sandbox | |
 | The verdict's bytes cannot drift | `packages/verdict/src/verdict.rs` | `cargo test -p kaap-verdict --test pinned` | |
-| The watcher does it with no script's help | `packages/worker/src/worker.ts` | `PROOF.md`, "12 Nov 2026: the watcher by itself": four requests, one of them held and why | [a reject the watcher sent](https://testnet.nearblocks.io/txns/G1WRfaAc8tS1jVemCntMivnovBiBEJq7S5Cptfcqxufc) |
+| The watcher does it with no script's help | `packages/worker/src/worker.ts` | `PROOF.md`, "12 Nov 2026: the watcher by itself" and "the watcher on its host": five requests, one of them held and why | [a reject the hosted watcher sent](https://testnet.nearblocks.io/txns/35eKdZrh5ps18kGCHo5Fa9LZLaceYjZ8LpTFPFgjgAJY) |
+| An attack on our own live host found a hole, and shows it closed | `scripts/attack-caller-limit.mjs`, `clientAddress` in `packages/worker/src/status.ts` | `PROOF.md`, "The caller limit, attacked on the live host": the output before the fix and after | |
 | The whole path works on a live network | `scripts/prove.mjs` | `PROOF.md`, the record of two runs | [filed](https://testnet.nearblocks.io/txns/GaQuPteeaiPAqjow7ezLC7f2HqxbBHv53erE1N4C7g9A), [judged](https://testnet.nearblocks.io/txns/az5yNU7xixz2Qwrt8g4pNhygJTpceRqHJTK2zv7NF3J), [recorded](https://testnet.nearblocks.io/txns/2T8fbLoy9gkFkbLThTMPsbRCf4RckfZVMVBvwvfqePmy), [rejected](https://testnet.nearblocks.io/txns/AWWzynnmDdCYaKeSJA66Kr3h7DxW6ni9Sh6uHtH6v4M9) |
 | Test counts | | README, "Test results" | |
 
@@ -38,7 +39,7 @@ The README's "NEAR tools used" table lists each NEAR tool with the files that us
 | What to check | File | How |
 |---|---|---|
 | The first screen says what Kaap is and shows a real request, with no wallet | `packages/web/components/landing/Hero.tsx` | open the site |
-| A judge can make the core thing happen, not only read about it | `packages/web/components/check/TryIt.tsx` | on `/check`, press "File the fake theft" and watch the guard reject it, step by step, where Kaap's watcher is running |
+| A judge can make the core thing happen, not only read about it | `packages/web/components/check/TryIt.tsx` | on `/check`, press "File the fake theft" and watch the guard reject it, step by step. Kaap's watcher runs on Railway: [its status page](https://watcher-production-2350aa2a.up.railway.app/status) |
 | A hash turns into what it really does | `packages/web/components/check/CheckTool.tsx` | on `/check`, press "Read the demo treasury's hash-only request", then "Use the words saved for this demo request" |
 | Every number on the site comes from the chain or from a record in this repo | `packages/web/data/`, written by `packages/web/scripts/proof-data.mjs` and `capture-hash-proposal.mjs` | read the scripts |
 | The site says what is not live | `packages/web/components/landing/Proof.tsx`, `packages/web/content/docs/trust/limits.mdx` | the table "What is live" on the home page, and the Limits page in the docs |
@@ -67,7 +68,7 @@ The README's "NEAR tools used" table lists each NEAR tool with the files that us
 |---|---|---|
 | A paid check: one cent a call through an OutLayer payment key, live on testnet | `packages/sealed/src/payment.rs`, `scripts/paid-check.mjs` | `packages/sealed/RUNS.md`, "Paid calls from a stranger": [a paid run on chain](https://testnet.nearblocks.io/txns/7UatZZiYH43zZzrcx4ghiydYVBJZHovf1dkrbTv2NAC), and an underpaid one [refused](https://testnet.nearblocks.io/txns/9s9UMFuen5shte55JSMpuJjxQJ8L9ivSzBLjCSsoZifp) |
 | What a veto costs to run | `packages/contracts/GAS.md` | under a thousandth of a NEAR a veto |
-| What is not there yet | `packages/web/content/docs/trust/limits.mdx` | no treasury other than the demo one is enrolled, the watcher is not hosted, and nothing is on mainnet |
+| What is not there yet | `packages/web/content/docs/trust/limits.mdx` | no treasury other than the demo one is enrolled, the watcher is one small container nobody is on call for, and nothing is on mainnet |
 
 ## Honesty of the numbers
 

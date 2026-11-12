@@ -6,7 +6,7 @@ As built on 11 Nov 2026, with the status lines, the web app and the notes on the
 - Next guard version: written and tested, not deployed. The code in `packages/contracts/guard` is one version ahead of the guard on chain. It adds a 24-hour wait on a change of the accepted key, a strict mode each DAO can choose, a 900 Tgas minimum and a size limit on `veto`. `packages/contracts/guard/README.md` and `packages/contracts/GAS.md` describe that version.
 - Sealed program: live on NEAR testnet, as OutLayer project `kaap-worker-1029053612.testnet/kaap-sealed`, active build `d8453d6e...9083` of 11 Nov 2026. The code in `packages/sealed` and `packages/core` has changed since that build, and a new build is not published yet.
 - Demo treasury: live on NEAR testnet. `kaap-dao-1111072928.testnet`, Sputnik DAO 3.2, enrolled in the guard, with no access keys.
-- Worker: built and tested, not hosted yet. It has no public address.
+- Worker: live since 12 Nov 2026, as one container on Railway, watching the demo treasury. Its public address is `https://watcher-production-2350aa2a.up.railway.app` (`/status`). It reads the chain through two free RPC providers, so a vote can be held when one of them does not answer.
 - Web app: built, not hosted yet. `packages/web` holds the landing page, the check screen at `/check`, the docs at `/docs` and the route `/api/check`. It runs with `npm run dev` in that folder.
 
 ## In one paragraph
@@ -29,7 +29,7 @@ flowchart LR
   AI["NEAR AI Cloud<br/>sealed model"]
   ONECLICK["1Click price list<br/>(mainnet runs only)"]
   subgraph Ours["Kaap services and tools"]
-    W["Worker<br/>(built, not hosted yet)"]
+    W["Worker<br/>(hosted on Railway)"]
     DB[("SQLite store")]
     CLI["kaap CLI<br/>(no keys)"]
     WEB["Web app: /check, /docs, /api/check<br/>(built, not hosted yet)"]
@@ -147,7 +147,7 @@ An arrow points from a package to the one built on it. The contracts compile in 
 | kaap-sealed | Checks the input and the payment, opens a sealed text, reads two providers at one final block, reads prices and history on mainnet only, runs kaap-core, asks the model and checks its attestation, signs the verdict, publishes the evidence | OutLayer, Intel TDX; live on testnet | no stored state; the OutLayer keystore holds its `verdict` signing key and `texts` key for this project and caller, and the program never sees the signing secret |
 | kaap-guard | The only member of a DAO's guard role; casts VoteReject on a verdict that passes eight checks, and nothing else (C15, C19) | NEAR contract; live on testnet | owner, accepted key, network, enrolled DAOs, used-verdict hashes |
 | kaap-registry | Append-only record of every verdict the sealed key signed; a newer one supersedes, nothing is overwritten (C13) | NEAR contract; live on testnet | accepted key, network, verdict records |
-| Worker | Watches each enrolled DAO's counter, starts sealed runs, checks each verdict, vetoes, records, alerts on Telegram, serves five HTTP routes, raises health signals (C18, C21, C22, C27) | one Node 24 process; built and tested, not hosted yet | the worker account's key in a file, the Telegram bot token, a SQLite store (DAOs, judgements, runs, spend, subscriptions, tokens, alerts) |
+| Worker | Watches each enrolled DAO's counter, starts sealed runs, checks each verdict, vetoes, records, alerts on Telegram, serves five HTTP routes, raises health signals (C18, C21, C22, C27) | one Node 24 process, in a container on Railway since 12 Nov 2026 | the worker account's key in a file, the Telegram bot token, a SQLite store (DAOs, judgements, runs, spend, subscriptions, tokens, alerts) |
 | kaap-worker-bridge | kaap-core's hashes, verdict decoding and veto rule for the worker | plain wasm inside the worker | nothing |
 | kaap CLI | `check`, `verify`, `enroll`, `arming`, `seal-text`, `subscribe`, `eval`, `census`; reads only and sends no transaction (C31) | the reader's own machine, Node 24 | nothing; `seal-text` keeps one reply key in memory for its one request |
 | kaap-core-wasm | kaap-core for JavaScript, every rule exactly as the sealed program runs it (C14) | the CLI and the web app's `/api/check`; a browser can load the same build | nothing |
@@ -294,7 +294,7 @@ The worker has no public address yet. As built it listens on `127.0.0.1:8787` (`
 
 | `GET /proposal?dao=<account>&id=<n>` (or `HEAD`) | none | 200 `{v: 1, network, dao, proposal_id, state, verdict: {risk, floor, findings, ai_status, verdict_hash, vetoable} or null, veto, record, txs: [{kind, tx, state, outcome}]}`; 400 `bad_request` with `expected`; 404 `dao_not_watched` or `not_seen` | answers only for a watched DAO; every value is one of the worker's own words, a hash, a finding code or a transaction id (C34) |
 
-The client address is the connecting address, or, for a connection from loopback, the last entry of `X-Forwarded-For` (`clientAddress`). With `KAAP_HTTP_PROXY=platform`, for a host whose own proxy fronts every connection, that last entry is used for every request (C35). `/status`, `/text-key` and `/proposal` send `access-control-allow-origin: *`. `/subscribe` and `/texts` send no CORS header and answer an `OPTIONS` request with 405, so as built a page served from another origin cannot read their answers.
+The client address is the connecting address, or, for a connection from loopback, the last entry of `X-Forwarded-For` (`clientAddress`). With `KAAP_HTTP_PROXY=x-real-ip`, for a host whose own proxy fronts every connection and overwrites that header, `X-Real-IP` alone is used for every request and `X-Forwarded-For` is not read (C35). `/status`, `/text-key` and `/proposal` send `access-control-allow-origin: *`. `/subscribe` and `/texts` send no CORS header and answer an `OPTIONS` request with 405, so as built a page served from another origin cannot read their answers.
 
 ### (b2) The site's own routes
 

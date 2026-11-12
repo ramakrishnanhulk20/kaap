@@ -64,7 +64,11 @@
       }
     }
   },
-  "watcher": null,
+  "watcher": {
+    "url": "https://watcher-production-2350aa2a.up.railway.app",
+    "since": "12 Nov 2026",
+    "host": "Railway"
+  },
   "evaluation": {
     "report": "packages/sealed/AI-EVAL.md",
     "records": 298,

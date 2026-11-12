@@ -24,7 +24,7 @@ flowchart LR
   AI["NEAR AI Cloud<br/>sealed model"]
   ONECLICK["1Click price list<br/>(mainnet runs only)"]
   subgraph Ours["Kaap services and tools"]
-    W["Worker<br/>(built, not hosted yet)"]
+    W["Worker<br/>(hosted on Railway)"]
     DB[("SQLite store")]
     CLI["kaap CLI<br/>(no keys)"]
     WEB["Web app: /check, /docs, /api/check<br/>(built, not hosted yet)"]
@@ -57,9 +57,11 @@ flowchart LR
   CLI -- "accepted_key, is_enrolled, veto_result" --> GUARD
   CLI -- "attestations by transaction" --> OLAPI
   WEB -- "check: the views the CLI reads, 2 providers" --> DAO
+  WEB -- "try it: add_proposal, signed with a filing-only key" --> DAO
+  WEB -- "GET /proposal" --> W
 ```
 
-Solid lines are calls that happen today. The watcher is drawn because it is built, but it is not hosted: in the recorded run a script made its calls.
+Solid lines are calls that happen today. The watcher has been hosted since 12 Nov 2026 and watches the demo treasury. In the first recorded run, made the day before, a script made its calls.
 
 ## A disguised payment gets vetoed
 

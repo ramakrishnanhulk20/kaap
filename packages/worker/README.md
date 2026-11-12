@@ -2,7 +2,7 @@
 
 Kaap's always-on process. It watches every treasury enrolled in the guard, has the sealed reader judge each new request, hands a vetoable verdict to the guard, records every verdict in the registry, and alerts members on Telegram.
 
-**Status: built and tested, not hosted.** No treasury is being watched around the clock today. In the recorded proof (`PROOF.md`) a script, `scripts/prove.mjs`, made the same calls. `HOSTING.md` is the hosting plan.
+**Status: live since 12 Nov 2026, as one container on Railway, watching the demo treasury.** Its status page is https://watcher-production-2350aa2a.up.railway.app/status. No other treasury is enrolled. In the first recorded proof (`PROOF.md`), made before it was hosted, a script, `scripts/prove.mjs`, made the same calls. `HOSTING.md` says how it is hosted and what to check after each deploy.
 
 ## What it does, in order
 

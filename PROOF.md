@@ -424,3 +424,45 @@ Each refusal comes from the network, before the transaction runs, so none of the
 ### What this does not cover
 
 These runs were on one machine, for about half an hour. They do not show the watcher staying up for days, restarting by itself after a crash on a host, or holding its limits behind a hosting platform's proxy.
+
+## 12 Nov 2026: the watcher on its host
+
+Later the same day the watcher moved to a host: one container on Railway, built from `packages/worker/Dockerfile`, with its key file on a mounted disk (`packages/worker/HOSTING.md`). The one on the machine was stopped first, since two watchers must never share an account. Its status page is public: https://watcher-production-2350aa2a.up.railway.app/status.
+
+Its database was new, so on its first start it read the five requests still open on the treasury (#2, #4, #5, #6, #7) again. It rated each high, recorded each verdict and voted on none, as before. Four AI answers were verified and one, on #4, was not, which changes nothing: no veto rests on the AI.
+
+Then one more fake theft was filed from the site's button, with nothing else running:
+
+| Request | Filed by | Seconds to the guard's reject | AI answer | Filing | Sealed run | Guard's vote | Record |
+|---|---|---|---|---|---|---|---|
+| #12 | the site's button | about 44 | answered, could not be verified, so not relied on | [26PbW5r5...](https://testnet.nearblocks.io/txns/26PbW5r5YmvgN54eXcnt4QXAPWTw9uG5zfHo8k3YY8pq) | [62P4EqAV...](https://testnet.nearblocks.io/txns/62P4EqAVJHrvk6eFFNdq6589547JJGuEFbBdLbtvs2PB) | [35eKdZrh...](https://testnet.nearblocks.io/txns/35eKdZrh5ps18kGCHo5Fa9LZLaceYjZ8LpTFPFgjgAJY) | [Avn8ja4n...](https://testnet.nearblocks.io/txns/Avn8ja4nScK76VWahAQKxYwvTafJaRqd58oAwkbEtC7d) |
+
+The verdict was critical, with the findings DESC_CONTRADICTS and UNKNOWN_VALUE. `node packages/cli/dist/src/bin.js verify kaap-dao-1111072928.testnet 12` passes all 24 of its checks.
+
+### The caller limit, attacked on the live host
+
+The watcher gives each caller ten subscription tokens an hour and a few sealed texts, counted by address. Behind a host's proxy that address comes from a header, and which header the proxy overwrites is the host's behaviour, so the limit was attacked where it runs. `node scripts/attack-caller-limit.mjs` asks twelve times, each time claiming another address in both `X-Forwarded-For` and `X-Real-IP`.
+
+Against the first hosted build:
+
+```
+watcher: https://watcher-production-2350aa2a.up.railway.app
+answers to 12 asks, each under another made-up address: 404 404 404 404 404 404 404 404 404 404 404 404
+RESULT: FAIL, 12 asks were counted separately: the watcher believed a made-up address
+```
+
+That build read the last entry of `X-Forwarded-For`. That is right behind a proxy that adds its own entry, and wrong behind Railway's, which hands a caller's own header through untouched and writes the caller's address into `X-Real-IP` instead. Behind a host's proxy the watcher now reads only `X-Real-IP` (`KAAP_HTTP_PROXY=x-real-ip`), and a missing, doubled or unreadable value counts against the proxy itself. Against the build with that fix, deployed about ten minutes after the first one began answering:
+
+```
+watcher: https://watcher-production-2350aa2a.up.railway.app
+answers to 12 asks, each under another made-up address: 404 404 404 404 404 404 404 404 404 404 429 429
+RESULT: pass, the limit bit after 10 asks: the made-up addresses changed nothing
+```
+
+The watcher's log line for the refusal names the address it counted. It was the public address of the machine that ran the attack, so Railway had written over the made-up `X-Real-IP`.
+
+What the hole allowed while it was open: asking for more tokens than the limit, and sending more sealed texts than the limit, each of which starts a paid sealed run, until the treasury's daily cap of 60 runs stopped them. It never put a vote, a payment or a verdict within reach. The site's own routes read `X-Forwarded-For` in the same way, and now follow the same rule (`packages/web/lib/caller.ts`).
+
+### What this does not cover
+
+One press and one attack, on the host's first day. Not shown: the watcher staying up for days or coming back by itself after a crash, a caller on IPv6 (the attack ran over IPv4), and the site's limits behind its own host, where it is not deployed yet. The watcher still runs on free RPC providers.
