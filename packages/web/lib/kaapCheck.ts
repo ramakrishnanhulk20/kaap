@@ -35,6 +35,9 @@ export interface CheckReport {
   history_source: string;
   prices_source: string;
   guard_account: string | null;
+  /** The mode the treasury chose in that guard: `strict`, `default`, or `none` for a guard built
+   *  before strict mode. Null where the treasury is enrolled in no guard. */
+  guard_mode?: string | null;
   kind_label: string;
   analysis: {
     effects: Record<string, unknown>[];
