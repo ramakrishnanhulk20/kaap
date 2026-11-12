@@ -34,3 +34,7 @@ coverage/
 work-orders/
 packages/web/AGENTS.md
 packages/web/.next-*/
+
+# Renders from the art scripts
+art/world/out/
+art/world/__pycache__/

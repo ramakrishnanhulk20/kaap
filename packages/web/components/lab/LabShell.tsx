@@ -5,9 +5,11 @@ import { useSearchParams } from 'next/navigation';
 import { useSyncExternalStore } from 'react';
 import HeroD from './HeroD';
 import HeroE from './HeroE';
+import HeroF from './HeroF';
 import ThemeToggle from './ThemeToggle';
 
 const DIRECTIONS = [
+  { id: 'f', label: 'F  Watchman', Hero: HeroF },
   { id: 'e', label: 'E  Kaappu', Hero: HeroE },
   { id: 'd', label: 'D  Ink', Hero: HeroD },
 ] as const;
@@ -32,7 +34,7 @@ function useStill() {
 
 export default function LabShell() {
   const asked = useSearchParams().get('d');
-  const chosen: DirectionId = DIRECTIONS.some((direction) => direction.id === asked) ? (asked as DirectionId) : 'e';
+  const chosen: DirectionId = DIRECTIONS.some((direction) => direction.id === asked) ? (asked as DirectionId) : 'f';
   const still = useStill();
   const { Hero } = DIRECTIONS.find((direction) => direction.id === chosen)!;
 
@@ -51,7 +53,7 @@ export default function LabShell() {
         <div
           role="tablist"
           aria-label="Hero direction"
-          className="grid h-full grid-cols-2 max-sm:col-span-2 max-sm:row-start-2 sm:flex"
+          className="grid h-full grid-cols-3 max-sm:col-span-2 max-sm:row-start-2 sm:flex"
         >
           {DIRECTIONS.map(({ id, label }) => {
             const active = id === chosen;

@@ -1,0 +1,281 @@
+.toy-hero {
+  /* Room kept under the picture for the title, the pitch and the buttons, so all of it fits the
+     first screen on a short window. */
+  --words: 264px;
+  --film-h: clamp(250px, calc(100svh - var(--bar, 0px) - var(--words)), 50vw);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100svh - var(--bar, 0px));
+  overflow-x: clip;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+/* The picture is photographed on paper of the page's own colour, so it has no visible frame.
+   The soft edges hide the last trace of one. */
+.toy-film {
+  position: relative;
+  flex: none;
+  height: var(--film-h);
+  aspect-ratio: 2 / 1;
+  margin-inline: auto;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent),
+    linear-gradient(to bottom, #000 92%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent, #000 4%, #000 96%, transparent),
+    linear-gradient(to bottom, #000 92%, transparent);
+  mask-composite: intersect;
+}
+
+.toy-film img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Lamplight: a soft warm pool over the lantern that breathes, so the still picture is not dead. */
+.toy-lamp {
+  position: absolute;
+  left: 44.6%;
+  top: 28.4%;
+  width: 17%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(255 205 110 / 0.5), rgb(255 205 110 / 0));
+  mix-blend-mode: screen;
+  pointer-events: none;
+  animation: toy-lamp 3.4s ease-in-out infinite;
+}
+
+@keyframes toy-lamp {
+  0%,
+  100% {
+    opacity: 0.55;
+    scale: 1;
+  }
+  38% {
+    opacity: 1;
+    scale: 1.06;
+  }
+  61% {
+    opacity: 0.7;
+    scale: 0.98;
+  }
+}
+
+.toy-words {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: clamp(32px, 5vw, 76px);
+  align-items: end;
+  width: min(1220px, calc(100% - 64px));
+  margin: calc(var(--film-h) * -0.045) auto 0;
+  padding-bottom: clamp(20px, 3.6svh, 40px);
+}
+
+.toy-label {
+  margin: 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.toy-title {
+  margin: 10px 0 0;
+  font-family: var(--font-grotesk), sans-serif;
+  font-size: clamp(2.5rem, min(5.5vw, 9.4svh), 5.6rem);
+  font-weight: 800;
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+  color: var(--ink);
+}
+
+.toy-tied {
+  position: relative;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+/* The thread from the picture, tied under the first line. Drawn in pixels, not scaled, so the
+   twist keeps its size at any title size. */
+.toy-thread {
+  position: absolute;
+  left: -2px;
+  bottom: calc(-0.02em - 8px);
+  width: calc(100% + 4px);
+  height: 12px;
+  pointer-events: none;
+}
+
+.toy-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin: clamp(14px, 2.4svh, 22px) 0 0;
+}
+
+.toy-name-tamil {
+  font-family: var(--font-tamil), serif;
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.toy-name-meaning {
+  font-family: var(--font-serif), serif;
+  font-size: 17px;
+  font-style: italic;
+  color: var(--muted);
+}
+
+.toy-pitch {
+  margin: 0;
+  max-width: 34em;
+  font-family: var(--font-body), sans-serif;
+  font-size: clamp(15.5px, 2.2svh, 18px);
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.toy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: clamp(12px, 2.2svh, 22px);
+}
+
+.toy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: clamp(44px, 6svh, 50px);
+  padding: 0 20px;
+  border-radius: 8px;
+  font-family: var(--font-body), sans-serif;
+  font-size: 15.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.toy-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.toy-btn--main {
+  border: 0;
+  background: var(--ink);
+  color: var(--bg);
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.toy-btn--main:hover {
+  background: var(--accent);
+  color: var(--ink);
+  transform: translateY(-1px);
+}
+
+.toy-btn--side {
+  border: 1.5px solid color-mix(in srgb, var(--ink) 34%, transparent);
+  background: transparent;
+  color: var(--ink);
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.toy-btn--side:hover {
+  border-color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.toy-live {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: clamp(12px, 2svh, 18px) 0 0;
+  max-width: 36em;
+  font-family: var(--font-body), sans-serif;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.toy-live b {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.toy-live-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+@media (max-width: 859px) {
+  .toy-hero {
+    --film-h: 82vw;
+  }
+
+  /* A phone shows the right-hand part of the picture: the letter, the watchman and the treasury. */
+  .toy-film {
+    width: 100%;
+    aspect-ratio: auto;
+    -webkit-mask-image: linear-gradient(to bottom, #000 90%, transparent);
+    mask-image: linear-gradient(to bottom, #000 90%, transparent);
+  }
+
+  .toy-film img {
+    object-position: 71% 50%;
+  }
+
+  .toy-lamp {
+    display: none;
+  }
+
+  .toy-words {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+    width: calc(100% - 40px);
+    margin-top: -8px;
+    padding-bottom: 32px;
+  }
+
+  .toy-title {
+    font-size: clamp(2.2rem, 10.6vw, 2.9rem);
+  }
+
+  .toy-actions .toy-btn {
+    flex: 1 1 auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toy-lamp {
+    animation: none;
+    opacity: 0.8;
+  }
+
+  .toy-btn {
+    transition: none;
+  }
+}
