@@ -4,10 +4,12 @@
 // most NEAR Business treasuries have, not yet enrolled, both recorded under the 29 Oct deployment
 // and read through the real chain of records (the 29 Oct DAO is enrolled with the 29 Oct guard, so
 // that record is used; the other with none, so today's), and the 11 Nov demo DAO, enrolled with
-// today's guard. Edited copies of these recordings show the guard losing a kind, a second account
-// in the guard role (still armed, with a warning), and a Sputnik 2 DAO being refused. It does not
-// file or vote on any draft (the CLI never does), and it does not cover a DAO whose guard holds
-// delegated tokens.
+// today's guard. The NEAR Business DAO's arming was recorded again on 12 Nov under today's record,
+// since today's guard did not exist at the block of its first recording. `arming` checks the guard's
+// and registry's code and keys first. Edited copies of these recordings show the guard losing a
+// kind, a second account in the guard role (still armed, with a warning), a guard holding an access
+// key (no arming answer, exit 5), and a Sputnik 2 DAO being refused. It does not file or vote on
+// any draft (the CLI never does), and it does not cover a DAO whose guard holds delegated tokens.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -60,6 +62,25 @@ test('arming: the 29 Oct DAO is armed on every kind but its own removal, with no
   assert.match(out, /^ {2}2 votes: add_bounty, .*\btransfer\b/m);
   assert.match(out, /^race: Every kind that can pass needs at least 2 approvals/m);
   assert.doesNotMatch(out, /also able to veto alone/, 'no other account vetoes alone, so no warning');
+  assert.match(
+    out,
+    /^contracts\n {2}pass {2}guard code: kaap-guard-1029061211\.testnet runs the recorded build, sha256 5adbadb5\.\.\.ec76 \(two providers, block 275908758\)\n {2}pass {2}guard keys: kaap-guard-1029061211\.testnet has no access key, so no one can sign for it \(two providers, block 275908758\)\n {2}pass {2}registry code: .*\n {2}pass {2}registry keys: .*$/m,
+  );
+});
+
+test('arming: a guard with an access key gets no arming answer, only its contract lines, exit 5', async () => {
+  const oneKey = (r: HttpRequest, text: string) => {
+    const p = body(r).params as { request_type?: string; account_id?: string } | undefined;
+    if (p?.request_type !== 'view_access_key_list' || p.account_id !== GUARD) return text;
+    const answer = JSON.parse(text) as { result: { keys: unknown[] } };
+    answer.result.keys = [{ public_key: 'ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN', access_key: { nonce: 1, permission: 'FullAccess' } }];
+    return JSON.stringify(answer);
+  };
+  const { code, out, err } = await run('arming-1029', oneKey);
+  assert.equal(code, 5, err);
+  assert.equal(out, '');
+  assert.match(err, /^ {2}fail {2}guard keys: kaap-guard-1029061211\.testnet has 1 access key \(ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN\), so whoever holds it can sign for it \(two providers, block 275908758\)$/m);
+  assert.doesNotMatch(err, /armed:/);
 });
 
 test('arming: a guard role without transfer:VoteReject is not armed', async () => {
@@ -166,14 +187,14 @@ test('enroll refuses a DAO on Sputnik 2, whose kinds Kaap has not tested', async
   assert.match(err, /runs Sputnik 2\.0; Kaap's enrolment drafts use the ChangePolicyAddOrUpdateRole kind and are tested only on Sputnik 3$/);
 });
 
-test('arming and enroll only read: the two testnet providers, view_account and four views', async () => {
+test('arming and enroll only read: the two testnet providers, view_account, view_access_key_list and four views', async () => {
   const views = new Set(['get_contracts_metadata', 'get_policy', 'is_enrolled', 'get_last_proposal_id']);
   for (const fixture of ['arming-1029', 'arming-nb', 'enroll-1029', 'enroll-nb']) {
     const { log } = await run(fixture);
     for (const r of log) {
       assert.ok(r.url === NETWORKS.testnet.primary || r.url === NETWORKS.testnet.secondary, r.url);
       const { method, params } = body(r);
-      assert.ok(method === 'block' || (method === 'query' && (params?.request_type === 'view_account' || views.has(params?.method_name ?? ''))), r.body);
+      assert.ok(method === 'block' || (method === 'query' && (params?.request_type === 'view_account' || params?.request_type === 'view_access_key_list' || views.has(params?.method_name ?? ''))), r.body);
     }
   }
 });

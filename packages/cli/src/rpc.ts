@@ -67,6 +67,10 @@ export interface ChunkHeader {
 /** The transaction root of a chunk with no transactions: 32 zero bytes in base58. */
 const EMPTY_ROOT = '11111111111111111111111111111111';
 
+/** A code hash as NEAR writes it: base58 of 32 bytes, from 32 characters (all zero bytes, an
+ *  account with no code) to 44. */
+const CODE_HASH = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
 export interface AccountState {
   codeHash: string;
   globalContractHash: string | null;
@@ -75,6 +79,12 @@ export interface AccountState {
   amount: bigint;
   blockHeight: number;
   blockHash: string;
+}
+
+/** One access key of an account: its public key, and its permission as NEAR writes it, as JSON. */
+export interface AccessKey {
+  publicKey: string;
+  permission: string;
 }
 
 /** `refused`: the contract ran and panicked, or has no such method. `no_proposal`: Sputnik's
@@ -282,10 +292,13 @@ export class Provider {
     return { text, ...pinned(r, this.name) };
   }
 
+  /** The account's code and balance. Its code hashes are read only as base58 hashes, the shape every
+   *  command that prints one relies on. */
   async account(account: string, at: At): Promise<AccountState> {
     const r = await this.call('query', { request_type: 'view_account', ...(at === 'final' ? { finality: 'final' } : { block_id: at }), account_id: account });
     const { code_hash: codeHash, amount, global_contract_hash: global, global_contract_account_id: globalAccount } = r;
-    if (typeof codeHash !== 'string' || typeof amount !== 'string' || !/^\d{1,40}$/.test(amount)) throw new RpcError(this.name, 'shape', 'view_account has no code_hash or amount');
+    if (typeof codeHash !== 'string' || !CODE_HASH.test(codeHash) || typeof amount !== 'string' || !/^\d{1,40}$/.test(amount)) throw new RpcError(this.name, 'shape', 'view_account has no code_hash or amount');
+    if (global !== undefined && global !== null && (typeof global !== 'string' || !CODE_HASH.test(global))) throw new RpcError(this.name, 'shape', 'view_account names a global contract hash that is not a hash');
     return {
       codeHash,
       globalContractHash: typeof global === 'string' ? global : null,
@@ -293,6 +306,20 @@ export class Provider {
       amount: BigInt(amount),
       ...pinned(r, this.name),
     };
+  }
+
+  /** Every access key of the account: anyone holding one can sign for it. */
+  async accessKeys(account: string, at: At): Promise<{ keys: AccessKey[]; blockHeight: number; blockHash: string }> {
+    const r = await this.call('query', { request_type: 'view_access_key_list', ...(at === 'final' ? { finality: 'final' } : { block_id: at }), account_id: account });
+    const list = r['keys'];
+    if (!Array.isArray(list)) throw new RpcError(this.name, 'shape', 'view_access_key_list has no keys');
+    const keys: AccessKey[] = [];
+    for (const k of list) {
+      const access = isRecord(k) ? k['access_key'] : undefined;
+      if (!isRecord(k) || typeof k['public_key'] !== 'string' || !isRecord(access)) throw new RpcError(this.name, 'shape', 'an access key is not readable');
+      keys.push({ publicKey: k['public_key'], permission: JSON.stringify(access['permission'] ?? null) });
+    }
+    return { keys, ...pinned(r, this.name) };
   }
 }
 

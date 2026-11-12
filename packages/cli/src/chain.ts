@@ -5,14 +5,18 @@
 // so a difference is a lie or a fault, never a race.
 //
 // Covered: the block, the code hash of the DAO and of the contracts a verdict pinned (callers pass
-// only ids kaap-core accepts, so the id is safe to print), the factory's list of Sputnik versions,
-// the proposal counter, the proposal and the policy. Not covered: both providers lying the same way
-// (a named non-goal), and the history pages, which come from the first provider alone because they
-// only add medium findings and the policy rebuild, never a critical one.
+// only ids kaap-core accepts, so the id is safe to print), the code and the access keys of Kaap's
+// guard and registry (named by the repository's deployment record), the factory's list of Sputnik
+// versions, the proposal counter, the proposal and the policy. Not covered: both providers lying the
+// same way (a named non-goal), and the history pages, which come from the first provider alone.
+// They add the medium findings NEW_RECIPIENT and LARGE_AMOUNT, and for a proposal that is no longer
+// open the policy in force before it is worked out, or rebuilt, from them, so in the advisory
+// `kaap check` one provider's pages can lead to DESC_CONTRADICTS, a critical finding, through that
+// policy.
 
 import type { Core, ProposalRead } from './core.js';
 import { MAX_VIEW_BODY_BYTES } from './caps.js';
-import { type AccountState, type Block, type Provider, RpcError, type View } from './rpc.js';
+import { type AccessKey, type AccountState, type Block, type Provider, RpcError, type View } from './rpc.js';
 
 export class Held extends Error {
   constructor(message: string) {
@@ -62,6 +66,18 @@ export class Reader {
       throw new Held(`the two providers disagree on the code of ${account}`);
     }
     return a;
+  }
+
+  /** Both providers' access keys of `account` at `block`; refuses unless they name the same keys
+   *  with the same permissions. */
+  async accessKeys(account: string, block: Block): Promise<AccessKey[]> {
+    const what = 'the access keys';
+    const [a, b] = await this.#pair(what, () => this.primary.accessKeys(account, block.height), () => this.secondary.accessKeys(account, block.height));
+    this.#pinned(what, a, block);
+    this.#pinned(what, b, block);
+    const listed = (keys: AccessKey[]) => JSON.stringify(keys.map((k) => [k.publicKey, k.permission]).sort());
+    if (listed(a.keys) !== listed(b.keys)) throw new Held(`the two providers disagree on the access keys of ${account}`);
+    return a.keys;
   }
 
   /** A view both providers must return byte for byte. */

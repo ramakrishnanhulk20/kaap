@@ -75,6 +75,62 @@
    "body": "{\"jsonrpc\":\"2.0\",\"id\":\"kaap\",\"method\":\"query\",\"params\":{\"request_type\":\"call_function\",\"block_id\":277188501,\"account_id\":\"kaap-guard-1111072803.testnet\",\"method_name\":\"is_enrolled\",\"args_base64\":\"eyJkYW8iOiJrYWFwLWRhby0xMTExMDcyOTI4LnRlc3RuZXQifQ==\"}}",
    "status": 200,
    "text": "{\"jsonrpc\":\"2.0\",\"result\":{\"block_hash\":\"GwEKT7GAb9SW6UqpGMCcUqDzEt9Umzd62Z8vmSDShGp5\",\"block_height\":277188501,\"logs\":[],\"result_text\":\"true\"},\"id\":\"kaap\"}"
+  },
+  {
+   "url": "https://near-testnet.drpc.org",
+   "method": "POST",
+   "body": "{\"jsonrpc\":\"2.0\",\"id\":\"kaap\",\"method\":\"query\",\"params\":{\"request_type\":\"view_account\",\"block_id\":277188501,\"account_id\":\"kaap-guard-1111072803.testnet\"}}",
+   "status": 200,
+   "text": "{\"id\":\"kaap\",\"jsonrpc\":\"2.0\",\"result\":{\"amount\":\"9999709588754477200000000\",\"block_hash\":\"GwEKT7GAb9SW6UqpGMCcUqDzEt9Umzd62Z8vmSDShGp5\",\"block_height\":277188501,\"code_hash\":\"DrjaN1zVz4cxvvxbxhM6rVZsqy8SrBunmMbyeqbsr4R4\",\"locked\":\"0\",\"storage_paid_at\":0,\"storage_usage\":220791}}"
+  },
+  {
+   "url": "https://rpc.testnet.fastnear.com",
+   "method": "POST",
+   "body": "{\"jsonrpc\":\"2.0\",\"id\":\"kaap\",\"method\":\"query\",\"params\":{\"request_type\":\"view_account\",\"block_id\":277188501,\"account_id\":\"kaap-guard-1111072803.testnet\"}}",
+   "status": 200,
+   "text": "{\"jsonrpc\":\"2.0\",\"result\":{\"amount\":\"9999709588754477200000000\",\"block_hash\":\"GwEKT7GAb9SW6UqpGMCcUqDzEt9Umzd62Z8vmSDShGp5\",\"block_height\":277188501,\"code_hash\":\"DrjaN1zVz4cxvvxbxhM6rVZsqy8SrBunmMbyeqbsr4R4\",\"locked\":\"0\",\"storage_paid_at\":0,\"storage_usage\":220791},\"id\":\"kaap\"}"
+  },
+  {
+   "url": "https://near-testnet.drpc.org",
+   "method": "POST",
+   "body": "{\"jsonrpc\":\"2.0\",\"id\":\"kaap\",\"method\":\"query\",\"params\":{\"request_type\":\"view_access_key_list\",\"block_id\":277188501,\"account_id\":\"kaap-guard-1111072803.testnet\"}}",
+   "status": 200,
+   "text": "{\"id\":\"kaap\",\"jsonrpc\":\"2.0\",\"result\":{\"block_hash\":\"GwEKT7GAb9SW6UqpGMCcUqDzEt9Umzd62Z8vmSDShGp5\",\"block_height\":277188501,\"keys\":[]}}"
+  },
+  {
+   "url": "https://rpc.testnet.fastnear.com",
+   "method": "POST",
+   "body": "{\"jsonrpc\":\"2.0\",\"id\":\"kaap\",\"method\":\"query\",\"params\":{\"request_type\":\"view_access_key_list\",\"block_id\":277188501,\"account_id\":\"kaap-guard-1111072803.testnet\"}}",
+   "status": 200,
+   "text": "{\"jsonrpc\":\"2.0\",\"result\":{\"block_hash\":\"GwEKT7GAb9SW6UqpGMCcUqDzEt9Umzd62Z8vmSDShGp5\",\"block_height\":277188501,\"keys\":[]},\"id\":\"kaap\"}"
+  },
+  {
+   "url": "https://near-testnet.drpc.org",
+   "method": "POST",
+   "body": "{\"jsonrpc\":\"2.0\",\"id\":\"kaap\",\"method\":\"query\",\"params\":{\"request_type\":\"view_account\",\"block_id\":277188501,\"account_id\":\"kaap-registry-1111072803.testnet\"}}",
+   "status": 200,
+   "text": "{\"id\":\"kaap\",\"jsonrpc\":\"2.0\",\"result\":{\"amount\":\"10023953908579378600000000\",\"block_hash\":\"GwEKT7GAb9SW6UqpGMCcUqDzEt9Umzd62Z8vmSDShGp5\",\"block_height\":277188501,\"code_hash\":\"3Kro1EgWDYAawFx8RHUwVGTKmJvp9bAUeRL65cwGAoZz\",\"locked\":\"0\",\"storage_paid_at\":0,\"storage_usage\":185315}}"
+  },
+  {
+   "url": "https://rpc.testnet.fastnear.com",
+   "method": "POST",
+   "body": "{\"jsonrpc\":\"2.0\",\"id\":\"kaap\",\"method\":\"query\",\"params\":{\"request_type\":\"view_account\",\"block_id\":277188501,\"account_id\":\"kaap-registry-1111072803.testnet\"}}",
+   "status": 200,
+   "text": "{\"jsonrpc\":\"2.0\",\"result\":{\"amount\":\"10023953908579378600000000\",\"block_hash\":\"GwEKT7GAb9SW6UqpGMCcUqDzEt9Umzd62Z8vmSDShGp5\",\"block_height\":277188501,\"code_hash\":\"3Kro1EgWDYAawFx8RHUwVGTKmJvp9bAUeRL65cwGAoZz\",\"locked\":\"0\",\"storage_paid_at\":0,\"storage_usage\":185315},\"id\":\"kaap\"}"
+  },
+  {
+   "url": "https://near-testnet.drpc.org",
+   "method": "POST",
+   "body": "{\"jsonrpc\":\"2.0\",\"id\":\"kaap\",\"method\":\"query\",\"params\":{\"request_type\":\"view_access_key_list\",\"block_id\":277188501,\"account_id\":\"kaap-registry-1111072803.testnet\"}}",
+   "status": 200,
+   "text": "{\"id\":\"kaap\",\"jsonrpc\":\"2.0\",\"result\":{\"block_hash\":\"GwEKT7GAb9SW6UqpGMCcUqDzEt9Umzd62Z8vmSDShGp5\",\"block_height\":277188501,\"keys\":[]}}"
+  },
+  {
+   "url": "https://rpc.testnet.fastnear.com",
+   "method": "POST",
+   "body": "{\"jsonrpc\":\"2.0\",\"id\":\"kaap\",\"method\":\"query\",\"params\":{\"request_type\":\"view_access_key_list\",\"block_id\":277188501,\"account_id\":\"kaap-registry-1111072803.testnet\"}}",
+   "status": 200,
+   "text": "{\"jsonrpc\":\"2.0\",\"result\":{\"block_hash\":\"GwEKT7GAb9SW6UqpGMCcUqDzEt9Umzd62Z8vmSDShGp5\",\"block_height\":277188501,\"keys\":[]},\"id\":\"kaap\"}"
   }
  ]
 }

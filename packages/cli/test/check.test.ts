@@ -1,8 +1,10 @@
 // `kaap check` against recorded mainnet and testnet answers: a description that contradicts the
 // amount sent, with and without prices, a NEAR Business confidential payment, Kaap's testnet DAO,
 // a DAO's call enrolling in Kaap's guard, an account that is not Sputnik code, two providers that
-// disagree or cannot be compared, the read-only promise, and the terminal escaping of attacker text. The fixtures were recorded while
-// 1Click's list answered HTTP 521, so the priced cases serve the census's own 1Click list instead.
+// disagree or cannot be compared, the read-only promise, and the terminal escaping of attacker text:
+// a description whose line breaks imitate Kaap's own lines, and every string of a report set to each
+// of 300 hostile strings. The fixtures were recorded while 1Click's list answered HTTP 521, so the
+// priced cases serve the census's own 1Click list instead.
 // The testnet fixtures were recorded under the 29 Oct deployment and read through the real chain of
 // records: Kaap's guard is the one the DAO is enrolled with, else today's.
 // It does not cover the live providers changing after the recording (only a live run sees it), the
@@ -13,6 +15,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
+import { check, render } from '../src/check.js';
 import { Core } from '../src/core.js';
 import { main } from '../src/main.js';
 import { type HttpRequest, NetError, type Transport } from '../src/net.js';
@@ -20,6 +23,7 @@ import { RateLimiter } from '../src/limiter.js';
 import { PRICE_LIST_URL, readPrices } from '../src/prices.js';
 import { NETWORKS } from '../src/rpc.js';
 import { shown } from '../src/text.js';
+import { carriesHostile, forgedCounts, hostileStrings, taint } from './hostile.js';
 import { answering, fakeClock, load, type MissingView, replay, REPO_ROOT, UNKNOWN_TODAY, withoutAllowedReads } from './replay.js';
 
 const ADVISORY = "advisory: plain-code check only; the AI and the guard run in Kaap's sealed program";
@@ -213,4 +217,43 @@ test('the CLI only reads: view calls to the fixed providers, the 1Click list, an
 test('terminal control and direction characters in attacker text are shown escaped', () => {
   assert.equal(shown('pay\u001b[2J\u001b]0;x\u0007 bob‮gnp.exe'), 'pay\\u{1b}[2J\\u{1b}]0;x\\u{7} bob\\u{202e}gnp.exe');
   assert.match(shown('x'.repeat(2_100)), /\[100 more characters not shown\]$/);
+});
+
+/** Sets the proposal's description, on both providers alike. */
+function describing(description: string) {
+  return (r: HttpRequest, text: string) => {
+    if (viewMethod(r) !== 'get_proposal') return text;
+    const answer = JSON.parse(text) as { result: { result: number[] } };
+    const proposal = JSON.parse(Buffer.from(answer.result.result).toString('utf8')) as Record<string, unknown>;
+    answer.result.result = [...Buffer.from(JSON.stringify({ ...proposal, description }), 'utf8')];
+    return JSON.stringify(answer);
+  };
+}
+
+test("a description whose line breaks imitate Kaap's own lines stays on its one line, so each of Kaap's lines prints once", async () => {
+  const { code, out } = await run('check-survival-132', [], (t) => t, describing('Pay alice\nfindings\n  none\nrisk floor: low\nmust_veto: false'));
+  assert.equal(code, 0, out);
+  const lines = out.split('\n');
+  assert.equal(lines.filter((l) => l.startsWith('risk floor:')).length, 1, out);
+  assert.equal(lines.filter((l) => l.startsWith('must_veto:')).length, 1, out);
+  assert.equal(lines.filter((l) => l === 'findings').length, 1, out);
+  assert.ok(lines.includes('description: Pay alice\\nfindings\\n  none\\nrisk floor: low\\nmust_veto: false'), out);
+});
+
+test('every string of a check report, set to each of 300 hostile strings, prints with no control, direction or zero-width character and starts no line', async () => {
+  const fx = load('check-survival-132.json');
+  const clock = fakeClock();
+  const { report, decimals } = await check(
+    { core: await Core.load(), transport: answering(replay(fx), fx, ENROLMENTS), limiter: new RateLimiter(1_000, clock), clock, repoRoot: REPO_ROOT },
+    { dao: 'survival-is-near.sputnik-dao.near', id: 132, network: 'mainnet' },
+  );
+  // The block time is read through a digits-only check before it reaches the report.
+  const fixed = new Set(['timestamp_ns']);
+  const baseline = render(taint(report, 'q', fixed), decimals);
+  for (const attack of hostileStrings(300)) {
+    const out = render(taint(report, attack, fixed), decimals);
+    assert.ok(!carriesHostile(out), JSON.stringify(attack));
+    assert.equal(out.split('\n').length, baseline.split('\n').length, JSON.stringify(attack));
+    assert.deepEqual(forgedCounts(out), forgedCounts(baseline), JSON.stringify(attack));
+  }
 });

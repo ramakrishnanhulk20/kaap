@@ -3,7 +3,8 @@
 // guard. The policy, the DAO's code and the guard's enrolment are read at one final block and must
 // agree across two providers (C22). The guard is the one the DAO is enrolled with across Kaap's
 // deployment records, current first, else the current one (deployment.ts), and is named with its
-// record.
+// record. Before any answer, that record's guard and registry must still run the build it names
+// with no access key (contracts.ts); otherwise the command stops there, exit 5 or 6.
 //
 // Armed means all three: the DAO enrolled itself in the guard; by kaap-core's `guard_arming`, the
 // guard's one reject decides every kind in Kaap's template; and it does not decide the one kind the
@@ -14,11 +15,12 @@
 
 import type { Reader } from './chain.js';
 import { type Deps, readers } from './check.js';
+import { contractBlock, contractsAsRecorded, stopUnlessAsRecorded } from './contracts.js';
 import type { Arming, EnrolmentDrafts } from './core.js';
 import { recognise, type Recognised } from './dao.js';
 import { type Deployment, describeDeployment, enrolledDeployment } from './deployment.js';
 import { type Block, NETWORKS, type Network } from './rpc.js';
-import { oneLine, utc } from './text.js';
+import { oneLine, terminalText, utc } from './text.js';
 
 export interface ArmingState {
   armed: boolean;
@@ -69,11 +71,17 @@ export async function readGuard(deps: Deps & { repoRoot: string }, request: { da
 export interface ArmingReport {
   title: string;
   facts: string[];
+  /** The four contract lines under their heading, all passing. */
+  contracts: string[];
   lines: string[];
 }
 
+/** Whether the guard is armed, once its guard and registry are the recorded build with no access
+ *  key; anything else stops the command with the four lines and no arming answer (contracts.ts). */
 export async function arming(deps: Deps & { repoRoot: string }, request: { dao: string; network: Network }): Promise<ArmingReport> {
   const g = await readGuard(deps, request);
+  const contracts = await contractsAsRecorded(g.reader, g.d, g.head);
+  stopUnlessAsRecorded(g.d, contracts, 'Whether the guard is armed is not shown until both providers show each contract running the recorded build with no access key.');
   return {
     title: `kaap arming ${request.dao} on ${request.network}`,
     facts: [
@@ -82,6 +90,7 @@ export async function arming(deps: Deps & { repoRoot: string }, request: { dao: 
       `Kaap on ${request.network}: ${describeDeployment(g.d)}`,
       `guard: ${g.d.guard}; enrolled in the guard: ${g.enrolled ? 'yes' : 'no'}`,
     ],
+    contracts: contractBlock(contracts),
     lines: armingLines(g.arming, g.template, g.state),
   };
 }
@@ -124,6 +133,6 @@ function votes(needed: Record<string, string>): string[] {
 }
 
 export function render(r: ArmingReport): string {
-  return [r.title, ...r.facts, '', ...r.lines].join('\n');
+  return terminalText([r.title, ...r.facts, ...r.contracts, '', ...r.lines]);
 }
 

@@ -1,22 +1,51 @@
-// Turns text an attacker can write (a description, an account name, a token id) into something a
-// terminal shows as plain characters (C24). Control characters could move the cursor, recolour or
-// clear the screen, and bidirectional marks could make a line read in another order, so each is
-// written out as a visible \u{...} escape. Long text is cut and says so.
+// Turns text an attacker can write (a description, an account name, a node's answer, a worker's
+// explanation) into something a terminal shows as plain characters (C24). One rule covers every
+// command: a string from the chain, an RPC node, OutLayer's API or a worker is printed only through
+// `shown`, or after a check that it has a fixed shape (an account id, a hash, a number, a fixed
+// word). `shown` leaves no character a terminal acts on: every control (C0, DEL, C1) and every
+// format character, which takes in the bidirectional marks and isolates and the zero-width spaces
+// and joiners, is written out as a visible escape, and so are the Unicode line and paragraph
+// separators. A line break becomes `\n`, so a value never starts a line of its own; prose that
+// should keep its lines goes through `shownLines` and is indented under its heading by the caller.
+// Long text is cut and says so. `check`, `verify`, `arming` and `seal-text` also pass every
+// finished line through `shown` once more (`terminalText`), so a value that reached a line without
+// its own check is still inert.
+//
+// Not covered: letters that look like others or draw nothing (homoglyphs, combining marks, the
+// Hangul fillers) are shown as they are, since they can mislead the eye but cannot move the cursor,
+// reorder a line or start one; and a backslash is shown as it is, so an escape the text spells out
+// itself looks like one made here.
 
 import { MAX_SHOWN_TEXT } from './caps.js';
 
-// C0 and C1 controls, DEL, and the bidirectional marks and isolates.
-const UNSAFE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f؜‎‏‪-‮⁦-⁩]/gu;
+// Controls, format characters, unpaired surrogates, and the line and paragraph separators.
+const UNSAFE = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu;
+const NAMED: Readonly<Record<string, string>> = { '\n': '\\n', '\r': '\\r', '\t': '\\t' };
 
-export function shown(text: string, max = MAX_SHOWN_TEXT): string {
-  const cut = [...text];
-  const head = cut.length > max ? `${cut.slice(0, max).join('')} [${cut.length - max} more characters not shown]` : text;
-  return head.replace(UNSAFE, (c) => `\\u{${c.codePointAt(0)?.toString(16) ?? ''}}`);
+function cut(text: string, max: number): string {
+  const points = [...text];
+  return points.length > max ? `${points.slice(0, max).join('')} [${points.length - max} more characters not shown]` : text;
 }
 
-/** One line: newlines and tabs become visible too. */
-export function oneLine(text: string, max = MAX_SHOWN_TEXT): string {
-  return shown(text, max).replace(/\r?\n/g, '\\n').replace(/\t/g, '\\t');
+const escaped = (text: string) => text.replace(UNSAFE, (c) => NAMED[c] ?? `\\u{${c.codePointAt(0)?.toString(16) ?? ''}}`);
+
+/** Attacker text as one line with nothing a terminal acts on, at most `max` characters of it. */
+export function shown(text: string, max = MAX_SHOWN_TEXT): string {
+  return escaped(cut(text, max));
+}
+
+/** `shown` under the name most callers use for it. */
+export const oneLine = shown;
+
+/** Attacker prose as its own lines (split at each line break), each as `shown` leaves it, for the
+ *  caller to indent under a heading of its own so no line of it starts a line of output. */
+export function shownLines(text: string, max = MAX_SHOWN_TEXT): string[] {
+  return cut(text, max).split(/\r?\n/).map(escaped);
+}
+
+/** A command's finished lines as the text it prints, each line through `shown` once more. */
+export function terminalText(lines: readonly string[]): string {
+  return lines.map((line) => shown(line, Number.POSITIVE_INFINITY)).join('\n');
 }
 
 export function percent(part: number, whole: number): string {

@@ -1,18 +1,22 @@
 // `kaap verify <dao> <id>`: checks the verdict Kaap's registry holds for one proposal, down to the
 // sealed hardware run that produced it, and prints each check as pass or fail. The verdict is looked
 // for in the current deployment's registry, then in each earlier record's (deployment.ts), and every
-// check is made against the deployment that holds it, named in its own line. Every signature and
-// hash is recomputed here, with Node's ed25519 and kaap-core's own encoders, from values read off
-// the chain; no service's "valid" is taken (A8, C28). Reads that decide a check are made at one
-// final block and must agree across two providers (C22); the verdict's own block and its sealed run
-// soon grow older than the live providers keep, so each of those reads comes from one node (rpc.ts
-// `Archive`): a live provider while it still holds the data, else KAAP_ARCHIVAL_RPC when set, else
-// a public archival node, and every line that rests on them names the node that answered. That
-// covers the policy and the called contracts' code at the verdict's block. They are never compared:
-// the two public testnet archives are served by the same operator (checked 3 Nov), so a second read
-// there would not be independent. As corroboration, the same contracts' code is read again at the
-// final block from both live providers, and a redeploy since the verdict is a warning. A read that
-// no node would answer is shown as unread, never as a failed check, and the command exits 6, not 5.
+// check is made against the deployment that holds it, named in its own line, starting with that
+// deployment's guard and registry still running the build its record names, with no access key
+// (contracts.ts). Every signature and hash is recomputed here, with Node's ed25519 and kaap-core's
+// own encoders, from values read off the chain; no service's "valid" is taken (A8, C28). Reads that
+// decide a check are made at one final block and must agree across two providers (C22); the
+// verdict's own block and its sealed run soon grow older than the live providers keep, so each of
+// those reads comes from one node (rpc.ts `Archive`): a live provider while it still holds the data,
+// else KAAP_ARCHIVAL_RPC when set, else a public archival node. That covers the policy and the
+// called contracts' code at the verdict's block, and the sealed runs. They are never compared: the
+// two public testnet archives are served by the same operator (checked 3 Nov), so a second read
+// there would not be independent. Every line that rests on one of them names the node that answered
+// and says it is one node, not compared; one that also rests on OutLayer's API says so; and the
+// result line counts them, so a quote of it never claims more than its lines do. As corroboration,
+// the same contracts' code is read again at the final block from both live providers, and a
+// redeploy since the verdict is a warning. A read that no node would answer is shown as unread,
+// never as a failed check, and the command exits 6, not 5.
 //
 // What it does not check, and prints as such: Intel's signature on the TDX quote inside OutLayer's
 // attestation, and OutLayer's approval of its measurements (see outlayer.ts and binding.ts). A
@@ -24,12 +28,13 @@ import { z } from 'zod';
 import { BindingRefused, quoteReportData, taskHash } from './binding.js';
 import { Held, type Reader, Unanswered } from './chain.js';
 import { type Deps, readers } from './check.js';
+import { type ContractLine, contractsAsRecorded } from './contracts.js';
 import { type Core, CoreError } from './core.js';
 import { recognise } from './dao.js';
 import { type Deployment, deploymentChain, describeDeployment } from './deployment.js';
 import { type Attestation, type AttestationRead, findRun, readAttestation, readRun, type Run, type Search } from './outlayer.js';
 import { Archive, archiveHosts, type Block, NETWORKS, type Network, RpcError } from './rpc.js';
-import { oneLine, utc } from './text.js';
+import { oneLine, terminalText, utc } from './text.js';
 import { BadVerdict, decodeVerdict, ed25519Valid, edKeyBytes, sha256Hex, signedBytes, type VerdictFields } from './verdict.js';
 
 export class NoVerdict extends Error {
@@ -55,7 +60,15 @@ export interface Check {
   /** Could not be read at all, so neither passed nor failed: shown as "unread". Names where the
    *  read was asked: the archive list, the two live providers, or OutLayer's API. */
   unread?: Unread;
+  /** Its evidence came from one node, or from OutLayer's API checked against one node, and its
+   *  text says so. Every other check that reads the chain rests on both live providers. */
+  oneSource?: boolean;
 }
+
+/** How a line that rests on one node, and one that also rests on OutLayer's API, names its source. */
+const oneNode = (source: string) => `chain read from ${source}, one node per read, not compared`;
+const apiAndNode = (source: string) => `attestation from OutLayer's API alone; ${oneNode(source)}`;
+const single = (c: Check): Check => ({ ...c, oneSource: true });
 
 export interface VerifyReport {
   title: string;
@@ -92,6 +105,7 @@ const fail = (text: string): Check => ({ ok: false, text });
 type Unread = 'archive' | 'live' | 'outlayer';
 const unread = (text: string, from: Unread = 'archive'): Check => ({ ok: false, unread: from, text });
 const check = (ok: boolean, yes: string, no: string): Check => (ok ? pass(yes) : fail(no));
+const contractCheck = (l: ContractLine): Check => (l.status === 'pass' ? pass(l.text) : l.status === 'fail' ? fail(l.text) : unread(l.text, 'live'));
 /** A failed read: unread when no node answered, failed when one did with something else. */
 const notRead = (e: RpcError, text: string, from: Unread = 'archive'): Check => (e.failure === 'unavailable' ? unread(text, from) : fail(text));
 const short = (hex: string) => `${hex.slice(0, 8)}...${hex.slice(-4)}`;
@@ -195,25 +209,27 @@ function bindingProblems(run: Run, a: Attestation, d: Deployment): { hash: strin
   return { hash, problems };
 }
 
-/** The run's checks, each naming `source`, the nodes its chain record was read from. When OutLayer
- *  never answered for its attestation, the three checks that need it are unread. */
+/** The run's checks, each naming its sources in its own text: `source`, the one node per read its
+ *  chain record came from, and for the three that rest on it, OutLayer's API. When OutLayer never
+ *  answered for its attestation, those three are unread. */
 function runChecks(run: Run, att: AttestationRead, d: Deployment, label: string, source: string): Check[] {
   const p = runProblems(run, att, d);
   const b = att.found ? bindingProblems(run, att.attestation, d) : { hash: null, problems: [att.why] };
-  const build = run.requested?.build ? short(run.requested.build) : 'unknown';
+  // Named in a passing line only, which needs a published build, so it is shown only when it is one.
+  const build = run.requested?.build && d.builds.has(run.requested.build) ? short(run.requested.build) : 'unknown';
   const why = att.found ? '' : att.why;
   const unreadAttestation = (what: string): Check => unread(`${label}: ${what} could not be checked, because OutLayer's API did not answer for its attestation (${why})`, 'outlayer');
-  const checks = [
-    check(
-      !p.chain.length,
-      `${label}: ${d.outlayer} recorded the request from ${d.worker} for project ${d.project} (uuid ${d.uuid}), build ${build}, a published build`,
-      `${label}: on chain, ${p.chain.join('; ')}`,
-    ),
-    ...(!att.found && att.unanswered
+  const record = check(
+    !p.chain.length,
+    `${label}: ${d.outlayer} recorded the request from ${d.worker} for project ${d.project} (uuid ${d.uuid}), build ${build}, a published build`,
+    `${label}: on chain, ${p.chain.join('; ')}`,
+  );
+  const attested =
+    !att.found && att.unanswered
       ? [unreadAttestation('the attested project, caller and wasm'), unreadAttestation('the attested input and output hashes'), unreadAttestation('OutLayer\'s record against its TDX quote')]
-      : attestationChecks(p, b, d, label, build)),
-  ];
-  return checks.map((c) => ({ ...c, text: `${c.text} (chain read from ${source})` }));
+      : attestationChecks(p, b, d, label, build);
+  const sources = (c: Check, named: string): Check => single({ ...c, text: `${c.text} (${named})` });
+  return [sources(record, oneNode(source)), ...attested.map((c) => sources(c, att.found ? apiAndNode(source) : oneNode(source)))];
 }
 
 function attestationChecks(p: ReturnType<typeof runProblems>, b: { hash: string | null; problems: string[] }, d: Deployment, label: string, build: string): Check[] {
@@ -253,6 +269,9 @@ export async function verify(deps: Deps & { repoRoot: string }, request: VerifyR
   const head = await reader.head();
   const dao = await recognise(core, reader, NETWORKS[request.network].factory, request.dao, head);
   const { d, latest, without } = await withVerdict(reader, deps.repoRoot, request, head);
+  // The contracts of the record that holds the verdict, an earlier one included, come first: the
+  // checks after them read through that guard and that registry.
+  const contracts = await contractsAsRecorded(reader, d, head);
   const parsed = recordSchema.safeParse(latest);
   if (!parsed.success) throw new Held('the registry\'s latest verdict is not the expected record');
   const record = parsed.data;
@@ -269,7 +288,7 @@ export async function verify(deps: Deps & { repoRoot: string }, request: VerifyR
     `Kaap on ${request.network}: ${describeDeployment(d)}, sealed program ${d.project} called by ${d.worker}${without.length ? `; used because ${without.join(' and ')} ${without.length === 1 ? 'holds' : 'hold'} no verdict for this proposal` : ''}`,
     `verdict: record ${record.index} in ${d.registry}, recorded by ${oneLine(record.recorded_by, 80)} at block ${record.recorded_at_block}`,
   ];
-  const checks: Check[] = [];
+  const checks: Check[] = contracts.map(contractCheck);
   const notChecked: string[] = [];
   const notes: string[] = [];
 
@@ -334,10 +353,10 @@ export async function verify(deps: Deps & { repoRoot: string }, request: VerifyR
     const why =
       v === null
         ? 'the verdict did not decode, so its block is unknown'
-        : `no run by ${d.worker} in blocks ${search?.to} to ${search?.from} returned this verdict and signature${search?.otherRuns ? ` (${search.otherRuns} ${search.otherRuns === 1 ? 'run' : 'runs'} for this proposal returned another)` : ''}${searched ? ` (read from ${searched})` : ''}`;
-    checks.push(fail(`sealed run: ${why}`));
+        : `no run by ${d.worker} in blocks ${search?.to} to ${search?.from} returned this verdict and signature${search?.otherRuns ? ` (${search.otherRuns} ${search.otherRuns === 1 ? 'run' : 'runs'} for this proposal returned another)` : ''}${searched ? ` (${oneNode(searched)})` : ''}`;
+    checks.push(v === null ? fail(`sealed run: ${why}`) : single(fail(`sealed run: ${why}`)));
   } else {
-    checks.push(pass(`sealed run: transaction ${run.tx} returned exactly this verdict and signature (found in ${search?.blocksRead} blocks, read from ${searched})`));
+    checks.push(single(pass(`sealed run: transaction ${run.tx} returned exactly this verdict and signature (found in ${search?.blocksRead} blocks, ${oneNode(searched)})`)));
     const att = await readAttestation(request.network, run.tx, deps.transport, deps.limiter, deps.clock);
     checks.push(...runChecks(run, att, d, 'the run', searched));
     notChecked.push(`Intel's signature on the TDX quote and OutLayer's approval of its measurements (OutLayer's own tool: outlayer-verify tx ${run.tx} --network ${request.network} --api ${NETWORKS[request.network].outlayer}); record: ${att.url}`);
@@ -380,10 +399,12 @@ async function policyCheck(archive: Archive, deps: Deps, request: VerifyRequest,
     const view = await archive.view(request.dao, 'get_policy', {}, v.block_height);
     const policyHash = deps.core.policyHash(view.text);
     const from = `(read from ${archive.name}, one node, not compared)`;
-    return check(
-      policyHash === v.policy_hash,
-      `policy hash: kaap-core recomputes ${short(policyHash)} from the DAO's policy at block ${v.block_height} ${from}`,
-      `policy hash: kaap-core gives ${short(policyHash)} at block ${v.block_height} ${from}, the verdict says ${short(v.policy_hash)}`,
+    return single(
+      check(
+        policyHash === v.policy_hash,
+        `policy hash: kaap-core recomputes ${short(policyHash)} from the DAO's policy at block ${v.block_height} ${from}`,
+        `policy hash: kaap-core gives ${short(policyHash)} at block ${v.block_height} ${from}, the verdict says ${short(v.policy_hash)}`,
+      ),
     );
   } catch (e) {
     if (e instanceof RpcError) return notRead(e, `policy hash: the policy at block ${v.block_height} could not be read (${e.message})`);
@@ -456,10 +477,12 @@ async function receiversCheck(archive: Archive, core: Core, request: VerifyReque
   const named = accounts.map((a) => oneLine(a, 80)).join(', ');
   const source = `(read from ${archive.hostsSince(mark)}, one node per read, not compared)`;
   return {
-    check: check(
-      hash === v.receivers_hash,
-      `receivers hash: kaap-core recomputes ${short(hash)} from the code of ${named} at block ${at} ${source}`,
-      `receivers hash: kaap-core gives ${short(hash)} from the code of ${named} at block ${at} ${source}, the verdict says ${short(v.receivers_hash)}`,
+    check: single(
+      check(
+        hash === v.receivers_hash,
+        `receivers hash: kaap-core recomputes ${short(hash)} from the code of ${named} at block ${at} ${source}`,
+        `receivers hash: kaap-core gives ${short(hash)} from the code of ${named} at block ${at} ${source}, the verdict says ${short(v.receivers_hash)}`,
+      ),
     ),
     pairs,
   };
@@ -515,14 +538,16 @@ async function keyChecks(archive: Archive, deps: Deps, network: Network, d: Depl
   }
   if (run === null) return [fail(`${label}: ${archive.name} does not know transaction ${d.attestedRunTx}`)];
   const source = archive.hostsSince(mark);
-  const att = await readAttestation(network, run.tx, deps.transport, deps.limiter, deps.clock);
+  const att = await readAttestation(network, d.attestedRunTx, deps.transport, deps.limiter, deps.clock);
   const printed = run.sealed ? edKeyBytes(run.sealed.public_key) : null;
   return [
     ...runChecks(run, att, d, label, source),
-    check(
-      guardRaw !== null && printed !== null && printed.equals(guardRaw),
-      `${label}: its attested output prints the guard's accepted key (chain read from ${source})`,
-      `${label}: its attested output prints ${run.sealed ? oneLine(run.sealed.public_key, 60) : 'no key'}, not the guard's accepted key (chain read from ${source})`,
+    single(
+      check(
+        guardRaw !== null && printed !== null && printed.equals(guardRaw),
+        `${label}: its attested output prints the guard's accepted key (${oneNode(source)})`,
+        `${label}: its attested output prints ${run.sealed ? oneLine(run.sealed.public_key, 60) : 'no key'}, not the guard's accepted key (${oneNode(source)})`,
+      ),
     ),
   ];
 }
@@ -540,26 +565,30 @@ export function outcome(r: VerifyReport): 'pass' | 'fail' | 'unread' {
   return r.checks.some((c) => c.unread) ? 'unread' : 'pass';
 }
 
+/** The report as the terminal shows it, every line through `terminalText`. The result line counts
+ *  the passing checks that rest on one node or on OutLayer's API, so a quote of it carries that too. */
 export function render(r: VerifyReport): string {
   const failed = r.checks.filter((c) => !c.ok && !c.unread).length;
   const unreadChecks = r.checks.filter((c) => c.unread);
   const warned = r.checks.filter((c) => c.ok && c.warning).length;
+  const thin = r.checks.filter((c) => c.ok && c.oneSource).length;
+  const backing = thin ? `; ${thin} of the passes rest on one node or on OutLayer's API alone, as their lines say` : '';
   const result =
     failed > 0
       ? `result: ${failed} of ${r.checks.length} checks fail${unreadChecks.length ? `, and ${unreadChecks.length} could not be read` : ''}`
       : unreadChecks.length > 0
-        ? `result: no check fails, but ${unreadChecks.length} of ${r.checks.length} could not be read`
+        ? `result: no check fails, but ${unreadChecks.length} of ${r.checks.length} could not be read${backing}`
         : warned > 0
-          ? `result: no check fails; ${r.checks.length - warned} pass and ${warned} ${warned === 1 ? 'warns' : 'warn'}`
-          : `result: all ${r.checks.length} checks pass`;
+          ? `result: no check fails; ${r.checks.length - warned} pass and ${warned} ${warned === 1 ? 'warns' : 'warn'}${backing}`
+          : `result: all ${r.checks.length} checks pass${backing}`;
   const advice = !unreadChecks.length
     ? []
     : unreadChecks.some((c) => c.unread === 'archive')
       ? ['The archive nodes are rate-limiting or not answering: wait a minute and run again, or set KAAP_ARCHIVAL_RPC to the https address of an archival node you can use.']
       : unreadChecks.some((c) => c.unread === 'outlayer')
         ? ['OutLayer\'s API is not answering: wait a minute and run again.']
-        : ['The RPC providers are rate-limiting or not answering: wait a minute and run again.'];
-  return [
+        : ['The two RPC providers are rate-limiting, not answering, or not answering alike: wait a minute and run again.'];
+  return terminalText([
     r.title,
     ...r.facts,
     '',
@@ -571,5 +600,5 @@ export function render(r: VerifyReport): string {
     '',
     result,
     ...advice,
-  ].join('\n');
+  ]);
 }

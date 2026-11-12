@@ -19,8 +19,16 @@ import type { Deployment } from './deployment.js';
 import type { Clock, RateLimiter } from './limiter.js';
 import { type HttpResponse, NetError, type Transport } from './net.js';
 import { type Block, type Network, NETWORKS, type Provider, RpcError } from './rpc.js';
+import { shown } from './text.js';
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** A NEAR transaction hash: base58 of 32 bytes. Every transaction hash this file prints or puts
+ *  into a URL has this shape. */
+export const TX_HASH = /^[1-9A-HJ-NP-Za-km-z]{43,44}$/;
+
+/** A block hash, also base58 of 32 bytes, at any length base58 can write 32 bytes in. */
+const BLOCK_HASH = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 /** The sealed program's output (packages/sealed/README.md, "What it signs"). */
 const outputSchema = z.looseObject({
@@ -36,7 +44,7 @@ export type SealedOutput = z.output<typeof outputSchema>;
 const inputSchema = z.looseObject({ network: z.string(), dao: z.string(), proposal_id: z.number().int().nonnegative() });
 
 const txSchema = z.looseObject({
-  hash: z.string(),
+  hash: z.string().regex(TX_HASH),
   signer_id: z.string(),
   receiver_id: z.string(),
   actions: z.array(z.unknown()),
@@ -147,7 +155,8 @@ function logged(outcome: Record<string, unknown>, outlayer: string): { requested
   for (const r of receipts) {
     const o = isRecord(r) ? r['outcome'] : undefined;
     if (!isRecord(o) || o['executor_id'] !== outlayer || !Array.isArray(o['logs'])) continue;
-    const blockHash = isRecord(r) && typeof r['block_hash'] === 'string' ? r['block_hash'] : null;
+    // Only a hash is read as the receipt's block: it is asked for, and named if it cannot be read.
+    const blockHash = isRecord(r) && typeof r['block_hash'] === 'string' && BLOCK_HASH.test(r['block_hash']) ? r['block_hash'] : null;
     for (const line of o['logs']) {
       if (typeof line !== 'string' || !line.startsWith('EVENT_JSON:')) continue;
       try {
@@ -190,10 +199,14 @@ async function blockByHash(archival: Provider, hash: string): Promise<Block> {
   return { height: read.data.header.height, hash, timestampNs: read.data.header.timestamp_nanosec };
 }
 
-/** The run `tx` as the archival node knows it, or null when it does not. */
+/** The run `tx` as the archival node knows it, or null when it does not. An answer for any other
+ *  transaction is refused as no answer (`unavailable`), so `kaap verify` shows the run unread: its
+ *  hash would otherwise be printed, and put into the attestation's address, as this run's. */
 export async function readRun(archival: Provider, tx: string, sender: string, outlayer: string): Promise<Run | null> {
   const outcome = await archival.txStatus(tx, sender);
   if (outcome === null) return null;
+  const answered = isRecord(outcome['transaction']) ? outcome['transaction']['hash'] : undefined;
+  if (answered !== tx) throw new RpcError(archival.name, 'unavailable', `answered for transaction ${shown(String(answered), 50)} when asked for ${tx}`);
   const parsed = txSchema.safeParse(outcome['transaction']);
   if (!parsed.success) throw new RpcError(archival.name, 'shape', `transaction ${tx.slice(0, 12)} is not readable`);
   const inputData = requestInput(parsed.data.actions);
@@ -213,7 +226,7 @@ export async function readRun(archival: Provider, tx: string, sender: string, ou
   const events = logged(outcome, outlayer);
   const requestBlock = events.requestedIn === null ? null : await blockByHash(archival, events.requestedIn);
   const completionBlock = events.completedIn === null ? null : await blockByHash(archival, events.completedIn);
-  return { tx: parsed.data.hash, signer: parsed.data.signer_id, receiver: parsed.data.receiver_id, inputData, output, sealed, requested: events.requested, requestBlock, completionBlock };
+  return { tx, signer: parsed.data.signer_id, receiver: parsed.data.receiver_id, inputData, output, sealed, requested: events.requested, requestBlock, completionBlock };
 }
 
 export interface Search {
@@ -227,7 +240,10 @@ export interface Search {
 
 /** Looks for the worker's run that returned exactly `verdict` and `signature` (base64 as the
  *  registry gives them, compared as bytes), from a few blocks after `readAt` back to
- *  `RUN_SCAN_BACK` blocks before it, nearest first. */
+ *  `RUN_SCAN_BACK` blocks before it, nearest first. Each run is read by the hash its chunk lists,
+ *  and `readRun` refuses an answer for any other, so a run found is one of the hashes asked about.
+ *  A call from the worker to OutLayer that a chunk lists unreadably, a hash that is not a
+ *  transaction hash included, is refused as no answer: skipping it would report the run missing. */
 export async function findRun(archival: Provider, d: Deployment, want: { network: Network; dao: string; proposalId: number; verdict: Buffer; signature: Buffer }, readAt: number): Promise<Search> {
   const search: Search = { run: null, blocksRead: 0, otherRuns: 0, from: readAt + RUN_SCAN_AHEAD, to: Math.max(0, readAt - RUN_SCAN_BACK) };
   for (let height = search.from; height >= search.to; height--) {
@@ -237,6 +253,9 @@ export async function findRun(archival: Provider, d: Deployment, want: { network
     for (const chunk of block.chunks) {
       for (const raw of await archival.chunkTransactions(chunk.hash)) {
         const tx = txSchema.safeParse(raw);
+        if (!tx.success && isRecord(raw) && raw['signer_id'] === d.worker && raw['receiver_id'] === d.outlayer) {
+          throw new RpcError(archival.name, 'unavailable', `a transaction from ${d.worker} to ${d.outlayer} in block ${height} is not readable`);
+        }
         if (!tx.success || tx.data.signer_id !== d.worker || tx.data.receiver_id !== d.outlayer) continue;
         const inputData = requestInput(tx.data.actions);
         if (inputData === null || !names(inputData, want.network, want.dao, want.proposalId)) continue;
@@ -262,7 +281,9 @@ export type AttestationRead = { found: true; attestation: Attestation; url: stri
  *  up to `RPC_TRIES` tries, waiting 1, 2, then 4 s or its Retry-After up to `MAX_RETRY_WAIT_MS`,
  *  each through the rate limiter. Any other answer, a 404 included, is OutLayer's word. */
 export async function readAttestation(network: Network, tx: string, transport: Transport, limiter: RateLimiter, clock: Clock): Promise<AttestationRead> {
-  const url = `${NETWORKS[network].outlayer}/attestations/by-tx/${tx}`;
+  const base = `${NETWORKS[network].outlayer}/attestations/by-tx/`;
+  if (!TX_HASH.test(tx)) return { found: false, why: 'the run named is not a NEAR transaction hash, so OutLayer was not asked', url: base, unanswered: false };
+  const url = `${base}${tx}`;
   let response: HttpResponse | null = null;
   let why = 'OutLayer could not be reached';
   for (let attempt = 1; attempt <= RPC_TRIES; attempt++) {

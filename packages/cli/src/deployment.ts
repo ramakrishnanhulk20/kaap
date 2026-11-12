@@ -1,8 +1,9 @@
 // Where Kaap runs on a network, read from the repository's own records: `deployments/<network>.json`
-// (the guard, the registry, the sealed program, the run that printed its key, and the key a text is
-// sealed to) and `packages/sealed/<network>.json` (every build of the sealed program ever
-// published). These are what `verify`, `check`, `enroll`, `arming` and `seal-text` check the chain
-// against. A redeploy keeps the record it replaced and names it in `previous`, so a verdict or an
+// (the guard and the registry with the sha256 of the build each was deployed with, the sealed
+// program, the run that printed its key, and the key a text is sealed to) and
+// `packages/sealed/<network>.json` (every build of the sealed program ever published). These are
+// what `verify`, `check`, `enroll`, `arming` and `seal-text` check the chain against. A redeploy
+// keeps the record it replaced and names it in `previous`, so a verdict or an
 // enrolment made under an earlier deployment is still checked against that deployment: the chain is
 // followed from the current record, at most `MAX_DEPLOYMENT_RECORDS` records, each by the exact path
 // it is named by and only inside `deployments/`. Each file is read through a strict schema and a
@@ -35,8 +36,8 @@ const deploymentsSchema = z.looseObject({
   deployed_at: z.string().min(1).max(64),
   previous: z.string().min(1).max(200).optional(),
   accepted_key: edKey,
-  guard: z.looseObject({ account_id: account }),
-  registry: z.looseObject({ account_id: account }),
+  guard: z.looseObject({ account_id: account, code_sha256: sha256Hex.optional() }),
+  registry: z.looseObject({ account_id: account, code_sha256: sha256Hex.optional() }),
   sealed: z.looseObject({
     project_id: z.string().regex(/^[^/\s]+\/[^/\s]+$/),
     worker_account: account,
@@ -65,6 +66,10 @@ export interface Deployment {
   deployedAt: string;
   guard: string;
   registry: string;
+  /** The sha256 of the build the record says each was deployed with, lower-case hex; null when the
+   *  record names none, which the commands that check it count as a failed check. */
+  guardCode: string | null;
+  registryCode: string | null;
   /** The key the record says the guard was set up with. The guard's own `accepted_key()` is what
    *  counts; this is only shown next to it. */
   recordedKey: string;
@@ -147,6 +152,8 @@ function deploymentAt(repoRoot: string, network: Network, path: string, record: 
       deployedAt: d.data.deployed_at,
       guard: d.data.guard.account_id,
       registry: d.data.registry.account_id,
+      guardCode: d.data.guard.code_sha256 ?? null,
+      registryCode: d.data.registry.code_sha256 ?? null,
       recordedKey: d.data.accepted_key,
       project: d.data.sealed.project_id,
       uuid: b.data.uuid,

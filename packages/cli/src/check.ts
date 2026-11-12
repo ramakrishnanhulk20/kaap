@@ -13,7 +13,7 @@ import type { Clock, RateLimiter } from './limiter.js';
 import type { Transport } from './net.js';
 import { readPrices } from './prices.js';
 import { type Block, NETWORKS, type Network, Provider, RpcError } from './rpc.js';
-import { oneLine, shown, units, utc } from './text.js';
+import { oneLine, shown, terminalText, units, utc } from './text.js';
 
 export const ADVISORY = "advisory: plain-code check only; the AI and the guard run in Kaap's sealed program";
 
@@ -180,8 +180,9 @@ export function plainEffect(effect: Record<string, unknown>): string | null {
 }
 
 function effectLine(effect: Record<string, unknown>, decimals: Map<string, number>): string {
+  const type = shown(String(effect['type']), 40);
   const words = plainEffect(effect);
-  if (words !== null) return `${String(effect['type'])}: ${words}`;
+  if (words !== null) return `${type}: ${words}`;
   const parts: string[] = [];
   for (const [key, value] of Object.entries(effect)) {
     if (key === 'type') continue;
@@ -191,9 +192,9 @@ function effectLine(effect: Record<string, unknown>, decimals: Map<string, numbe
       const d = decimalsOf(token, decimals);
       if (d !== null) text = `${value} (${units(value, d)} ${token === 'near' ? 'NEAR' : 'whole tokens'})`;
     }
-    parts.push(`${key} ${oneLine(text, 300)}`);
+    parts.push(`${shown(key, 40)} ${oneLine(text, 300)}`);
   }
-  return `${String(effect['type'])}: ${parts.join(', ')}`;
+  return `${type}: ${parts.join(', ')}`;
 }
 
 /** The guard and the record it came from, with an earlier deployment named as such. */
@@ -204,6 +205,9 @@ function guardLine(report: CheckReport): string {
   return `${report.guard_account}, from deployment record ${oneLine(r.record, 120)} (${which}, deployed ${oneLine(r.deployed_at, 40)})`;
 }
 
+/** The report as the terminal shows it. Text the chain or kaap-core wrote goes through `shown`, a
+ *  description's line breaks included, so each of these lines prints once; `terminalText` passes
+ *  every line once more. */
 export function render(report: CheckReport, decimals: Map<string, number> = new Map()): string {
   const a = report.analysis;
   const lines = [
@@ -224,13 +228,13 @@ export function render(report: CheckReport, decimals: Map<string, number> = new 
     ...(a.findings.length ? a.findings.map((f) => `  ${f.code.padEnd(26)} ${f.severity}`) : ['  none']),
     `risk floor: ${a.risk_floor}`,
     `description check: ${a.description_check}`,
-    ...report.description_reasons.contradictions.map((why) => `  contradicts: ${why}`),
-    ...report.description_reasons.agreements.map((why) => `  agrees: ${why}`),
+    ...report.description_reasons.contradictions.map((why) => `  contradicts: ${shown(why, 300)}`),
+    ...report.description_reasons.agreements.map((why) => `  agrees: ${shown(why, 300)}`),
     `must_veto: ${a.must_veto}`,
     `veto_allowed: ${a.veto_allowed}`,
     '',
     report.advisory,
   ];
-  return lines.join('\n');
+  return terminalText(lines);
 }
 

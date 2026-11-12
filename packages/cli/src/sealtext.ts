@@ -1,13 +1,15 @@
 // `kaap seal-text`: hands Kaap's worker the text behind a hash-only proposal so that only Kaap's
 // sealed program can read it, and opens the explanation it sends back (C12, C26). Before anything
-// leaves this machine, three checks stop it: the key the text is sealed to must carry a signature
-// by the key the guard accepts on chain, read from two providers at one final block (C22); and the
-// text must hash, by kaap-core's own NEP-413 or NEP-461 hash, to the payload the proposal asks to
-// sign, so a wrong text never costs a paid run; nor does one too long for the run's input, counted
-// as the worker counts it. The guard and the text key come from the deployment record whose guard
-// the DAO is enrolled with, current first (deployment.ts). The text and the reply key's secret stay in memory:
-// they are never written to a file, printed, or sent; only ciphertext and the reply key's public
-// half go to the worker.
+// leaves this machine, four checks stop it: the guard and the registry must still run the build
+// their deployment record names, with no access key (contracts.ts, exit 5 or 6 otherwise); the key
+// the text is sealed to must carry a signature by the key the guard accepts on chain, read from two
+// providers at one final block (C22); and the text must hash, by kaap-core's own NEP-413 or NEP-461
+// hash, to the payload the proposal asks to sign, so a wrong text never costs a paid run; nor does
+// one too long for the run's input, counted as the worker counts it. The worker's answer is printed
+// as its report, with the command that checks it on chain. The guard and the text key come from
+// the deployment record whose guard the DAO is enrolled with, current first (deployment.ts). The
+// text and the reply key's secret stay in memory: they are never written to a file, printed, or
+// sent; only ciphertext and the reply key's public half go to the worker.
 //
 // What this does not cover: whether the worker runs the sealed program at all (its answer is
 // checked for shape, and the explanation must open with this request's reply key, but the verdict
@@ -20,24 +22,19 @@ import { z } from 'zod';
 import { MAX_EXPIRES_IN_MS, MAX_RUN_INPUT_BYTES, MAX_TEXT_ANSWER_BYTES, MAX_TEXT_FILE_BYTES, TEXT_ANSWER_TIMEOUT_MS } from './caps.js';
 import { Held, type Reader } from './chain.js';
 import { type Deps, NoProposal, readers } from './check.js';
+import { contractBlock, contractsAsRecorded, Refused as SealRefused, stopUnlessAsRecorded } from './contracts.js';
 import { type Core, CoreError, type ProposalRead } from './core.js';
 import { describeDeployment, enrolledDeployment, loadTextKey, type TextKey } from './deployment.js';
 import { type HttpResponse, NetError, type Transport } from './net.js';
 import { type Block, type Network, RpcError } from './rpc.js';
 import { explanationContext, type Fresh, openSealed, SEALED_PREFIX, SealingError, sealTo, textContext, textKeySigned } from './sealing.js';
 import { WorkerRefused } from './subscribe.js';
-import { oneLine, shown, utc } from './text.js';
+import { oneLine, shown, shownLines, terminalText, utc } from './text.js';
 import { edKeyBytes } from './verdict.js';
 
-/** Refused on this machine, before or after the worker answered. `code` is the exit code. */
-export class SealRefused extends Error {
-  readonly code: number;
-  constructor(message: string, code = 1) {
-    super(message);
-    this.name = 'SealRefused';
-    this.code = code;
-  }
-}
+// Refused on this machine, before or after the worker answered, with its exit code. The same class
+// stops `kaap arming` when its contracts are not as recorded.
+export { SealRefused };
 
 export interface SealTextRequest {
   dao: string;
@@ -168,7 +165,7 @@ function checkTextHash(text: Text, payloads: string[], request: SealTextRequest)
     throw new SealRefused(`proposal ${request.id} of ${request.dao} asks for no signature, so no text can be behind it: Kaap takes texts only for sign requests. ${NOTHING_SENT}`);
   }
   if (!payloads.includes(text.hash)) {
-    throw new SealRefused(`the text hashes to ${text.hash} (${text.standard}), but proposal ${request.id} asks to sign ${payloads.join(' and ')}: it is not this proposal's text. ${NOTHING_SENT} No run was paid for.`);
+    throw new SealRefused(`the text hashes to ${text.hash} (${text.standard}), but proposal ${request.id} asks to sign ${payloads.map((p) => shown(p, 80)).join(' and ')}: it is not this proposal's text. ${NOTHING_SENT} No run was paid for.`);
   }
 }
 
@@ -200,6 +197,8 @@ export interface SealTextReport {
   providers: string[];
   /** The deployment record the guard and the text key were taken from, as one line. */
   deployment: string;
+  /** The four contract lines under their heading, all passing. */
+  contracts: string[];
   guardKey: string;
   textKey: string;
   textKeyRun: string;
@@ -217,6 +216,8 @@ export async function sealText(deps: Deps & { repoRoot: string; fresh: Fresh }, 
   const reader = readers(deps, request.network);
   const head = await reader.head();
   const { d } = await enrolledDeployment(reader, deps.repoRoot, request.network, request.dao, head);
+  const contracts = await contractsAsRecorded(reader, d, head);
+  stopUnlessAsRecorded(d, contracts, NOTHING_SENT);
   const textKey = loadTextKey(deps.repoRoot, d);
   const guardKey = await checkTextKey(reader, d.guard, textKey, head);
   const text = readText(core, request.file);
@@ -253,6 +254,7 @@ export async function sealText(deps: Deps & { repoRoot: string; fresh: Fresh }, 
     block: head,
     providers: reader.providers,
     deployment: describeDeployment(d),
+    contracts: contractBlock(contracts),
     guardKey,
     textKey: textKey.key.toString('hex'),
     textKeyRun: textKey.runTx,
@@ -340,17 +342,21 @@ function refusal(response: HttpResponse, request: SealTextRequest): WorkerRefuse
 
 const EXPLORER: Readonly<Record<Network, string>> = { mainnet: 'https://nearblocks.io/txns/', testnet: 'https://testnet.nearblocks.io/txns/' };
 
+/** The report as the terminal shows it. The worker's answer is printed as the worker's report and
+ *  followed by the command that checks it on chain; the explanation's own lines are each indented
+ *  under its heading and escaped; every line goes through `terminalText`. */
 export function render(r: SealTextReport): string {
   const v = r.verdict;
-  return [
+  return terminalText([
     `kaap seal-text ${oneLine(r.request.dao, 80)} #${r.request.id} on ${r.request.network}`,
     `read at final block ${r.block.height} (${utc(r.block.timestampNs)}): the guard's key and the proposal, agreed by ${r.providers.join(' and ')}`,
     `Kaap on ${r.request.network}: ${r.deployment}`,
+    ...r.contracts,
     `text key: ${r.textKey} from run ${r.textKeyRun}, signed by the guard's accepted key ${r.guardKey} (checked here with ed25519)`,
     `text: ${r.standard === 'nep413' ? 'NEP-413' : 'NEP-461'}, hashes to ${r.payload}, the payload proposal ${r.request.id} asks to sign`,
     `sent to ${r.request.worker}/texts: ${r.ciphertextBytes} bytes of ciphertext only Kaap's sealed program can open, and a reply key made for this request`,
     '',
-    'verdict',
+    `what the worker at ${r.request.worker} reported, not yet checked against the chain`,
     `  risk: ${v.risk}`,
     `  floor: ${v.floor}`,
     `  findings: ${v.findings.join(', ') || 'none'}`,
@@ -358,9 +364,10 @@ export function render(r: SealTextReport): string {
     `  veto: ${v.veto === 'started' ? "started (the guard's vote to reject lands on chain on its own, after this answer)" : 'not needed'}`,
     `  sealed run: ${EXPLORER[r.request.network]}${v.runTx}`,
     '',
-    'explanation, opened here with the reply key (the worker only ever held ciphertext)',
-    ...shown(r.explanation).split('\n').map((line) => `  ${line}`),
+    "explanation in the worker's answer, opened here with the reply key made for this request",
+    ...shownLines(r.explanation).map((line) => `  ${line}`),
     '',
-    "The verdict is the worker's report of its sealed run. The AI part of a verdict can differ between runs.",
-  ].join('\n');
+    `confirm it from the chain: kaap verify ${oneLine(r.request.dao, 80)} ${r.request.id} --network ${r.request.network}`,
+    'The AI part of a verdict can differ between runs.',
+  ]);
 }

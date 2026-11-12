@@ -13,8 +13,14 @@
 // disagreeing on a receiver's code now, each failing its check and the command; OutLayer's record
 // changed against its TDX quote, its quote rewritten to the Legacy hash, and a record whose quote
 // is rewritten to match it but whose fields or time disagree with the chain, each failing the
-// binding check; a receiver redeployed since the verdict, which warns; no verdict for a proposal;
-// what the command reads; the accounts the receivers hash covers, on the sealed job's own cases; a
+// binding check; the guard and registry of the record that holds the verdict checked first, at the
+// final block (each recording carries both providers' answers for that block, from the archive
+// where the providers no longer keep it), with a guard on other code or holding an access key
+// failing and providers that differ leaving it unread; a node answering, or a chunk listing, a run
+// under another hash or a terminal escape, which is unread and never reaches the output; every line
+// of a report with 300 hostile strings added; a receiver redeployed since the verdict, which warns;
+// no verdict for a proposal; what the command reads; the accounts the receivers hash covers, on the
+// sealed job's own cases; a
 // verdict from another decoder warning without failing; and the verdict reader and the ed25519
 // check on their own. It does not cover Intel's signature on the TDX quote or OutLayer's approval
 // of its measurements (the CLI does not check them and says so), a receivers hash over a called
@@ -28,11 +34,13 @@ import { test } from 'node:test';
 
 import { type BindingRecord, taskHash } from '../src/binding.js';
 import { Core } from '../src/core.js';
+import { RateLimiter } from '../src/limiter.js';
 import { main } from '../src/main.js';
 import { type HttpRequest, NetError, type Transport } from '../src/net.js';
 import { NETWORKS } from '../src/rpc.js';
 import { base58, BadVerdict, decodeVerdict, ed25519Valid, edKeyBytes, signedBytes } from '../src/verdict.js';
-import { calledAccounts, decoderCheck, render } from '../src/verify.js';
+import { calledAccounts, decoderCheck, render, verify } from '../src/verify.js';
+import { carriesHostile, forgedCounts, hostileStrings, taint } from './hostile.js';
 import { answering, fakeClock, load, replay, REPO_ROOT, UNKNOWN_TODAY, withoutAllowedReads } from './replay.js';
 
 const GUARD_KEY = 'ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN';
@@ -40,7 +48,7 @@ const [ARCHIVE = '', SECOND_ARCHIVE = ''] = NETWORKS.testnet.archives;
 const LIVE = new Set([NETWORKS.testnet.primary, NETWORKS.testnet.secondary]);
 /** How each line that rests on the 29 Oct recordings names the archival node they were recorded
  *  from. */
-const FROM_ARCHIVE = ' (chain read from archival-rpc.testnet.fastnear.com)';
+const FROM_ARCHIVE = " (attestation from OutLayer's API alone; chain read from archival-rpc.testnet.fastnear.com, one node per read, not compared)";
 
 /** The recording holds the blocks a passing run read. A run that keeps looking reads the rest of
  *  its window, which the archival node answers here as heights with no block, and the chunks of a
@@ -129,6 +137,45 @@ function editAttestation(change: (a: Record<string, unknown>) => void) {
   };
 }
 
+const VERDICT_RUN = '7vT7uwgwggGUc3CpNgLApgyjFS4s65KTfZTbMF2enx6T';
+const KEY_RUN = '7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC';
+
+/** Changes the transaction a node returns when asked for the run `hash`. */
+function editTx(hash: string, change: (tx: Record<string, unknown>) => void) {
+  return (r: HttpRequest, text: string) => {
+    if (params(r).method !== 'tx' || !r.body?.includes(hash)) return text;
+    const answer = JSON.parse(text) as { result?: { transaction?: Record<string, unknown> } };
+    if (answer.result?.transaction) change(answer.result.transaction);
+    return JSON.stringify(answer);
+  };
+}
+
+/** Changes the run `hash` where a chunk lists it. */
+function editChunkTx(hash: string, change: (tx: Record<string, unknown>) => void) {
+  return (r: HttpRequest, text: string) => {
+    if (params(r).method !== 'chunk') return text;
+    const answer = JSON.parse(text) as { result?: { transactions?: Record<string, unknown>[] } };
+    for (const tx of answer.result?.transactions ?? []) if (tx['hash'] === hash) change(tx);
+    return JSON.stringify(answer);
+  };
+}
+
+const GUARD_1029 = 'kaap-guard-1029061211.testnet';
+/** The 29 Oct registry's code hash: real code, but not the guard's. */
+const REGISTRY_1029_CODE = '65Y2p3NqwjE8z8oXdzvRPjDWux2SXmHrxxzAhpqwPdqY';
+const ONE_KEY = [{ public_key: GUARD_KEY, access_key: { nonce: 1, permission: 'FullAccess' } }];
+
+/** Changes what the live providers in `providers` answer for `account`'s `read` at the final block. */
+function contractRead(account: string, read: 'view_account' | 'view_access_key_list', providers: string[], change: (result: Record<string, unknown>) => void) {
+  return (r: HttpRequest, text: string) => {
+    const p = params(r).params;
+    if (!providers.includes(r.url) || p?.request_type !== read || p.account_id !== account) return text;
+    const answer = JSON.parse(text) as { result: Record<string, unknown> };
+    change(answer.result);
+    return JSON.stringify(answer);
+  };
+}
+
 /** Writes `first` and `rest` into the quote's REPORTDATA, as a server inventing a quote would. */
 function setReportData(a: Record<string, unknown>, first: Buffer, rest: Buffer = Buffer.alloc(32)) {
   const quote = Buffer.from(String(a['tdx_quote']), 'base64');
@@ -159,6 +206,11 @@ test('the 29 Oct attack verdict passes every check, down to the attested run tha
   assert.equal(code, 0, out);
   assert.match(out, /^kaap verify kaap-dao-1029064008\.testnet #2 on testnet$/m);
   assert.match(out, OCT_29_RECORD);
+  assert.match(
+    out,
+    /^checks\n {2}pass {2}guard code: kaap-guard-1029061211\.testnet runs the recorded build, sha256 5adbadb5\.\.\.ec76 \(two providers, block 276019403\)\n {2}pass {2}guard keys: kaap-guard-1029061211\.testnet has no access key, so no one can sign for it \(two providers, block 276019403\)\n {2}pass {2}registry code: kaap-registry-1029061211\.testnet runs the recorded build, sha256 4b73d851\.\.\.539f \(two providers, block 276019403\)\n {2}pass {2}registry keys: kaap-registry-1029061211\.testnet has no access key, so no one can sign for it \(two providers, block 276019403\)$/m,
+    'the contracts of the record that holds the verdict, checked first',
+  );
   assert.match(out, /risk critical, floor critical, findings DESC_CONTRADICTS, UNKNOWN_VALUE, AI unavailable/);
   assert.match(out, /pass {2}sealed signature: valid for the guard's accepted key ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN/);
   assert.match(out, /pass {2}kind hash: kaap-core recomputes c6ca399d/);
@@ -167,11 +219,11 @@ test('the 29 Oct attack verdict passes every check, down to the attested run tha
   assert.match(out, /pass {2}receivers hash: kaap-core recomputes d159b011\.\.\.f3e0 from the code of kaap-dao-1029064008\.testnet at block 275266740 \(read from archival-rpc\.testnet\.fastnear\.com, one node per read, not compared\)$/m);
   assert.match(out, /pass {2}receivers now: the code of kaap-dao-1029064008\.testnet at block \d+ is unchanged since the verdict \(two providers\)$/m);
   assert.match(out, /pass {2}decoder: the verdict names kaap-core 0\.1\.0, the decoder this CLI runs$/m);
-  assert.match(out, /pass {2}sealed run: transaction 7vT7uwgwggGUc3CpNgLApgyjFS4s65KTfZTbMF2enx6T returned exactly this verdict and signature \(found in \d+ blocks, read from archival-rpc\.testnet\.fastnear\.com\)$/m);
+  assert.match(out, /pass {2}sealed run: transaction 7vT7uwgwggGUc3CpNgLApgyjFS4s65KTfZTbMF2enx6T returned exactly this verdict and signature \(found in \d+ blocks, chain read from archival-rpc\.testnet\.fastnear\.com, one node per read, not compared\)$/m);
   assert.match(out, /pass {2}the run: OutLayer's attestation names the same project, caller kaap-worker-1029053612\.testnet and wasm 0099d7b7/);
-  assert.match(out, /^ {2}pass {2}the run: OutLayer's record is the one its TDX quote commits to \(task hash 9b4c3c22\.\.\.da4f, V1\); Intel's signature on the quote is not checked here \(chain read from archival-rpc\.testnet\.fastnear\.com\)$/m);
+  assert.match(out, /^ {2}pass {2}the run: OutLayer's record is the one its TDX quote commits to \(task hash 9b4c3c22\.\.\.da4f, V1\); Intel's signature on the quote is not checked here \(attestation from OutLayer's API alone; chain read from archival-rpc\.testnet\.fastnear\.com, one node per read, not compared\)$/m);
   assert.match(out, /^ {2}pass {2}the key's run 7HvniWe5\.\.\.: OutLayer's record is the one its TDX quote commits to \(task hash [0-9a-f]{8}\.\.\.[0-9a-f]{4}, V1\)/m);
-  assert.match(out, /pass {2}the key's run 7HvniWe5\.\.\.: its attested output prints the guard's accepted key \(chain read from archival-rpc\.testnet\.fastnear\.com\)$/m);
+  assert.match(out, /pass {2}the key's run 7HvniWe5\.\.\.: its attested output prints the guard's accepted key \(chain read from archival-rpc\.testnet\.fastnear\.com, one node per read, not compared\)$/m);
   assert.doesNotMatch(out, /^ {2}(fail|warn)/m);
   assert.match(
     out,
@@ -179,7 +231,7 @@ test('the 29 Oct attack verdict passes every check, down to the attested run tha
   );
   assert.match(out, /AI evidence: none\. .*https:\/\/cloud\.near\.ai\/verify/);
   assert.match(out, /the guard voted to reject with this verdict, and the DAO took the vote/);
-  assert.match(out, /^result: all 20 checks pass$/m);
+  assert.match(out, /^result: all 24 checks pass; 12 of the passes rest on one node or on OutLayer's API alone, as their lines say$/m);
 });
 
 test('the 11 Nov demo verdict passes every check on today\'s record, reading its fresh run from a live provider and only the key\'s run from an archive', async () => {
@@ -187,13 +239,15 @@ test('the 11 Nov demo verdict passes every check on today\'s record, reading its
   assert.equal(code, 0, out);
   assert.match(out, /^kaap verify kaap-dao-1111072928\.testnet #3 on testnet$/m);
   assert.match(out, /^Kaap on testnet: deployment record deployments\/testnet\.json \(the current one, deployed 2026-11-11T07:28:03Z\): guard kaap-guard-1111072803\.testnet, registry kaap-registry-1111072803\.testnet, sealed program kaap-worker-1029053612\.testnet\/kaap-sealed called by kaap-worker-1029053612\.testnet$/m);
+  assert.match(out, /^ {2}pass {2}guard code: kaap-guard-1111072803\.testnet runs the recorded build, sha256 bf09d7bb\.\.\.3767 \(two providers, block 277188465\)$/m);
+  assert.match(out, /^ {2}pass {2}registry keys: kaap-registry-1111072803\.testnet has no access key, so no one can sign for it \(two providers, block 277188465\)$/m);
   assert.match(out, /pass {2}policy hash: kaap-core recomputes .* at block 277184829 \(read from near-testnet\.drpc\.org, one node, not compared\)$/m);
   assert.match(out, /pass {2}receivers hash: kaap-core recomputes .* at block 277184829 \(read from near-testnet\.drpc\.org, one node per read, not compared\)$/m);
-  assert.match(out, /pass {2}sealed run: transaction 4TxRqqMeQJCC1QFzhhzcozBZn1w3ZcDyLX4qXNJH4DSy returned exactly this verdict and signature \(found in 13 blocks, read from near-testnet\.drpc\.org\)$/m);
-  assert.match(out, /pass {2}the run: OutLayer's attestation names the same project, caller kaap-worker-1029053612\.testnet and wasm bf7bb4f8\.\.\.4f58, the build that ran \(chain read from near-testnet\.drpc\.org\)$/m);
-  assert.match(out, /pass {2}the key's run 7HvniWe5\.\.\.: its attested output prints the guard's accepted key \(chain read from archival-rpc\.testnet\.fastnear\.com\)$/m);
+  assert.match(out, /pass {2}sealed run: transaction 4TxRqqMeQJCC1QFzhhzcozBZn1w3ZcDyLX4qXNJH4DSy returned exactly this verdict and signature \(found in 13 blocks, chain read from near-testnet\.drpc\.org, one node per read, not compared\)$/m);
+  assert.match(out, /pass {2}the run: OutLayer's attestation names the same project, caller kaap-worker-1029053612\.testnet and wasm bf7bb4f8\.\.\.4f58, the build that ran \(attestation from OutLayer's API alone; chain read from near-testnet\.drpc\.org, one node per read, not compared\)$/m);
+  assert.match(out, /pass {2}the key's run 7HvniWe5\.\.\.: its attested output prints the guard's accepted key \(chain read from archival-rpc\.testnet\.fastnear\.com, one node per read, not compared\)$/m);
   assert.doesNotMatch(out, /^ {2}(fail|warn|unread)/m);
-  assert.match(out, /^result: all 20 checks pass$/m);
+  assert.match(out, /^result: all 24 checks pass; 12 of the passes rest on one node or on OutLayer's API alone, as their lines say$/m);
   const live = log.find((r) => r.url === NETWORKS.testnet.primary && params(r).method === 'tx' && r.body?.includes('4TxRqqMeQJCC1QFzhhzcozBZn1w3ZcDyLX4qXNJH4DSy'));
   assert.match(live?.body ?? '', /"wait_until":"NONE"/, 'a live provider is asked not to wait');
   const archived = log.filter((r) => NETWORKS.testnet.archives.includes(r.url));
@@ -208,10 +262,10 @@ test('the verdict on proposal 9 of the 29 Oct DAO, from the second published bui
   assert.match(out, OCT_29_RECORD);
   assert.match(out, /pass {2}sealed run: transaction 8P46vmTE9pUDxCX3s4yS5DCUpXdWEVPDRdfGYWJYyTqY returned exactly this verdict and signature/);
   assert.match(out, /pass {2}the run: OutLayer's attestation names the same project, caller kaap-worker-1029053612\.testnet and wasm 73409203/);
-  assert.match(out, /^ {2}pass {2}the run: OutLayer's record is the one its TDX quote commits to \(task hash a4863e46\.\.\.8aa8, V1\); Intel's signature on the quote is not checked here \(chain read from archival-rpc\.testnet\.fastnear\.com\)$/m);
+  assert.match(out, /^ {2}pass {2}the run: OutLayer's record is the one its TDX quote commits to \(task hash a4863e46\.\.\.8aa8, V1\); Intel's signature on the quote is not checked here \(attestation from OutLayer's API alone; chain read from archival-rpc\.testnet\.fastnear\.com, one node per read, not compared\)$/m);
   assert.match(out, /record: https:\/\/testnet-api\.outlayer\.ai\/attestations\/by-tx\/8P46vmTE9pUDxCX3s4yS5DCUpXdWEVPDRdfGYWJYyTqY$/m);
   assert.doesNotMatch(out, /^ {2}(fail|warn)/m);
-  assert.match(out, /^result: all 20 checks pass$/m);
+  assert.match(out, /^result: all 24 checks pass; 12 of the passes rest on one node or on OutLayer's API alone, as their lines say$/m);
 });
 
 test('a changed output hash, caller, timestamp or payment, a non-zero REPORTDATA tail, or a placeholder quote fails the binding check', async () => {
@@ -246,7 +300,7 @@ test('a V1 record whose quote carries its Legacy hash fails: the format is never
     }),
   );
   assert.equal(code, 5, out);
-  assert.match(line(out, BINDING), new RegExp(`^fail {2}the run: OutLayer's record and its TDX quote: the task hash recomputed from the record, 9b4c3c22\\.\\.\\.da4f, is not the ${legacy.slice(0, 8)}\\.\\.\\.${legacy.slice(-4)} the quote commits to \\(chain read from archival-rpc\\.testnet\\.fastnear\\.com\\)$`));
+  assert.match(line(out, BINDING), new RegExp(`^fail {2}the run: OutLayer's record and its TDX quote: the task hash recomputed from the record, 9b4c3c22\\.\\.\\.da4f, is not the ${legacy.slice(0, 8)}\\.\\.\\.${legacy.slice(-4)} the quote commits to \\(attestation from OutLayer's API alone; chain read from archival-rpc\\.testnet\\.fastnear\\.com, one node per read, not compared\\)$`));
 });
 
 test('a record whose quote is rewritten to match it still fails when it disagrees with the chain', async () => {
@@ -305,7 +359,8 @@ test('a called contract whose code at the verdict\'s block is not what the verdi
 function liveCode(codeHash: string, providers: string[], when: (n: number) => boolean) {
   const seen = new Map<string, number>();
   return (r: HttpRequest, text: string) => {
-    if (!providers.includes(r.url) || params(r).params?.request_type !== 'view_account') return text;
+    const p = params(r).params;
+    if (!providers.includes(r.url) || p?.request_type !== 'view_account' || p.account_id !== 'kaap-dao-1029064008.testnet') return text;
     const n = (seen.get(r.url) ?? 0) + 1;
     seen.set(r.url, n);
     if (!when(n)) return text;
@@ -322,7 +377,7 @@ test('a DAO redeployed since the verdict warns in receivers now and fails nothin
   assert.equal(code, 0, out);
   assert.match(line(out, /receivers now/), /^warn {2}receivers now: changed since the verdict: kaap-dao-1029064008\.testnet \(block \d+, two providers\); a redeploy after the verdict does not forge it/);
   assert.match(line(out, /receivers hash/), /^pass/, 'the code at the verdict\'s block is untouched');
-  assert.match(out, /^result: no check fails; 19 pass and 1 warns$/m);
+  assert.match(out, /^result: no check fails; 23 pass and 1 warns; 12 of the passes rest on one node or on OutLayer's API alone, as their lines say$/m);
 });
 
 test('the two live providers disagreeing on a receiver\'s code now fails receivers now', async () => {
@@ -397,7 +452,80 @@ test('an attestation naming another caller fails', async () => {
     a['caller_account_id'] = 'kaap-impostor.testnet';
   }));
   assert.equal(code, 5, out);
-  assert.match(line(out, /the run: OutLayer's attestation/), /^fail {2}the run: OutLayer's attestation: caller kaap-impostor\.testnet, not kaap-worker-1029053612\.testnet \(chain read from archival-rpc\.testnet\.fastnear\.com\)$/);
+  assert.match(line(out, /the run: OutLayer's attestation/), /^fail {2}the run: OutLayer's attestation: caller kaap-impostor\.testnet, not kaap-worker-1029053612\.testnet \(attestation from OutLayer's API alone; chain read from archival-rpc\.testnet\.fastnear\.com, one node per read, not compared\)$/);
+});
+
+test('a node answering a run with another transaction\'s hash leaves that run unread, never a pass', async () => {
+  const verdictRun = await run(editTx(VERDICT_RUN, (t) => (t['hash'] = KEY_RUN)));
+  assert.equal(verdictRun.code, 6, verdictRun.out);
+  assert.match(line(verdictRun.out, /^unread {2}sealed run/), new RegExp(`^unread {2}sealed run: could not be read: archival-rpc\\.testnet\\.fastnear\\.com: answered for transaction ${KEY_RUN} when asked for ${VERDICT_RUN}$`));
+  assert.doesNotMatch(verdictRun.out, /^ {2}(pass|fail) {2}sealed run/m);
+  const keyRun = await run(editTx(KEY_RUN, (t) => (t['hash'] = VERDICT_RUN)));
+  assert.equal(keyRun.code, 6, keyRun.out);
+  assert.match(line(keyRun.out, /^unread {2}the key's run/), new RegExp(`^unread {2}the key's run 7HvniWe5\\.\\.\\.: could not be read \\(archival-rpc\\.testnet\\.fastnear\\.com: answered for transaction ${VERDICT_RUN} when asked for ${KEY_RUN}\\)$`));
+  assert.doesNotMatch(keyRun.out, /^ {2}pass {2}the key's run/m);
+});
+
+test('a run whose hash is X and a terminal escape is refused where a node answers it or lists it, and no escape reaches the output', async () => {
+  const attack = 'X\u001b[8m';
+  const answered = await run(editTx(VERDICT_RUN, (t) => (t['hash'] = attack)));
+  assert.equal(answered.code, 6, answered.out);
+  assert.match(line(answered.out, /^unread {2}sealed run/), new RegExp(`answered for transaction X\\\\u\\{1b\\}\\[8m when asked for ${VERDICT_RUN}$`));
+  const listed = await run(editChunkTx(VERDICT_RUN, (t) => (t['hash'] = attack)));
+  assert.equal(listed.code, 6, listed.out);
+  assert.match(line(listed.out, /^unread {2}sealed run/), /: a transaction from kaap-worker-1029053612\.testnet to outlayer\.testnet in block \d+ is not readable$/);
+  for (const o of [answered, listed]) {
+    assert.doesNotMatch(`${o.out}${o.err}`, /\u001b/);
+    assert.doesNotMatch(o.out, /^ {2}pass {2}sealed run/m);
+  }
+});
+
+test('every line of a verify report, with each of 300 hostile strings added, prints with no control, direction or zero-width character and starts no line', async () => {
+  const fx = load('verify-1029-2.json');
+  const clock = fakeClock();
+  const report = await verify(
+    { core: await Core.load(), transport: pruned(answering(wholeWindow(replay(fx)), fx, UNKNOWN_TODAY)), limiter: new RateLimiter(1_000, clock), clock, repoRoot: REPO_ROOT },
+    { dao: 'kaap-dao-1029064008.testnet', id: 2, network: 'testnet' },
+  );
+  const baseline = render(taint(report, 'q'));
+  assert.equal(baseline.split('\n').filter((l) => l.startsWith('result:')).length, 1, baseline);
+  for (const attack of hostileStrings(300)) {
+    const out = render(taint(report, attack));
+    assert.ok(!carriesHostile(out), JSON.stringify(attack));
+    assert.equal(out.split('\n').length, baseline.split('\n').length, JSON.stringify(attack));
+    assert.deepEqual(forgedCounts(out), forgedCounts(baseline), JSON.stringify(attack));
+  }
+});
+
+test('a guard whose code is not the build its deployment record names fails verify, exit 5', async () => {
+  const t = NETWORKS.testnet;
+  const { code, out } = await run(contractRead(GUARD_1029, 'view_account', [t.primary, t.secondary], (a) => (a['code_hash'] = REGISTRY_1029_CODE)));
+  assert.equal(code, 5, out);
+  assert.match(line(out, /guard code:/), /^fail {2}guard code: kaap-guard-1029061211\.testnet runs code with sha256 4b73d851\.\.\.539f, not the recorded build 5adbadb5\.\.\.ec76 \(two providers, block 276019403\)$/);
+  assert.match(line(out, /guard keys:/), /^pass {2}guard keys: kaap-guard-1029061211\.testnet has no access key, so no one can sign for it \(two providers, block 276019403\)$/);
+  assert.match(line(out, /sealed signature/), /^pass/, 'the other checks still run');
+});
+
+test('a guard with one access key fails verify, exit 5', async () => {
+  const t = NETWORKS.testnet;
+  const { code, out } = await run(contractRead(GUARD_1029, 'view_access_key_list', [t.primary, t.secondary], (a) => (a['keys'] = ONE_KEY)));
+  assert.equal(code, 5, out);
+  assert.match(line(out, /guard keys:/), new RegExp(`^fail {2}guard keys: kaap-guard-1029061211\\.testnet has 1 access key \\(${GUARD_KEY}\\), so whoever holds it can sign for it \\(two providers, block 276019403\\)$`));
+  assert.match(line(out, /guard code:/), /^pass {2}guard code: kaap-guard-1029061211\.testnet runs the recorded build, sha256 5adbadb5\.\.\.ec76 \(two providers, block 276019403\)$/);
+});
+
+test("two providers that differ on the guard's code or on its keys leave that check unread, exit 6", async () => {
+  const t = NETWORKS.testnet;
+  const cases: [string, (r: HttpRequest, text: string) => string][] = [
+    ['guard code', contractRead(GUARD_1029, 'view_account', [t.secondary], (a) => (a['code_hash'] = REGISTRY_1029_CODE))],
+    ['guard keys', contractRead(GUARD_1029, 'view_access_key_list', [t.secondary], (a) => (a['keys'] = ONE_KEY))],
+  ];
+  for (const [what, edit] of cases) {
+    const { code, out } = await run(edit);
+    assert.equal(code, 6, `${what}\n${out}`);
+    assert.doesNotMatch(out, /^ {2}fail/m, what);
+    assert.match(line(out, new RegExp(`${what}:`)), new RegExp(`^unread {2}${what}: kaap-guard-1029061211\\.testnet could not be read at block 276019403: the two providers disagree on the (code|access keys) of kaap-guard-1029061211\\.testnet$`), what);
+  }
 });
 
 test('a proposal no registry in the chain of records holds a verdict for exits 3 and prints no checks', async () => {
@@ -420,9 +548,9 @@ test('with the first archive refusing every request, every check passes through 
   assert.equal(code, 0, out);
   assert.match(out, /pass {2}policy hash: kaap-core recomputes .* \(read from archival-rpc\.testnet\.near\.org, one node, not compared\)$/m);
   assert.match(out, /pass {2}receivers hash: .* \(read from archival-rpc\.testnet\.near\.org, one node per read, not compared\)$/m);
-  assert.match(out, /pass {2}sealed run: transaction 7vT7uwgwggGUc3CpNgLApgyjFS4s65KTfZTbMF2enx6T returned exactly this verdict and signature \(found in \d+ blocks, read from archival-rpc\.testnet\.near\.org\)$/m);
-  assert.match(out, /pass {2}the key's run 7HvniWe5\.\.\.: its attested output prints the guard's accepted key \(chain read from archival-rpc\.testnet\.near\.org\)$/m);
-  assert.match(out, /^result: all 20 checks pass$/m);
+  assert.match(out, /pass {2}sealed run: transaction 7vT7uwgwggGUc3CpNgLApgyjFS4s65KTfZTbMF2enx6T returned exactly this verdict and signature \(found in \d+ blocks, chain read from archival-rpc\.testnet\.near\.org, one node per read, not compared\)$/m);
+  assert.match(out, /pass {2}the key's run 7HvniWe5\.\.\.: its attested output prints the guard's accepted key \(chain read from archival-rpc\.testnet\.near\.org, one node per read, not compared\)$/m);
+  assert.match(out, /^result: all 24 checks pass; 12 of the passes rest on one node or on OutLayer's API alone, as their lines say$/m);
   assert.equal(refused, 3, 'asked at once, after 2 s and after 5 s, then left to rest for the rest of the run');
 });
 
@@ -454,9 +582,9 @@ test('KAAP_ARCHIVAL_RPC is asked before the public archives, each line names it,
   const { code, out } = await run(undefined, named, undefined, { vars: { KAAP_ARCHIVAL_RPC: `${own}/` } });
   assert.equal(code, 0, out);
   assert.match(out, /pass {2}policy hash: kaap-core recomputes .* \(read from archive\.example\.org, one node, not compared\)$/m);
-  assert.match(out, /pass {2}the run: OutLayer's attestation names the same project, .* \(chain read from archive\.example\.org\)$/m);
-  assert.match(out, /pass {2}the key's run 7HvniWe5\.\.\.: its attested output prints the guard's accepted key \(chain read from archive\.example\.org\)$/m);
-  assert.match(out, /^result: all 20 checks pass$/m);
+  assert.match(out, /pass {2}the run: OutLayer's attestation names the same project, .* \(attestation from OutLayer's API alone; chain read from archive\.example\.org, one node per read, not compared\)$/m);
+  assert.match(out, /pass {2}the key's run 7HvniWe5\.\.\.: its attested output prints the guard's accepted key \(chain read from archive\.example\.org, one node per read, not compared\)$/m);
+  assert.match(out, /^result: all 24 checks pass; 12 of the passes rest on one node or on OutLayer's API alone, as their lines say$/m);
   assert.equal(toPublic, ownLacked);
 });
 
@@ -471,7 +599,7 @@ test('OutLayer\'s API dropping a connection is asked again, and one that never a
   };
   const once = await run(undefined, dropOnce);
   assert.equal(once.code, 0, once.out);
-  assert.match(once.out, /^result: all 20 checks pass$/m);
+  assert.match(once.out, /^result: all 24 checks pass; 12 of the passes rest on one node or on OutLayer's API alone, as their lines say$/m);
 
   let gets = 0;
   const down = (t: Transport): Transport => async (r) => {
@@ -484,9 +612,9 @@ test('OutLayer\'s API dropping a connection is asked again, and one that never a
   assert.equal(code, 6, out);
   assert.doesNotMatch(out, /^ {2}fail/m);
   assert.equal(out.match(/^ {2}unread {2}/gm)?.length, 6, 'three checks for each of the two runs');
-  assert.match(line(out, /^unread {2}the run: the attested input and output hashes/), /could not be checked, because OutLayer's API did not answer for its attestation \(OutLayer answered HTTP 503\) \(chain read from archival-rpc\.testnet\.fastnear\.com\)$/);
+  assert.match(line(out, /^unread {2}the run: the attested input and output hashes/), /could not be checked, because OutLayer's API did not answer for its attestation \(OutLayer answered HTTP 503\) \(chain read from archival-rpc\.testnet\.fastnear\.com, one node per read, not compared\)$/);
   assert.match(line(out, /^pass {2}the run: outlayer\.testnet recorded the request/), /a published build/, 'the chain record of the run is still checked');
-  assert.match(out, /^result: no check fails, but 6 of 20 could not be read\nOutLayer's API is not answering: wait a minute and run again\.$/m);
+  assert.match(out, /^result: no check fails, but 6 of 24 could not be read; 6 of the passes rest on one node or on OutLayer's API alone, as their lines say\nOutLayer's API is not answering: wait a minute and run again\.$/m);
 });
 
 test('verify only reads: fixed hosts, view, block, chunk and tx calls, and GETs of attestations', async () => {
@@ -501,7 +629,7 @@ test('verify only reads: fixed hosts, view, block, chunk and tx calls, and GETs 
     }
     assert.ok(rpc.has(r.url), r.url);
     const { method, params: p } = JSON.parse(r.body ?? '{}') as { method: string; params: { request_type?: string; method_name?: string } };
-    assert.ok(['block', 'chunk', 'tx'].includes(method) || (method === 'query' && (p.request_type === 'view_account' || views.has(p.method_name ?? ''))), r.body);
+    assert.ok(['block', 'chunk', 'tx'].includes(method) || (method === 'query' && (p.request_type === 'view_account' || p.request_type === 'view_access_key_list' || views.has(p.method_name ?? ''))), r.body);
   }
   const src = new URL('../../src/', import.meta.url);
   for (const file of readdirSync(src).filter((f) => f.endsWith('.ts'))) {

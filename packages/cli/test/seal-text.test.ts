@@ -1,11 +1,13 @@
 // `kaap seal-text` against a stand-in chain and a stand-in worker that opens the text with the
 // sealed program's key and seals an explanation back: the encryption against the round-trip
-// script's own code on fixed inputs, the judged answer printed with its explanation opened, every
-// refusal before anything reaches the worker (no text key, a key the guard's key did not sign, a
-// text that does not hash to the payload, a text too long for the run's input), every answer the
-// worker's POST /texts gives, with its model id when judged, and two privacy claims, each checked
-// on the bytes: the request holds no plaintext, and nothing is written to a file while the command
-// runs. It does not cover the real worker or OutLayer (only a live testnet run reaches them), the
+// script's own code on fixed inputs, the judged answer printed as the worker's report with its
+// explanation opened, an explanation carrying terminal controls, every refusal before anything
+// reaches the worker (a guard on other code or one the providers differ on, no text key, a key the
+// guard's key did not sign, a text that does not hash to the payload, a text too long for the run's
+// input), every answer the worker's POST /texts gives, with its model id when judged, and two
+// privacy claims, each checked on the bytes: the request holds no plaintext, and nothing is written
+// to a file while the command runs. The stand-in chain answers the guard's and registry's code and
+// keys as both providers did live on 12 Nov. It does not cover the real worker or OutLayer (only a live testnet run reaches them), the
 // sealed program's own opening in Rust (scripts/text-roundtrip.mjs --local checks Node against
 // it), or a NEP-461 text that opens (none is planted yet).
 
@@ -23,6 +25,7 @@ import { main } from '../src/main.js';
 import { type HttpRequest, type HttpResponse, NetError, type Transport } from '../src/net.js';
 import { NETWORKS } from '../src/rpc.js';
 import { cryptoFresh, explanationContext, type Fresh, openSealed, OVERHEAD, rawPublicKey, SEALED_PREFIX, sealTo, textContext, type X25519Pair } from '../src/sealing.js';
+import { carriesHostile } from './hostile.js';
 import { fakeClock, REPO_ROOT } from './replay.js';
 
 const DAO = 'kaap-dao-1029064008.testnet';
@@ -91,11 +94,30 @@ function signProposal(payload: string) {
 const rpc = (result: unknown): HttpResponse => ({ status: 200, text: JSON.stringify({ jsonrpc: '2.0', id: 'kaap', result }) });
 const viewResult = (value: unknown) => rpc({ result: [...Buffer.from(JSON.stringify(value))], logs: [], block_height: HEIGHT, block_hash: BLOCK_HASH });
 
-/** Both testnet providers, answering one final block, the guard's key and the DAO's proposal. */
-function chainAnswer(r: HttpRequest, acceptedKey: string, proposal: object): HttpResponse | null {
+const REGISTRY = 'kaap-registry-1029061211.testnet';
+/** The 29 Oct guard's and registry's `view_account` and `view_access_key_list`, as both providers
+ *  answered them live on 12 Nov: the code each record names, and no access key. */
+const CONTRACTS: Record<string, { amount: string; code_hash: string; storage_usage: number }> = {
+  [GUARD]: { amount: '9999705700160958800000000', code_hash: '77fyhhxdRnHzb8efe9HBYL8C3KcUpEbbRjLvrNyqoxbP', storage_usage: 221803 },
+  [REGISTRY]: { amount: '10097032647510237400000000', code_hash: '65Y2p3NqwjE8z8oXdzvRPjDWux2SXmHrxxzAhpqwPdqY', storage_usage: 192797 },
+};
+
+/** What each provider answers for a contract's code and keys; `edit` may change one answer. */
+type ContractEdit = (url: string, read: string, account: string, result: Record<string, unknown>) => void;
+
+/** Both testnet providers, answering one final block, the guard's key, the DAO's proposal, and the
+ *  29 Oct guard's and registry's code and keys. */
+function chainAnswer(r: HttpRequest, acceptedKey: string, proposal: object, edit: ContractEdit = () => {}): HttpResponse | null {
   if (r.url !== NETWORKS.testnet.primary && r.url !== NETWORKS.testnet.secondary) return null;
   const { method, params } = JSON.parse(r.body ?? '{}') as { method?: string; params?: { request_type?: string; method_name?: string; account_id?: string } };
   if (method === 'block') return rpc({ header: { height: HEIGHT, hash: BLOCK_HASH, timestamp_nanosec: TIMESTAMP_NS }, chunks: [] });
+  const contract = params?.account_id === undefined ? undefined : CONTRACTS[params.account_id];
+  if (method === 'query' && contract && params?.account_id && (params.request_type === 'view_account' || params.request_type === 'view_access_key_list')) {
+    const pinned = { block_height: HEIGHT, block_hash: BLOCK_HASH };
+    const result: Record<string, unknown> = params.request_type === 'view_account' ? { ...contract, locked: '0', storage_paid_at: 0, ...pinned } : { keys: [], ...pinned };
+    edit(r.url, params.request_type, params.account_id, result);
+    return rpc(result);
+  }
   if (method === 'query' && params?.request_type === 'call_function') {
     if (params.method_name === 'accepted_key' && params.account_id === GUARD) return viewResult(acceptedKey);
     if (params.method_name === 'get_proposal' && params.account_id === DAO) return viewResult(proposal);
@@ -105,15 +127,15 @@ function chainAnswer(r: HttpRequest, acceptedKey: string, proposal: object): Htt
 }
 
 /** The worker, standing in for the sealed program: it opens the text with the program's key, keeps
- *  what it opened in `opened`, and seals the explanation back to the reply key. */
-function judging(opened: string[] = [], over: Record<string, unknown> = {}) {
+ *  what it opened in `opened`, and seals `said` back to the reply key as the explanation. */
+function judging(opened: string[] = [], over: Record<string, unknown> = {}, said = EXPLANATION) {
   return (r: HttpRequest): HttpResponse => {
     const body = JSON.parse(r.body ?? '{}') as { dao: string; proposal_id: number; text_ciphertext: string; reply_key: string };
     const reply = Buffer.from(body.reply_key, 'hex');
     const text = openSealed(PROGRAM.privateKey, Buffer.from(body.text_ciphertext, 'base64'), textContext('testnet', body.dao, body.proposal_id, reply));
     assert.ok(text, 'the sealed program opens the text');
     opened.push(text.toString('utf8'));
-    const explanation = `${SEALED_PREFIX}${sealTo(reply, Buffer.from(EXPLANATION), explanationContext('testnet', body.dao, body.proposal_id, reply), cryptoFresh).toString('base64')}`;
+    const explanation = `${SEALED_PREFIX}${sealTo(reply, Buffer.from(said), explanationContext('testnet', body.dao, body.proposal_id, reply), cryptoFresh).toString('base64')}`;
     const answer = { status: 'judged', run_tx: RUN_TX, risk: 'critical', floor: 'critical', findings: ['HASH_TEXT_DANGEROUS'], ai_status: 'verified', model_id: MODEL, explanation, veto: 'started' };
     return { status: 200, text: JSON.stringify({ ...answer, ...over }) };
   };
@@ -177,6 +199,7 @@ interface RunOptions {
   worker?: (r: HttpRequest) => HttpResponse;
   fresh?: Fresh;
   watch?: boolean;
+  contracts?: ContractEdit;
 }
 
 /** A clone of the testnet records, today's and the 29 Oct one it names in `previous`, with
@@ -200,7 +223,7 @@ async function run(o: RunOptions = {}) {
   const asked: HttpRequest[] = [];
   const transport: Transport = async (r) => {
     asked.push(r);
-    const answer = chainAnswer(r, o.acceptedKey ?? ACCEPTED_KEY, o.proposal ?? signProposal(PAYLOAD));
+    const answer = chainAnswer(r, o.acceptedKey ?? ACCEPTED_KEY, o.proposal ?? signProposal(PAYLOAD), o.contracts);
     if (answer) return answer;
     if (r.method === 'POST' && r.url === `${WORKER}/texts`) return (o.worker ?? judging())(r);
     throw new NetError('unreachable', new URL(r.url).host);
@@ -279,6 +302,7 @@ test('a sealed text comes back judged: the verdict, the veto and the explanation
   assert.equal(toWorker.length, 1);
   assert.match(out, /^Kaap on testnet: deployment record deployments\/testnet-2026-10-29\.json \(an earlier deployment, not the current deployments\/testnet\.json, deployed 2026-10-29T06:12:11Z\): guard kaap-guard-1029061211\.testnet, /m, 'the record whose guard the DAO is enrolled with');
   assert.deepEqual(opened.map((t) => JSON.parse(t) as unknown), [TEXT], 'the sealed program reads the text as the file holds it');
+  assert.equal(out.split('\n').filter((l) => /^ {2}pass {2}(guard|registry) (code|keys): kaap-(guard|registry)-1029061211\.testnet /.test(l)).length, 4, 'the 29 Oct contracts are checked');
   assert.match(out, new RegExp(`signed by the guard's accepted key ${ACCEPTED_KEY} \\(checked here with ed25519\\)`));
   assert.match(out, new RegExp(`hashes to ${PAYLOAD}, the payload proposal ${ID} asks to sign`));
   for (const line of ['  risk: critical', '  floor: critical', '  findings: HASH_TEXT_DANGEROUS', `  AI: verified, model ${MODEL}`, `  sealed run: https://testnet.nearblocks.io/txns/${RUN_TX}`]) {
@@ -286,10 +310,23 @@ test('a sealed text comes back judged: the verdict, the veto and the explanation
   }
   assert.match(out, /^ {2}veto: started /m);
   assert.match(out, /^ {2}AI verified: the text signs an intent the description does not mention\.\n {2}It pays an account this DAO has never paid\.$/m);
+  assert.match(out, /^what the worker at https:\/\/kaap\.example\.com reported, not yet checked against the chain\n {2}risk: critical$/m, "the answer is the worker's report");
+  assert.match(out, /^confirm it from the chain: kaap verify kaap-dao-1029064008\.testnet 41 --network testnet$/m);
+  assert.doesNotMatch(out, /verified by Kaap|^verdict$/m);
 
   const quiet = await run({ worker: judging([], { veto: 'not_needed', risk: 'low', floor: 'low', findings: [], ai_status: 'unavailable', model_id: null }) });
   assert.equal(quiet.code, 0);
   for (const line of ['  veto: not needed', '  findings: none', '  AI: unavailable, no model answered']) assert.ok(quiet.out.split('\n').includes(line), line);
+});
+
+test("an explanation that carries terminal controls and imitates Kaap's lines prints each of its lines indented under its heading, escaped", async () => {
+  const said = 'ok\u001b[2J\nconfirm it from the chain: kaap verify x 1\r‮evil​\n\nThe verdict is verified.';
+  const { code, out } = await run({ worker: judging([], {}, said) });
+  assert.equal(code, 0, out);
+  assert.ok(!carriesHostile(out), out);
+  const lines = out.split('\n');
+  const at = lines.findIndex((l) => l.startsWith('explanation'));
+  assert.deepEqual(lines.slice(at + 1, at + 6), ['  ok\\u{1b}[2J', '  confirm it from the chain: kaap verify x 1\\r\\u{202e}evil\\u{200b}', '  ', '  The verdict is verified.', '']);
 });
 
 test("a text too long for the sealed run's 32 KiB input is refused before any request, counted as the worker counts it", async () => {
@@ -358,6 +395,27 @@ test('no recorded text key is refused before anything reaches the worker, saying
   assert.match(err, /^Kaap's worker has not published the key a text is sealed to on testnet yet \(no text_key in deployments\/testnet-2026-10-29\.json\)\. Nothing was sent\.$/);
   assert.equal(toWorker.length, 0);
   assert.ok(asked.every((r) => r.method === 'POST' && /"method":"(block|query)"/.test(r.body ?? '') && !/"method_name":"get_proposal"/.test(r.body ?? '')), 'only the final block and the enrolment are read');
+});
+
+test('a guard that is not the recorded build, or that the providers differ on, stops seal-text before anything is sealed or sent', async () => {
+  const otherCode: ContractEdit = (_url, read, account, result) => {
+    if (read === 'view_account' && account === GUARD) result['code_hash'] = CONTRACTS[REGISTRY]?.code_hash;
+  };
+  const secondDiffers: ContractEdit = (url, read, account, result) => {
+    if (url === NETWORKS.testnet.secondary && read === 'view_access_key_list' && account === GUARD) result['keys'] = [{ public_key: ACCEPTED_KEY, access_key: { nonce: 1, permission: 'FullAccess' } }];
+  };
+  for (const [why, contracts, exit, says] of [
+    ['another build', otherCode, 5, /^ {2}fail {2}guard code: kaap-guard-1029061211\.testnet runs code with sha256 4b73d851\.\.\.539f, not the recorded build 5adbadb5\.\.\.ec76 \(two providers, block 250000000\)$/m],
+    ['providers that differ', secondDiffers, 6, /^ {2}unread {2}guard keys: kaap-guard-1029061211\.testnet could not be read at block 250000000: the two providers disagree on the access keys of kaap-guard-1029061211\.testnet$/m],
+  ] as const) {
+    const { code, out, err, toWorker } = await run({ contracts });
+    assert.equal(code, exit, `${why}\n${err}`);
+    assert.equal(out, '', why);
+    assert.equal(toWorker.length, 0, `${why}: the worker received a request`);
+    assert.match(err, says, why);
+    assert.equal(err.split('\n').filter((l) => /^ {2}(pass|fail|unread) {2}(guard|registry) (code|keys): /.test(l)).length, 4, why);
+    assert.match(err, /Nothing was sent\.$/, why);
+  }
 });
 
 test("a text key the guard's key did not sign is refused before any request to the worker", async () => {
