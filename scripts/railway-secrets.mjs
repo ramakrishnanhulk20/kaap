@@ -11,11 +11,13 @@
 // From the repository root, with the Railway command line signed in:
 //   node scripts/railway-secrets.mjs --key-file <the near-cli key file of the watcher account>
 // Options, with their defaults: --project kaap --service watcher --volume watcher-volume
-//   --environment production. Add --dry-run to make every check and place nothing.
+//   --environment production. Add --dry-run to make every check and place nothing, and
+//   --railway <path> when the Railway command is somewhere this terminal does not look.
 // The person who runs this is the one moving the secrets: it asks nothing and shows no value.
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const args = process.argv.slice(2);
@@ -35,26 +37,51 @@ const fail = (message) => {
   process.exit(1);
 };
 
+const windows = process.platform === 'win32';
+
+function start(command, parameters, input) {
+  const options = { input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, MSYS_NO_PATHCONV: '1' } };
+  if (!windows) return spawnSync(command, parameters, options);
+  // On Windows the command is a .cmd file, which only a shell can start, so the line is quoted
+  // here for that shell. No secret is ever on it: the token goes in on standard input.
+  const words = [command, ...parameters];
+  const odd = words.find((w) => /["%\r\n]/.test(w));
+  if (odd !== undefined) fail(`this cannot be passed to the Railway command on Windows: ${odd.slice(0, 80)}`);
+  const line = words.map((w) => (/^[A-Za-z0-9_.\/:=@\-]+$/.test(w) ? w : `"${w}"`)).join(' ');
+  return spawnSync(line, { ...options, shell: true });
+}
+
+/** Where the Railway command is. A terminal does not always have npm's own folder on its PATH,
+ *  and on Windows that folder is where `npm i -g @railway/cli` puts the command. */
+function findRailway() {
+  const given = option('railway');
+  const places = given ? [given] : ['railway', ...(windows && process.env.APPDATA ? [join(process.env.APPDATA, 'npm', 'railway.cmd')] : [])];
+  for (const place of places) {
+    if (place !== 'railway' && !existsSync(place)) continue;
+    const r = start(place, ['--version']);
+    if (!r.error && r.status === 0) return place;
+  }
+  return fail(given ? `no Railway command answers at ${given}` : 'the Railway command was not found from this terminal: install it with "npm i -g @railway/cli", or name its place with --railway <path>');
+}
+const railwayCommand = findRailway();
+
 /** Runs the Railway command line. Its own output is shown only when `show` is set, since some
  *  commands echo what they were given. */
 function railway(parameters, { input, show = false } = {}) {
-  // On Windows the command is a .cmd file, which only a shell can start, so each parameter is
-  // quoted for that shell. No secret is ever a parameter: the token goes in on standard input.
-  const windows = process.platform === 'win32';
-  const quoted = windows ? parameters.map((p) => (/^[A-Za-z0-9_.\/:=@\-]+$/.test(p) ? p : `"${p.replaceAll('"', '')}"`)) : parameters;
-  const r = spawnSync('railway', quoted, { input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], shell: windows, env: { ...process.env, MSYS_NO_PATHCONV: '1' } });
-  if (r.error) fail(`the railway command could not be run: ${r.error.message}`);
+  const r = start(railwayCommand, parameters, input);
+  if (r.error) fail(`the Railway command could not be run: ${r.error.message}`);
   if (show) process.stdout.write(r.stdout);
   return { ok: r.status === 0, out: r.stdout, err: r.stderr };
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
 if (!keyFile) fail('give the key file: --key-file <path>');
 if (!existsSync(keyFile)) fail(`there is no file at ${keyFile}`);
 
+// Railway says in its own words whether the folder is not linked or the login has run out.
 const linked = railway(['status', '--json']);
-if (!linked.ok) fail('this folder is not linked to a Railway project: run "railway link" here first');
+if (!linked.ok) fail(`Railway would not show this folder's project: ${(linked.err || linked.out).trim().slice(0, 200) || 'it gave no reason'}`);
 let linkedName = '';
 try {
   linkedName = JSON.parse(linked.out).name ?? '';
@@ -118,7 +145,7 @@ console.log('1 of 3  bot token set as a service variable; the service is startin
 let uploaded = false;
 for (let i = 0; i < 60 && !uploaded; i++) {
   await sleep(i === 0 ? 20_000 : 8_000);
-  const up = railway(['volume', 'files', '--volume', volume, 'upload', keyFile, remote, '--overwrite']);
+  const up = railway(['volume', 'files', '--volume', volume, 'upload', resolve(keyFile), remote, '--overwrite']);
   uploaded = up.ok;
   if (!up.ok && !/no active deployment|not ready|deploying|restart/i.test(up.err + up.out)) fail(`the key file could not be placed: ${(up.err || up.out).trim().slice(0, 200)}`);
 }
