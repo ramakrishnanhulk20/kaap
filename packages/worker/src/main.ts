@@ -104,6 +104,7 @@ async function main(): Promise<void> {
       enrolledMs: config.KAAP_ENROLLED_MS,
       holdAlertMs: config.KAAP_HOLD_ALERT_MS,
       backfillWindow: config.KAAP_BACKFILL_WINDOW,
+      maxWatchedDaos: config.KAAP_MAX_WATCHED_DAOS,
       maxConcurrentRuns: config.KAAP_MAX_CONCURRENT_RUNS,
       lagAlertMs: config.KAAP_LAG_ALERT_MS,
       workerAccount: config.KAAP_WORKER_ACCOUNT,
@@ -117,6 +118,7 @@ async function main(): Promise<void> {
       log,
       now,
       watching: () => worker!.watching(),
+      notWatched: () => worker!.notWatched(),
       texts: worker,
       proposal: (dao, id) => {
         const row = store.judged(config.KAAP_NETWORK, dao, id);

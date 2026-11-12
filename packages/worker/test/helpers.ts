@@ -29,7 +29,10 @@ export const GUARD = 'guard.kaap.testnet';
 export const REGISTRY = 'registry.kaap.testnet';
 export const DAO = 'treasury.sputnik.testnet';
 export const DAO_CODE = 'DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF';
-export const POLICY = daoReads.get_policy;
+/** The recorded policy with its guard role naming this test's guard, so the fake DAO arms it. */
+export const POLICY = daoReads.get_policy.replaceAll('kaap-guard-1029061211.testnet', GUARD);
+/** The recorded policy as it was: its guard role names another account, so it arms no guard here. */
+export const UNARMED_POLICY = daoReads.get_policy;
 export const T0 = Date.parse('2026-11-02T10:00:00Z');
 
 export const noSleep = async () => {};
@@ -78,6 +81,12 @@ export class FakeProvider implements ViewProvider {
   registryHistory = new Map<string, string[]>();
   /** Liquid yoctoNEAR per account; 1 NEAR when unset. Every account uses 100 bytes of storage. */
   balances = new Map<string, bigint>();
+  /** Each DAO's `veto_unreadable` setting on the guard; false when unset. */
+  strict = new Map<string, boolean>();
+  /** What the guard's `pending_key` view returns. */
+  pendingKey: unknown = null;
+  /** View methods that fail on this provider alone. */
+  failing = new Set<string>();
   down = false;
   calls: Array<{ method: string; at: At }> = [];
 
@@ -92,6 +101,9 @@ export class FakeProvider implements ViewProvider {
   async callFunction(account: string, method: string, args: Record<string, unknown>, at: At): Promise<ViewResult> {
     this.calls.push({ method, at });
     if (this.down) throw new Error(`${this.name} is down`);
+    if (this.failing.has(method)) throw new Error(`${this.name}: ${method} failed`);
+    if (method === 'veto_unreadable') return this.#result(JSON.stringify(this.strict.get(String(args.dao)) ?? false));
+    if (method === 'pending_key') return this.#result(JSON.stringify(this.pendingKey));
     if (method === 'get_last_proposal_id') return this.#result(String('finality' in at && at.finality === 'optimistic' ? this.optimistic : this.final));
     if (method === 'get_policy') return this.#result(this.policy);
     if (method === 'get_proposal') {

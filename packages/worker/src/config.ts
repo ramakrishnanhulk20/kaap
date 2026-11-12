@@ -4,6 +4,7 @@
 
 import { z } from 'zod';
 
+import { DEFAULT_MAX_WATCHED_DAOS, MAX_IDS_PER_PASS } from './limits.ts';
 import { parseNear } from './near.ts';
 
 // NEAR's own account id rule (nearcore `AccountId::validate`): 2 to 64 characters, lowercase
@@ -45,7 +46,11 @@ const schema = z
     KAAP_VERDICT_TTL_MS: count(60_000, 3_600_000).default(600_000),
     KAAP_RUN_WINDOW_BLOCKS: count(50, 2_000).default(220),
     KAAP_HOLD_ALERT_MS: count(1_000, 600_000).default(30_000),
-    KAAP_BACKFILL_WINDOW: count(1, 1_000).default(100),
+    // How far back the first look at a treasury goes. No more than one pass takes up, so the
+    // newest proposals are never the ones left out.
+    KAAP_BACKFILL_WINDOW: z.coerce.number().int().min(1).max(MAX_IDS_PER_PASS, `at most ${MAX_IDS_PER_PASS}, the most proposal ids the worker takes up in one pass`).default(MAX_IDS_PER_PASS),
+    // Anyone can enrol an account in the guard, so the number watched at once has a ceiling.
+    KAAP_MAX_WATCHED_DAOS: count(1, 5_000).default(DEFAULT_MAX_WATCHED_DAOS),
     KAAP_MAX_CONCURRENT_RUNS: count(1, 32).default(4),
     KAAP_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     TELEGRAM_BOT_TOKEN: z.string().regex(/^\d{5,16}:[A-Za-z0-9_-]{30,64}$/, 'not a bot token as BotFather gives it (<digits>:<letters>)'),

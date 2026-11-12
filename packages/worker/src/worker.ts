@@ -10,10 +10,12 @@ import { PER_STOPPED_ATTACK } from './caps.ts';
 import { ACCOUNT_ID } from './config.ts';
 import { ALL, type Health, type Signal } from './health.ts';
 import type { Judge, Judgement, SealedText } from './judge.ts';
+import { DEFAULT_MAX_WATCHED_DAOS, DEFAULT_PROPOSAL_PERIOD_MS, MAX_IDS_PER_PASS } from './limits.ts';
 import type { Logger } from './log.ts';
 import { STORAGE_PRICE_PER_BYTE, formatNear } from './near.ts';
 import type { Reads } from './reads.ts';
 import type { RejudgeWatch } from './rejudge.ts';
+import { SPUTNIK_RELEASES } from './sputnik.ts';
 import type { JudgedRow, Store } from './store.ts';
 import { CounterWatch } from './watcher.ts';
 
@@ -47,6 +49,8 @@ export interface WorkerSettings {
   holdAlertMs: number;
   backfillWindow: number;
   maxConcurrentRuns: number;
+  /** The most treasuries watched at once; `DEFAULT_MAX_WATCHED_DAOS` when not given. */
+  maxWatchedDaos?: number;
   /** How long a provider may go without answering a DAO's counter before it is raised. */
   lagAlertMs?: number;
   /** How often lag is checked, on its own timer so a poll that hangs is still seen; 1 s. */
@@ -77,6 +81,14 @@ export class Worker {
   readonly #s: WorkerSettings;
   readonly #bridge: Pick<Bridge, 'decodeVerdict'>;
   readonly #watchers = new Map<string, CounterWatch>();
+  /** Enrolled accounts that are no treasury, with the fixed reason, for /status. */
+  readonly #notWatched = new Map<string, 'not_a_sputnik_dao'>();
+  /** Treasuries the worker stopped watching. Nothing queued for one runs until it is back. */
+  readonly #letGo = new Set<string>();
+  /** How long each treasury's policy lets a proposal stay open, from the policy that armed it. */
+  readonly #periodMs = new Map<string, number>();
+  /** A re-judge pass in progress per DAO: whether the DAO still stands once it is over. */
+  readonly #passing = new Map<string, Promise<boolean>>();
   readonly #queue: Array<[string, number]> = [];
   readonly #queued = new Set<string>();
   readonly #inFlight = new Set<string>();
@@ -107,8 +119,8 @@ export class Worker {
     this.#d.health.keepIn(this.#d.store, this.#s.network);
     await this.refreshGuard();
     if (!this.#d.acceptedKey.value) throw new Error('the guard key could not be read on both providers; the worker cannot check any verdict');
+    // Taking up a treasury the store already knows also takes up what a restart left queued.
     await this.refreshEnrolled();
-    for (const row of this.#d.store.unfinished(this.#s.network)) this.enqueue(row.dao, row.proposal_id);
     await this.#exclusive(() => this.#resumeAll());
     await this.checkBalances();
     this.#every(this.#s.pollMs, () => this.pollTick());
@@ -143,7 +155,7 @@ export class Worker {
     return this.#exclusive(async () => {
       await this.#resumeAll();
       if (this.#stopped) return;
-      await Promise.all([...this.#watchers.keys()].map((dao) => this.#d.rejudge.pass(dao)));
+      await Promise.all([...this.#watchers.keys()].map((dao) => this.#rejudged(dao)));
       if (this.#stopped) return;
       await this.#retryStopped();
     });
@@ -154,11 +166,82 @@ export class Worker {
     return [...this.#watchers.keys()];
   }
 
+  /** The enrolled accounts that are not watched because they are no treasury, each with its
+   *  fixed reason. */
+  notWatched(): Array<{ dao: string; reason: string }> {
+    return [...this.#notWatched].map(([dao, reason]) => ({ dao, reason })).sort((x, y) => (x.dao < y.dao ? -1 : 1));
+  }
+
+  /** One re-judge pass of `dao`. When the pass saw the policy or the code of a called contract
+   *  move, the worker reads again that the account is still a Sputnik DAO whose policy arms the
+   *  guard, before any judgement the pass asked for is paid for (C16, C30): `process` waits for
+   *  that reading. */
+  async #rejudged(dao: string): Promise<void> {
+    const stands = (async () => {
+      const fired = await this.#d.rejudge.pass(dao);
+      return fired.includes('policy') || fired.includes('code') ? this.#recheck(dao) : true;
+    })();
+    // A pass or a reading that fails ends no watch: only a clear answer does.
+    const settled = stands.catch(() => true);
+    this.#passing.set(dao, settled);
+    try {
+      await stands;
+    } finally {
+      if (this.#passing.get(dao) === settled) this.#passing.delete(dao);
+    }
+  }
+
+  /** Reads again whether a watched account is a Sputnik DAO that arms the guard, and lets it go
+   *  on a clear no. A treasury that took the guard's deciding vote away gets no more paid
+   *  judgements, and its members hear it at once. */
+  async #recheck(dao: string): Promise<boolean> {
+    const standing = await this.#standing(dao);
+    if (standing === 'watch' || standing === 'unread') return true;
+    if (standing === 'guard_not_armed') {
+      this.#unwatch(dao, 'guard_disarmed');
+      this.#d.health.raise('guard_not_armed', dao, { was_watched: true });
+    } else {
+      this.#unwatch(dao, 'no_longer_a_sputnik_dao');
+      this.#notWatched.set(dao, 'not_a_sputnik_dao');
+      this.#d.log.warn('not_a_sputnik_dao', { dao });
+    }
+    return false;
+  }
+
+  /** Whether an enrolled account is a treasury the guard can protect: Sputnik's code first, and
+   *  only then its policy, so an account that is no DAO has none of its views read. `unread`
+   *  when a provider failed or the two disagreed: nothing is concluded from that. */
+  async #standing(dao: string): Promise<'watch' | 'not_a_sputnik_dao' | 'guard_not_armed' | 'unread'> {
+    const { reads, log } = this.#d;
+    const code = await reads.codeHash(dao);
+    if ('kind' in code) {
+      log.warn('dao_unread', { dao, why: 'its code could not be read on both providers', problem: code });
+      return 'unread';
+    }
+    if (!SPUTNIK_RELEASES.has(code.codeHash)) return 'not_a_sputnik_dao';
+    const arming = await reads.arming(dao, this.#s.guard);
+    if (arming.kind !== 'arming') {
+      log.warn('dao_unread', { dao, why: 'its policy could not be read on both providers', problem: arming });
+      return 'unread';
+    }
+    if (arming.proposalPeriodMs !== null) this.#periodMs.set(dao, arming.proposalPeriodMs);
+    return arming.rejectsAlone.length > 0 ? 'watch' : 'guard_not_armed';
+  }
+
+  #unwatch(dao: string, event: 'dao_unenrolled' | 'guard_disarmed' | 'no_longer_a_sputnik_dao'): void {
+    this.#watchers.delete(dao);
+    this.#letGo.add(dao);
+    this.#d.health.clear('watcher_lag', dao);
+    this.#d.health.clear('provider_silent', dao);
+    this.#d.log.warn(event, { dao });
+  }
+
   /** Raises "watcher lag" (guard offline) when neither provider has answered a DAO's counter
    *  for the lag window, and "provider silent" (guard degraded) when one of them has not; each
    *  clears once the reads come back. "Cap reached" clears once no proposal of the DAO still open
    *  has a step a cap stopped: until then something is still waiting on the cap, whatever the
-   *  day (C18, C29). */
+   *  day (C18, C29). "Proposals skipped" clears once the treasury's own proposal period has
+   *  passed since it was raised: by then no skipped proposal can still pass. */
   sweep(): void {
     const { health, reads } = this.#d;
     const now = this.#d.now();
@@ -178,7 +261,10 @@ export class Worker {
         health.clear('provider_silent', dao);
       }
     }
-    for (const r of health.current()) if (r.signal === 'cap_reached' && !this.#d.store.stillCapped(this.#s.network, r.dao)) health.clear('cap_reached', r.dao);
+    for (const r of health.current()) {
+      if (r.signal === 'cap_reached' && !this.#d.store.stillCapped(this.#s.network, r.dao)) health.clear('cap_reached', r.dao);
+      if (r.signal === 'proposals_skipped' && now - r.since >= (this.#periodMs.get(r.dao) ?? DEFAULT_PROPOSAL_PERIOD_MS)) health.clear('proposals_skipped', r.dao);
+    }
   }
 
   /** Raises "balance low" for the worker below 20 stopped attacks and for the guard below the
@@ -250,39 +336,65 @@ export class Worker {
     this.#d.acceptedKey.value = a.value;
   }
 
-  /** Starts watching every DAO the guard lists, and stops watching any it no longer lists. */
+  /** Takes up the accounts the guard lists that are treasuries Kaap can protect, and lets go of
+   *  the ones it no longer lists. Anyone can enrol an account, so being listed earns nothing by
+   *  itself (C16, C22, C23, C29): both providers must list it, its code must be a Sputnik
+   *  release, its policy must give the guard a deciding reject, and there must be room under
+   *  the watch limit. Each is read again on every refresh, so an account that becomes such a
+   *  treasury is taken up then. One provider leaving a watched treasury out ends nothing. */
   async refreshEnrolled(): Promise<void> {
-    const { daos, problems } = await this.#d.reads.enrolled(this.#s.guard);
-    for (const p of problems) this.#d.log.warn('enrolled_unread', { problem: p });
-    for (const dao of daos) {
+    const { health, log } = this.#d;
+    const { both, either, problems } = await this.#d.reads.enrolled(this.#s.guard);
+    for (const p of problems) log.warn('enrolled_unread', { problem: p });
+    const complete = problems.length === 0;
+    if (complete) {
+      for (const dao of [...this.#watchers.keys()]) if (!either.includes(dao)) this.#unwatch(dao, 'dao_unenrolled');
+      for (const dao of [...this.#notWatched.keys()]) if (!both.includes(dao)) this.#notWatched.delete(dao);
+      for (const r of health.current()) if (r.signal === 'guard_not_armed' && !both.includes(r.dao)) health.clear('guard_not_armed', r.dao);
+    }
+    const limit = this.#s.maxWatchedDaos ?? DEFAULT_MAX_WATCHED_DAOS;
+    let waiting = 0;
+    for (const dao of both) {
       if (!ACCOUNT_ID.test(dao)) {
-        this.#d.log.warn('enrolled_invalid_id', { length: dao.length });
+        log.warn('enrolled_invalid_id', { length: dao.length });
         continue;
       }
-      if (!this.#watchers.has(dao)) await this.#addDao(dao);
-    }
-    if (problems.length === 0) {
-      for (const dao of [...this.#watchers.keys()]) {
-        if (!daos.includes(dao)) {
-          this.#watchers.delete(dao);
-          this.#d.health.clear('watcher_lag', dao);
-          this.#d.health.clear('provider_silent', dao);
-          this.#d.log.warn('dao_unenrolled', { dao });
-        }
+      if (this.#watchers.has(dao)) continue;
+      const standing = await this.#standing(dao);
+      if (standing === 'not_a_sputnik_dao') {
+        if (!this.#notWatched.has(dao)) log.warn('not_a_sputnik_dao', { dao });
+        this.#notWatched.set(dao, 'not_a_sputnik_dao');
+        continue;
       }
+      this.#notWatched.delete(dao);
+      if (standing === 'unread') continue;
+      if (standing === 'guard_not_armed') {
+        health.raise('guard_not_armed', dao);
+        continue;
+      }
+      health.clear('guard_not_armed', dao);
+      if (this.#watchers.size >= limit) {
+        waiting++;
+        continue;
+      }
+      await this.#addDao(dao);
     }
+    if (waiting > 0) health.raise('watch_limit_reached', ALL, { limit, waiting });
+    else if (complete) health.clear('watch_limit_reached', ALL);
   }
 
   async #addDao(dao: string): Promise<void> {
     const { store, reads, log } = this.#d;
+    const pending: number[] = [];
     if (!store.dao(this.#s.network, dao)) {
-      const { a, b } = await reads.finalCounters(dao);
-      if (a === null || b === null) {
+      const { a, b, implausible } = await reads.finalCounters(dao);
+      if (a === null || b === null || implausible) {
         log.warn('dao_not_added_yet', { dao, why: 'its counter could not be read on both providers' });
         return;
       }
       const last = Math.min(a, b);
-      const from = Math.max(0, last - this.#s.backfillWindow);
+      // The first backfill takes up no more ids than any later pass: the newest.
+      const from = Math.max(0, last - Math.min(this.#s.backfillWindow, MAX_IDS_PER_PASS));
       const ids = Array.from({ length: last - from }, (_, i) => from + i);
       const state = await reads.watchState(dao, ids);
       if (state.kind !== 'live') {
@@ -295,11 +407,22 @@ export class Worker {
       for (const p of open) store.queueNew(this.#s.network, dao, p.id, 'backfill', 'InProgress');
       store.addDao(this.#s.network, dao, last);
       log.info('dao_added', { dao, next_id: last, backfill_from: from, open_backfilled: open.map((p) => p.id), closed_skipped: state.proposals.length - open.length, older_than_window: from });
-      for (const p of open) this.enqueue(dao, p.id);
+      if (from > 0) {
+        const skipped = { from_id: 0, to_id: from - 1, count: from };
+        log.warn('proposals_skipped', { dao, ...skipped });
+        this.#d.health.raise('proposals_skipped', dao, skipped);
+      }
+      pending.push(...open.map((p) => p.id));
+    } else {
+      // A treasury the store already knows: after a restart, or back after it was let go. What
+      // was left queued for it is taken up now.
+      for (const row of store.unfinished(this.#s.network)) if (row.dao === dao) pending.push(row.proposal_id);
     }
     const watch = new CounterWatch(dao, reads, store, this.#d.health, log, { network: this.#s.network, holdAlertMs: this.#s.holdAlertMs, now: this.#d.now }, (id) => this.enqueue(dao, id));
     this.#watchers.set(dao, watch);
+    this.#letGo.delete(dao);
     log.info('watching', { dao });
+    for (const id of pending) this.enqueue(dao, id);
   }
 
   /** Asks for (`dao`, `id`) to be judged. One judgement per proposal runs at a time; a request
@@ -372,6 +495,10 @@ export class Worker {
   async process(dao: string, id: number): Promise<void> {
     const { store, judge, log } = this.#d;
     const net = this.#s.network;
+    // A re-judge waits for its pass's reading of whether the treasury still stands, and nothing
+    // runs for one the worker let go: it stays queued until the treasury is back.
+    if (store.judged(net, dao, id)?.reason.startsWith('rejudge:')) await this.#passing.get(dao);
+    if (this.#letGo.has(dao)) return;
     const row = store.judged(net, dao, id);
     if (!row || (row.state !== 'queued' && row.state !== 'judging')) return;
     const generation = row.generation;

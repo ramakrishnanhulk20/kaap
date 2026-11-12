@@ -27,7 +27,11 @@ export type Signal =
   | 'worker_balance_low'
   | 'guard_balance_low'
   | 'alerts_failing'
-  | 'ai_key_missing';
+  | 'ai_key_missing'
+  | 'guard_not_armed'
+  | 'proposals_skipped'
+  | 'counter_implausible'
+  | 'watch_limit_reached';
 
 export type Notice = 'counter_gap' | 'veto_lost';
 
@@ -87,6 +91,10 @@ export const SAYS: Record<Signal, string> = {
   guard_balance_low: 'The guard contract holds less NEAR than the storage for 20 more vetoes.',
   alerts_failing: 'Kaap cannot deliver Telegram alerts right now.',
   ai_key_missing: "The sealed judge ran without its NEAR AI key, so new verdicts carry no AI second opinion until the key reaches it again. Kaap's plain-code checks and vetoes still work.",
+  guard_not_armed: "This treasury's rules give Kaap's guard no deciding reject vote, so the guard cannot stop any request here. Kaap judges none of its requests until the guard is armed again.",
+  proposals_skipped: 'More requests were new at once than Kaap takes up in one pass. It took the newest and skipped the older ones, which members must check themselves.',
+  counter_implausible: "This account's request counter gave a number no treasury could reach, so Kaap took up nothing from it on that pass.",
+  watch_limit_reached: 'Kaap is watching as many treasuries as it is set to watch, and at least one more enrolled treasury is waiting for room.',
 };
 
 export interface Raised {

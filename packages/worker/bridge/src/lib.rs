@@ -100,6 +100,7 @@ export!(kaap_proposals_read, proposals_read);
 export!(kaap_same_proposal, same_proposal_pair);
 export!(kaap_called_accounts, called_accounts_of);
 export!(kaap_receivers_hash, receivers_hash_of);
+export!(kaap_guard_arming, guard_arming_of);
 
 fn hex(bytes: &[u8]) -> String {
     const DIGITS: &[u8; 16] = b"0123456789abcdef";
@@ -289,6 +290,31 @@ fn called_accounts_of(bytes: &[u8]) -> Result<Value, &'static str> {
     let input: CalledInput = serde_json::from_slice(bytes).map_err(|_| "not {dao,kind}")?;
     let accounts = kaap_core::receipt::called_accounts(&input.dao, input.kind.as_bytes());
     accounts.map(|a| json!(a)).ok_or("the kind names an invalid account id")
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ArmingInput {
+    policy: String,
+    guard: String,
+}
+
+/// What a DAO's policy gives `guard`, by kaap-core's `policy::arming::guard_arming` (C16): the
+/// kinds of proposal its one reject decides, and the policy's `proposal_period` in nanoseconds
+/// as Sputnik writes it, null when the policy states none that reads as a whole number. The
+/// worker watches a DAO only while the first list is not empty. Input
+/// `{"policy":"<get_policy text>","guard":"<account>"}`.
+fn guard_arming_of(bytes: &[u8]) -> Result<Value, &'static str> {
+    let input: ArmingInput = serde_json::from_slice(bytes).map_err(|_| "not {policy,guard}")?;
+    let canonical =
+        kaap_core::canonical_policy(input.policy.as_bytes()).map_err(|_| "the policy cannot be canonicalised")?;
+    let policy: Value = serde_json::from_slice(&canonical).map_err(|_| "the policy cannot be read")?;
+    let arming = kaap_core::policy::arming::guard_arming(&policy, &input.guard);
+    let period = policy
+        .get("proposal_period")
+        .and_then(Value::as_str)
+        .filter(|p| !p.is_empty() && p.len() <= 20 && p.bytes().all(|b| b.is_ascii_digit()));
+    Ok(json!({ "rejects_alone": arming.rejects_alone, "proposal_period_ns": period }))
 }
 
 /// kaap-core's `receipt::receivers_hash`: the `receivers_hash` a verdict carries. Input

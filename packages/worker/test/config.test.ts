@@ -97,6 +97,19 @@ test('text runs per DAO a day: 5 by default, 1 to 1,000', () => {
   for (const bad of ['0', '1001', '2.5']) assert.ok(problems({ ...complete, KAAP_CAP_TEXT_RUNS_PER_DAO_DAY: bad }).some((p) => p.startsWith('KAAP_CAP_TEXT_RUNS_PER_DAO_DAY:')), bad);
 });
 
+test('a backfill window above 50, the most proposal ids one pass takes up, stops the worker at start and says so', () => {
+  assert.equal(loadConfig(complete).KAAP_BACKFILL_WINDOW, 50);
+  assert.equal(loadConfig({ ...complete, KAAP_BACKFILL_WINDOW: '1' }).KAAP_BACKFILL_WINDOW, 1);
+  assert.deepEqual(problems({ ...complete, KAAP_BACKFILL_WINDOW: '500' }), ['KAAP_BACKFILL_WINDOW: at most 50, the most proposal ids the worker takes up in one pass']);
+  assert.deepEqual(problems({ ...complete, KAAP_BACKFILL_WINDOW: '51' }), ['KAAP_BACKFILL_WINDOW: at most 50, the most proposal ids the worker takes up in one pass']);
+});
+
+test('treasuries watched at once: 200 by default, 1 to 5,000', () => {
+  assert.equal(loadConfig(complete).KAAP_MAX_WATCHED_DAOS, 200);
+  assert.equal(loadConfig({ ...complete, KAAP_MAX_WATCHED_DAOS: '5000' }).KAAP_MAX_WATCHED_DAOS, 5_000);
+  for (const bad of ['0', '5001', '2.5']) assert.ok(problems({ ...complete, KAAP_MAX_WATCHED_DAOS: bad }).some((p) => p.startsWith('KAAP_MAX_WATCHED_DAOS:')), bad);
+});
+
 test('the two providers must be different hosts (C22)', () => {
   const got = problems({ ...complete, KAAP_RPC_SECONDARY: 'https://rpc.testnet.fastnear.com/other' });
   assert.deepEqual(got, ['KAAP_RPC_SECONDARY: the two RPC providers must be different hosts (C22)']);

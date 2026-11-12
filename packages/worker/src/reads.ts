@@ -6,7 +6,7 @@
 //
 // Not covered: both providers lying the same way (a named non-goal of the threat model).
 
-import type { Bridge, ProposalRead } from './bridge.ts';
+import type { Bridge, GuardArming, ProposalRead } from './bridge.ts';
 import { ACCOUNT_ID } from './config.ts';
 import { STORAGE_PRICE_PER_BYTE } from './near.ts';
 import type { At, ViewProvider, ViewResult } from './rpc.ts';
@@ -47,10 +47,19 @@ export const MAX_WATCHED = 300;
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 200);
 
+/** The contract answered `get_last_proposal_id`, with something no proposal counter could be.
+ *  That is the contract's doing, not a provider's failure to answer. */
+export class ImplausibleCounter extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ImplausibleCounter';
+  }
+}
+
 export function parseCounter(r: ViewResult): number {
-  if (!/^\d{1,16}$/.test(r.text)) throw new Error('get_last_proposal_id did not return a whole number');
+  if (!/^\d{1,16}$/.test(r.text)) throw new ImplausibleCounter('get_last_proposal_id did not return a whole number');
   const n = Number(r.text);
-  if (!Number.isSafeInteger(n)) throw new Error('get_last_proposal_id is above 2^53 - 1');
+  if (!Number.isSafeInteger(n)) throw new ImplausibleCounter('get_last_proposal_id is above 2^53 - 1');
   return n;
 }
 
@@ -104,10 +113,40 @@ export class Reads {
     return { height: head.height, hash: head.hash, a, b };
   }
 
-  /** Both providers' final counters for `dao`. */
-  async finalCounters(dao: string): Promise<{ a: number | null; b: number | null }> {
+  /** Both providers' final counters for `dao`, null for one that did not answer. `implausible`
+   *  when both answered and neither answer is a whole number below 2^53: the contract's own
+   *  answer, on which the two agree, is no counter. One such answer alone is that provider's
+   *  word against the other's, and reads as a provider that did not answer. */
+  async finalCounters(dao: string): Promise<{ a: number | null; b: number | null; implausible: boolean }> {
     const [a, b] = await Promise.allSettled([this.counter(this.primary, dao, 'final'), this.counter(this.secondary, dao, 'final')]);
-    return { a: a.status === 'fulfilled' ? a.value : null, b: b.status === 'fulfilled' ? b.value : null };
+    const odd = (r: PromiseSettledResult<number>) => r.status === 'rejected' && r.reason instanceof ImplausibleCounter;
+    return { a: a.status === 'fulfilled' ? a.value : null, b: b.status === 'fulfilled' ? b.value : null, implausible: odd(a) && odd(b) };
+  }
+
+  /** The code hash of `account` at one final block, as both providers give it. */
+  async codeHash(account: string): Promise<{ codeHash: string } | Problem> {
+    let head;
+    try {
+      head = await this.primary.block({ finality: 'final' });
+    } catch (e) {
+      return { kind: 'failed', item: 'block', provider: this.primary.name, detail: errorText(e) };
+    }
+    return this.#codeHashAt(account, head.height, head.hash);
+  }
+
+  /** What `dao`'s policy gives `guard`, read at one final block on both providers, whose two
+   *  policies must be the same in canonical form (C16, C22). */
+  async arming(dao: string, guard: string): Promise<({ kind: 'arming' } & GuardArming) | Problem> {
+    const pinned = await this.#pinned('get_policy', (p, at) => p.callFunction(dao, 'get_policy', {}, at));
+    if ('kind' in pinned) return pinned;
+    const { a, b, height, hash } = pinned;
+    for (const r of [a, b]) if (r.blockHeight !== height || r.blockHash !== hash) return { kind: 'disagree', item: 'block' };
+    try {
+      if (this.#bridge.policyHash(a.bytes) !== this.#bridge.policyHash(b.bytes)) return { kind: 'disagree', item: 'get_policy' };
+      return { kind: 'arming', ...this.#bridge.guardArming(a.text, guard) };
+    } catch (e) {
+      return { kind: 'failed', item: 'get_policy', provider: this.primary.name, detail: errorText(e) };
+    }
   }
 
   /** The state a veto must match, read just before it is sent: the proposal, the policy and the
@@ -168,7 +207,8 @@ export class Reads {
   /** What the re-judge watch compares (C4): the policy, the proposals with ids in `ids`, and the
    *  code of every contract those proposals call, all at one block on both providers. */
   async watchState(dao: string, ids: number[]): Promise<WatchState | Problem> {
-    const wanted = [...new Set(ids)].sort((x, y) => x - y).slice(0, MAX_WATCHED);
+    // The newest are kept when there are too many: a new proposal is the one still open to stop.
+    const wanted = [...new Set(ids)].sort((x, y) => x - y).slice(-MAX_WATCHED);
     const pages: Array<{ from: number; limit: number }> = [];
     for (const id of wanted) {
       const last = pages.at(-1);
@@ -244,24 +284,32 @@ export class Reads {
     return low;
   }
 
-  /** Every enrolled DAO, from both providers' answers put together, so one provider leaving a
-   *  DAO out can never stop it being watched. */
-  async enrolled(guard: string, pageSize = 100, maxPages = 50): Promise<{ daos: string[]; problems: Problem[] }> {
-    const daos = new Set<string>();
+  /** The accounts enrolled in the guard, as each provider lists them. `both` holds the ones both
+   *  list, in the first provider's order: only those may be taken up, since enrolling is what
+   *  makes the worker spend (C22). `either` holds the ones at least one lists: a DAO already
+   *  watched stays watched while it is in there, so one provider leaving it out can never end
+   *  its protection. With a problem on either side `both` is empty and nothing new is taken up. */
+  async enrolled(guard: string, pageSize = 100, maxPages = 50): Promise<{ both: string[]; either: string[]; problems: Problem[] }> {
+    const lists: string[][] = [];
     const problems: Problem[] = [];
     for (const p of [this.primary, this.secondary]) {
+      const daos: string[] = [];
       try {
         for (let page = 0; page < maxPages; page++) {
           const r = await p.callFunction(guard, 'enrolled_daos', { from_index: page * pageSize, limit: pageSize }, { finality: 'final' });
           const list: unknown = JSON.parse(r.text);
           if (!Array.isArray(list) || !list.every((d) => typeof d === 'string')) throw new Error('enrolled_daos is not a list of account ids');
-          for (const d of list as string[]) daos.add(d);
+          daos.push(...(list as string[]));
           if (list.length < pageSize) break;
         }
+        lists.push(daos);
       } catch (e) {
         problems.push({ kind: 'failed', item: 'enrolled_daos', provider: p.name, detail: errorText(e) });
       }
     }
-    return { daos: [...daos], problems };
+    const either = [...new Set(lists.flat())];
+    const [first, second] = lists;
+    const both = first && second ? [...new Set(first)].filter((d) => second.includes(d)) : [];
+    return { both, either, problems };
   }
 }

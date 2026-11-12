@@ -123,6 +123,10 @@ function readBody(raw: string): AlertBody | null {
   return null;
 }
 
+/** Signals that leave the guard able to act elsewhere, so they are not "offline", but that a
+ *  treasury's members hear at once all the same: at their treasury the guard can stop nothing. */
+const AT_ONCE: ReadonlySet<Signal> = new Set<Signal>(['guard_not_armed']);
+
 /** The message for one group of alerts: one urgent alert, or one batch for a DAO. */
 export function render(network: string, site: string | null, dao: string, bodies: AlertBody[]): string {
   const where = dao === ALL ? 'every DAO Kaap watches' : shownAccount(dao);
@@ -256,7 +260,7 @@ export class Alerts implements AlertSink {
     const { signal, dao } = event.raised;
     // News that Telegram is failing cannot travel by Telegram; GET /status carries it.
     if (signal === 'alerts_failing') return;
-    const urgent = event.kind === 'raised' && levelOf(signal) === 'offline';
+    const urgent = event.kind === 'raised' && (levelOf(signal) === 'offline' || AT_ONCE.has(signal));
     this.#queue(dao, 'health', null, urgent, urgent ? `offline:${signal}` : 'health', { t: 'health', change: event.kind, signal });
   }
 

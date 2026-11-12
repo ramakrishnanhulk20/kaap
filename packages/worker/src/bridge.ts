@@ -69,6 +69,13 @@ interface WasmApi {
 }
 const wasm = (globalThis as unknown as { WebAssembly: WasmApi }).WebAssembly;
 
+const armingSchema = z.strictObject({ rejects_alone: z.array(z.string()), proposal_period_ns: z.string().regex(/^\d{1,20}$/).nullable() });
+
+export interface GuardArming {
+  rejectsAlone: string[];
+  proposalPeriodMs: number | null;
+}
+
 export class Bridge {
   readonly #x: Exports;
   readonly #encoder = new TextEncoder();
@@ -150,5 +157,14 @@ export class Bridge {
 
   receiversHash(pairs: Array<[string, string]>): string {
     return hash.parse(this.#json('kaap_receivers_hash', pairs));
+  }
+
+  /** What the policy text gives `guard`, by kaap-core's own reading (C16): the kinds of proposal
+   *  its one reject decides, and how long the policy lets a proposal stay open, in milliseconds,
+   *  null when the policy states no period that reads as a whole number. */
+  guardArming(policyText: string, guard: string): GuardArming {
+    const a = armingSchema.parse(this.#json('kaap_guard_arming', { policy: policyText, guard }));
+    const ms = a.proposal_period_ns === null ? null : Number(BigInt(a.proposal_period_ns) / 1_000_000n);
+    return { rejectsAlone: a.rejects_alone, proposalPeriodMs: ms !== null && Number.isSafeInteger(ms) ? ms : null };
   }
 }

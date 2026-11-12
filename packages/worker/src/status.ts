@@ -133,6 +133,8 @@ export interface StatusDeps {
   log: Logger;
   now: () => number;
   watching: () => string[];
+  /** Enrolled accounts that are no treasury, each with its fixed reason; none when not given. */
+  notWatched?: () => Array<{ dao: string; reason: string }>;
   texts: TextDesk;
   /** What the store holds on one proposal of a watched DAO, or null when it never saw it. */
   proposal: (dao: string, id: number) => ProposalView | null;
@@ -274,13 +276,17 @@ export function proposalView(
 const shown = (r: Raised) => ({ signal: r.signal, level: levelOf(r.signal), since: new Date(r.since).toISOString(), says: SAYS[r.signal] });
 
 /** The /status document. */
-export function statusReport(health: Health, watching: string[], s: Pick<StatusSettings, 'network' | 'guard'>, now: number) {
+export function statusReport(health: Health, watching: string[], s: Pick<StatusSettings, 'network' | 'guard'>, now: number, notWatched: Array<{ dao: string; reason: string }> = []) {
   const raised = health.current();
   const everywhere = raised.filter((r) => r.dao === ALL).map(shown);
-  const daos = [...watching].sort().map((dao) => ({ dao, status: health.levelFor(dao), signals: raised.filter((r) => r.dao === dao).map(shown) }));
+  // An enrolled treasury whose rules give the guard no deciding vote is not watched, and is
+  // shown all the same: this page is where its members look. An enrolled account that is no
+  // treasury is listed apart, by its account id and a fixed word, and changes no status.
+  const unarmed = raised.filter((r) => r.signal === 'guard_not_armed' && r.dao !== ALL).map((r) => r.dao);
+  const daos = [...new Set([...watching, ...unarmed])].sort().map((dao) => ({ dao, status: health.levelFor(dao), signals: raised.filter((r) => r.dao === dao).map(shown) }));
   const levels = [...daos.map((d) => d.status), ...everywhere.map((e) => e.level)];
   const status = levels.includes('offline') ? 'offline' : levels.includes('degraded') ? 'degraded' : 'healthy';
-  return { v: 1, network: s.network, guard: s.guard, status, watching: daos.length, checked_at: new Date(now).toISOString(), daos, everywhere };
+  return { v: 1, network: s.network, guard: s.guard, status, watching: watching.length, checked_at: new Date(now).toISOString(), daos, everywhere, not_watched: notWatched };
 }
 
 export class StatusServer {
@@ -331,7 +337,7 @@ export class StatusServer {
     const path = (req.url ?? '').split('?')[0];
     if (path === '/status') {
       if (req.method !== 'GET' && req.method !== 'HEAD') return this.#json(res, 405, { error: 'method_not_allowed' }, { allow: 'GET' });
-      return this.#json(res, 200, statusReport(this.#d.health, this.#d.watching(), this.#s, this.#d.now()), { 'access-control-allow-origin': '*' });
+      return this.#json(res, 200, statusReport(this.#d.health, this.#d.watching(), this.#s, this.#d.now(), this.#d.notWatched?.() ?? []), { 'access-control-allow-origin': '*' });
     }
     if (path === '/text-key') {
       if (req.method !== 'GET' && req.method !== 'HEAD') return this.#json(res, 405, { error: 'method_not_allowed' }, { allow: 'GET' });

@@ -1,0 +1,10 @@
+{
+  "source": "The Sputnik releases the sputnik-dao.near factory lists in get_contracts_metadata, read on mainnet at block 222693606 on 2 Nov 2026; the same list as packages/core/src/describe/releases.rs and MAINNET_RELEASES in packages/cli/src/dao.ts. A testnet DAO can run these mainnet builds: Kaap's own runs 3.2.",
+  "releases": {
+    "8RMeZ5cXDap6TENxaJKtigRYf3n139iHmTRe8ZUNey6N": "2.0",
+    "8jmhwSkNeAWCRqsr2KoD7d8BzDYorEz3a3iHuM9Gykrg": "2.1",
+    "2Zof1Tyy4pMeJM48mDSi5ww2QQhTz97b9S8h6W6r4HnK": "3.0",
+    "4zSoHkLjJWZm34Psd4Eq2WUXHELt6LxtKmUXpsZWAECp": "3.1",
+    "DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF": "3.2"
+  }
+}
