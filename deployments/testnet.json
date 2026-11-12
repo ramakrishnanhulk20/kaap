@@ -91,5 +91,34 @@
     "public_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
     "run_tx": "DWRwVAcwpoVo5yfMHVVmWRw4S9QGNNj9XVioMDjobXBW",
     "build": "bf7bb4f86fe7b1531946d8e5b5b7bab39d3e98a3a97ecab00dd9f0e4c4d34f58"
+  },
+  "demo_filer": {
+    "set_up_by": "scripts/setup-demo-filer.mjs",
+    "payees_root_tx": "5Nb4vFpw7mut9Qe3qwxp4MRg4WJihCcXbiCUCjpgpaRQ",
+    "payee_txs": {
+      "a1ice.tryit.kaap-member-1029064001.testnet": "24bM66gETr56frVKFrwNCwEK1BF71J3PZNmkzSNxyW5s",
+      "alice.tryit.kaap-member-1029064001.testnet": "ErY5uymvEWjXXPthGRh57PEiELpUMam1vLw25Toge9B6"
+    },
+    "add_key_tx": "24uPirozvafA72gHjXtmzp6PrgwaAKmVhEYywjgbrm9H",
+    "account_id": "kaap-member-1029064001.testnet",
+    "public_key": "ed25519:9q7PNx97fjXi1wBbXtvgNdPwy4WtcixW6rfSAFc96X51",
+    "can_call": {
+      "contract": "kaap-dao-1111072928.testnet",
+      "methods": [
+        "add_proposal"
+      ],
+      "allowance_yocto": "1000000000000000000000000"
+    },
+    "planted": "planted:17",
+    "payees_root": "tryit.kaap-member-1029064001.testnet",
+    "description": "Monthly salary payment to alice.tryit.kaap-member-1029064001.testnet.",
+    "kind": {
+      "Transfer": {
+        "token_id": "",
+        "receiver_id": "a1ice.tryit.kaap-member-1029064001.testnet",
+        "amount": "500000000000000000000000000",
+        "msg": null
+      }
+    }
   }
 }
