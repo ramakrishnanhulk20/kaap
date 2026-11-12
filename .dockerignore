@@ -1,0 +1,18 @@
+# Keeps the build context to source. Nothing private and nothing built goes to the builder.
+.git
+.env
+.env.*
+!.env.example
+**/node_modules
+**/target
+**/dist
+**/.next
+**/.next-*
+**/.source
+scratchpad
+reference
+work-orders
+art
+eval
+*.md
+!packages/**/*.md
