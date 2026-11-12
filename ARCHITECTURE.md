@@ -283,7 +283,7 @@ Account reads: `view_access_key_list` on each contract gives `{"keys":[]}` for b
 
 ### (b) The worker's HTTP routes
 
-The worker has no public address yet. As built it listens on `127.0.0.1:8787` (`KAAP_HTTP_HOST`, `KAAP_HTTP_PORT`), meant to sit behind an HTTPS proxy on the same machine (`packages/worker/HOSTING.md`). These five routes are every route in `packages/worker/src/status.ts`. Every answer is JSON with `cache-control: no-store`; any other path gives 404 `not_found`, and a wrong method 405 `method_not_allowed` with an `allow` header.
+The worker's public address is its host's (`packages/worker/HOSTING.md`). By default it listens on `127.0.0.1:8787` (`KAAP_HTTP_HOST`, `KAAP_HTTP_PORT`), meant to sit behind an HTTPS proxy on the same machine; on its Railway host it listens on every address behind Railway's proxy. These five routes are every route in `packages/worker/src/status.ts`. Every answer is JSON with `cache-control: no-store`; any other path gives 404 `not_found`, and a wrong method 405 `method_not_allowed` with an `allow` header.
 
 | Route | Request body | Response | Limits |
 |---|---|---|---|
@@ -302,7 +302,7 @@ The client address is the connecting address, or, for a connection from loopback
 |---|---|---|
 | `GET /api/check?dao=&network=&id=`, and `POST` with a supplied text | Runs the CLI's `check` on the server and returns its report | 8 calls a minute per caller, 2 at once, the same plain question kept for 20 s |
 | `GET /api/demo/attack` | `{on}`: whether this host holds the filing-only key | |
-| `POST /api/demo/attack` with the header `x-kaap-demo: 1` | Files the prepared fake theft on the demo treasury with the filing-only key, or names the filing already in flight: `{ok, id, tx, already}` (C32, C33) | 2 presses in 10 minutes per caller, one filing in flight, 40 filings in 24 hours counted from the chain |
+| `POST /api/demo/attack` with the header `x-kaap-demo: 1` | Files the prepared fake theft on the demo treasury with the filing-only key, or names the filing already in flight: `{ok, id, tx, already}` (C32, C33) | 2 presses in 10 minutes and 6 in a day per caller, one filing in flight in each server process, a 25-second deadline on the filing, 40 filings in 24 hours counted from the chain. Callers are told apart only where `KAAP_SITE_PROXY=x-real-ip` is set; without it they share one count |
 | `GET /api/demo/status?id=<n>` | Where one demo filing stands, from the treasury, the registry and the watcher's `GET /proposal`: status, verdict summary, whether the guard rejected it, the run, veto and record transaction ids | 90 asks a minute per caller, each answer kept 1.5 s |
 
 The filing-only key is an access key of the demo member, `ed25519:9q7PNx97fjXi1wBbXtvgNdPwy4WtcixW6rfSAFc96X51`, added in [24uPiroz...](https://testnet.nearblocks.io/txns/24uPirozvafA72gHjXtmzp6PrgwaAKmVhEYywjgbrm9H). NEAR itself limits it to `add_proposal` on `kaap-dao-1111072928.testnet`, with no deposit. `scripts/check-demo-filer.mjs` tries five other uses and each is refused by the network.

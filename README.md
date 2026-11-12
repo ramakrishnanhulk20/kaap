@@ -400,7 +400,7 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 In that same fresh clone the engine was rebuilt from source and came out byte for byte the same as the committed file: sha256 `00177fedf3431e6fbad0828f9d97a52a918cfd847ebd1753ea5f806be9f83241`.
 
-Not covered: the site has no automated tests, and the watcher's tests run it against a scripted chain, not a live one. The live run is the one recorded in `PROOF.md`.
+Not covered: the site has four tests, of the try-it button's limits (`npm test` in `packages/web`), and none of its pages, and the watcher's tests run it against a scripted chain, not a live one. The live run is the one recorded in `PROOF.md`.
 
 ## The check as an API
 
@@ -517,6 +517,7 @@ What you still have to trust, and what Kaap does not do:
 - **Speed.** The veto has to land before enough approvers sign. A treasury whose rules let one signature execute a request leaves no time for any guard.
 - **Unreadable requests.** A hash nobody explains is flagged, not vetoed.
 - **No independent audit** has been done.
+- **The watcher's key.** The account that runs the watcher also owns the sealed reader on OutLayer, and its key is on the watcher's host. Someone who stole that key could publish a different reader that signs with the same key, and make the guard reject honest requests. They still could not approve or pay, and `kaap verify` would show the verdict came from a build that is not in this repository. The two are not split yet.
 - **One small host.** The watcher is one container on Railway, watching one treasury, the demo one. It has run there since 12 Nov 2026 only, nobody is on call for it, and no real treasury is enrolled.
 
 The limits page in the docs, [packages/web/content/docs/trust/limits.mdx](packages/web/content/docs/trust/limits.mdx), goes through each of these.
