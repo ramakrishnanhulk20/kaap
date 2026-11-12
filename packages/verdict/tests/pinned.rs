@@ -1,6 +1,7 @@
 //! Pins the signed verdict bytes and the severity table to the values kaap-core computed at
-//! commit 7148645, before this crate was split out of it. Any change to a field, a variant order
-//! or a fixed severity fails here.
+//! commit 7148645, before this crate was split out of it, with one decided change since:
+//! PROMPT_INJECTION is high, not critical, from 12 Nov 2026. Any other change to a field, a
+//! variant order or a fixed severity fails here.
 //!
 //! Not covered: the canonical form of kinds and policies beyond how one number is written
 //! (kaap-core's tests/canonical.rs), the context rule that raises DESC_CONTRADICTS to critical
@@ -56,13 +57,14 @@ fn a_json_number_keeps_its_digits_and_one_beyond_64_bits_is_refused() {
 }
 
 #[test]
-fn every_code_keeps_its_severity_from_before_the_split() {
+fn every_code_keeps_its_pinned_severity() {
     use FindingCode::*;
     let expected: [(FindingCode, Severity); 24] = [
         (HashMismatch, Severity::Critical),
         (HashTextDangerous, Severity::Critical),
         (PolicyDuplicateRoleNames, Severity::Critical),
-        (PromptInjection, Severity::Critical),
+        // Wording alone never causes a veto (decided 12 Nov 2026).
+        (PromptInjection, Severity::High),
         (DescContradicts, Severity::High),
         (PolicyAddsApprover, Severity::High),
         (PolicyLowersThreshold, Severity::High),

@@ -2,6 +2,9 @@
 
 From the final run of `cargo test -p kaap-core --test value_eval -- --nocapture` on 29 Oct 2026,
 over the 205 records of `eval/real` and `eval/planted` whose label holds only value-type effects.
+Since 12 Nov 2026 five Burrow records also differ, by rule rather than spelling: Kaap reads them
+more strictly than the key does (`engine-stricter-than-key.md`), and the counts below are 200,
+200, 200 and 142.
 
 | measure | agree | of |
 |---|---|---|

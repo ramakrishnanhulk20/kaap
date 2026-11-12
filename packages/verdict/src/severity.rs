@@ -9,16 +9,19 @@ use crate::types::{FindingCode, Severity};
 /// control. A signed verdict carries codes but no effects, so this is what the guard can know
 /// about a finding, and it never rates one above what `severity` gives it in context. The match
 /// has no wildcard arm, so adding a code will not compile until its severity is decided here.
+///
+/// PROMPT_INJECTION is high, not critical (decided 12 Nov 2026): words addressed to a model are
+/// found by a fixed list that honest text can trip, and wording alone must never cause a veto. A
+/// proposal carrying them still alerts every member, and still vetoes when another finding proves
+/// a deception.
 pub fn min_severity(code: FindingCode) -> Severity {
     use FindingCode::*;
     match code {
-        HashMismatch | HashTextDangerous | PolicyDuplicateRoleNames | PromptInjection => {
-            Severity::Critical
-        }
-        DescContradicts | PolicyAddsApprover | PolicyLowersThreshold | PolicyReplacesRole
-        | PolicyRemovesMember | PolicyBeforeUnknown | CodeUpgrade | IntentsKeyChange
-        | GuardWeakened | UnknownCall | ArgsNotJson | UnknownValue | LookalikeToken
-        | OtherRiskyKind => Severity::High,
+        HashMismatch | HashTextDangerous | PolicyDuplicateRoleNames => Severity::Critical,
+        PromptInjection | DescContradicts | PolicyAddsApprover | PolicyLowersThreshold
+        | PolicyReplacesRole | PolicyRemovesMember | PolicyBeforeUnknown | CodeUpgrade
+        | IntentsKeyChange | GuardWeakened | UnknownCall | ArgsNotJson | UnknownValue
+        | LookalikeToken | OtherRiskyKind => Severity::High,
         HashUnverified => Severity::Unknown,
         AttachedDeposit | CrossChainOut | NewRecipient | LargeAmount => Severity::Medium,
         EmptyDescription => Severity::Low,

@@ -94,6 +94,8 @@ fn quote(destination: &str) -> Quote {
         destination_asset: destination.into(),
         recipient: PAYEE.into(),
         recipient_type: "DESTINATION_CHAIN".into(),
+        refund_to: DAO.into(),
+        refund_type: "INTENTS".into(),
     }
 }
 

@@ -5,7 +5,8 @@
 //! A described change that the effects do not make, including one already in place, is a
 //! contradiction. When the text names a specific member, role or threshold change, any change of
 //! control it does not mention is one too: an approver added or removed, fewer votes needed
-//! (POLICY_LOWERS_THRESHOLD), or a change to the guard (GUARD_WEAKENED, ruling 23). An end-state
+//! (POLICY_LOWERS_THRESHOLD), an approving role whose holders are replaced (POLICY_REPLACES_ROLE),
+//! or a change to the guard (GUARD_WEAKENED, ruling 23). An end-state
 //! roster is checked against the end state (ruling 24). A text that names nothing specific never
 //! fires the unmentioned-change rule. With the policy before unknown nothing here is a claim:
 //! POLICY_BEFORE_UNKNOWN already stands.
@@ -204,5 +205,20 @@ pub(super) fn compare(claims: &Claims, folded: &str, input: &ProposalInput, effe
     }
     if codes.contains(&FindingCode::GuardWeakened) && !has_phrase(folded, "guard") {
         out.contradict("the guard changes and the text does not say so");
+    }
+    // A replaced role is mentioned when the text names it, or names as added every account it
+    // newly covers. A role opened to token holders or to everyone covers no account a text could
+    // list, so only its name mentions it.
+    if codes.contains(&FindingCode::PolicyReplacesRole) {
+        for replaced in crate::policy::replaced_roles(input) {
+            let named_as_added = |account: &String| {
+                p.adds.iter().any(|c| c.member == *account && covers(c, &replaced.name))
+                    || rosters.iter().any(|r| same_role(&r.role, &replaced.name) && r.members.contains(account))
+            };
+            let accounts_named = replaced.accounts.as_ref().is_some_and(|accounts| accounts.iter().all(named_as_added));
+            if !has_phrase(folded, &replaced.name) && !accounts_named {
+                out.contradict("a role's holders are replaced and the text does not say so");
+            }
+        }
     }
 }

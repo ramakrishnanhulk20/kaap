@@ -4,7 +4,8 @@
 //! `lists::INJECTION_PHRASES` get, so a fullwidth or zero-width-split "ignore previous" is still
 //! found (standard 2).
 //!
-//! Strings read: the description, the supplied hash text, every string in the kind, and each of
+//! Strings read: the description, the supplied hash text when it verifies one of the proposal's
+//! own sign payloads (`hash::supplied_text_verifies`), every string in the kind, and each of
 //! those strings decoded once from base64 when that gives UTF-8 text (a FunctionCall's `args`,
 //! with any nested `msg` inside it). The kind is read through `decode::value::read_kind`, which
 //! caps it at 256 KiB, and nesting deeper than `MAX_DEPTH` is not walked (standard 4). It misses
@@ -49,13 +50,14 @@ fn any_string(v: &Value, depth: usize, hit: &mut impl FnMut(&str) -> bool) -> bo
     }
 }
 
-/// True when the description or any string the proposal carries holds a phrase from
-/// `lists::INJECTION_PHRASES`.
+/// True when the description, any string the proposal carries, or a supplied text that verifies
+/// one of its payloads holds a phrase from `lists::INJECTION_PHRASES`.
 pub(super) fn found(input: &ProposalInput) -> bool {
     if addressed_to_a_model(&input.description) {
         return true;
     }
-    if input.supplied_text.as_ref().is_some_and(|t| addressed_to_a_model(&t.message)) {
+    // A text that verifies none of this proposal's payloads is anyone's text, not the proposal's.
+    if input.supplied_text.as_ref().is_some_and(|t| addressed_to_a_model(&t.message)) && crate::hash::supplied_text_verifies(input) {
         return true;
     }
     let Some((_, body)) = read_kind(&input.kind_json) else { return false };

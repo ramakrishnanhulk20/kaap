@@ -3,7 +3,10 @@
 //! account read from chain: a Burrow-shaped call on any other account is an unknown call (ruling
 //! 10). Anything not in these tables is `Other`, which the decoder turns into an unknown call
 //! unless the call is a standard token method on the token itself (standard 1: a missing entry
-//! produces an alert, not a pass).
+//! produces an alert, not a pass). On the three DeFi accounts only the calls
+//! `DefiProtocol::keeps_value` names are DeFi calls; every other method is an unknown call too.
+
+use serde_json::{Map, Value};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Known {
@@ -30,6 +33,39 @@ impl DefiProtocol {
             DefiProtocol::Burrow => "burrow",
             DefiProtocol::RefV2 => "ref-finance",
             DefiProtocol::RefDcl => "ref-dcl",
+        }
+    }
+
+    /// True when `method` with `args` is a call the protocol's own code shows sends nothing to
+    /// anyone but the caller, the DAO, so it is a `defi_call` that keeps the funds with the DAO.
+    /// Everything else on the account is an unknown call, as on any other contract (C2). Read in
+    /// github.com/ref-finance/burrowland at commit 2110c70 (2 Dec 2025), files under
+    /// contracts/contract/src:
+    /// - Burrow `update_asset_limit` and `enable_asset_capacity` set an asset's limits and flags
+    ///   and move nothing (config.rs 235-250 and 344-365).
+    /// - Burrow `update_asset` replaces an asset's config, whose `beneficiaries` are paid a share of
+    ///   the interest Burrow reserves (asset_config.rs 37-39, asset.rs 146-160), so it is known only
+    ///   when it names none.
+    /// - Burrow `execute` runs actions for the caller. `Withdraw` sends the caller's own tokens to
+    ///   the caller (actions.rs 84-95); `ForceClose` credits Burrow's owner and the liquidations move
+    ///   other accounts' positions (actions.rs 185-270), so it is known only when every action is a
+    ///   `Withdraw`.
+    /// - Burrow `add_asset_farm_reward` hands reserved tokens to a farm that pays other accounts
+    ///   (config.rs 411-473), so it is not known.
+    /// - Ref (`v2.ref-finance.near`) and Ref DCL (`dclv2.ref-labs.near`): no method, because neither
+    ///   contract's source is published at a commit Kaap can pin.
+    pub fn keeps_value(self, method: &str, args: &Value) -> bool {
+        let withdraw_only = |action: &Value| action.as_object().is_some_and(|a| a.len() == 1 && a.contains_key("Withdraw"));
+        match (self, method) {
+            (DefiProtocol::Burrow, "update_asset_limit" | "enable_asset_capacity") => true,
+            (DefiProtocol::Burrow, "update_asset") => {
+                args.pointer("/asset_config/beneficiaries").and_then(Value::as_object).is_some_and(Map::is_empty)
+            }
+            (DefiProtocol::Burrow, "execute") => args
+                .get("actions")
+                .and_then(Value::as_array)
+                .is_some_and(|actions| !actions.is_empty() && actions.iter().all(withdraw_only)),
+            _ => false,
         }
     }
 }

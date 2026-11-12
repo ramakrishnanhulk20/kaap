@@ -79,6 +79,11 @@ pub struct Quote {
     pub destination_asset: String,
     pub recipient: String,
     pub recipient_type: String,
+    /// Who 1Click pays back when the swap does not go through. It is a payee of the same funds,
+    /// signed like the recipient, so anyone here but the DAO is judged as a second payee.
+    pub refund_to: String,
+    /// `INTENTS` or `ORIGIN_CHAIN`, as 1Click writes it.
+    pub refund_type: String,
 }
 
 /// Every quote in `responses` whose signature checks against `ONE_CLICK_KEY`.
@@ -88,7 +93,7 @@ pub fn verified(responses: &[String]) -> Vec<Quote> {
 
 /// The quote in `response` when its signature checks against `key` and it is a full quote with
 /// a deposit address, an origin asset, a whole-number `amountIn`, an RFC 3339 deadline, a
-/// destination asset and a recipient. `None` for anything else.
+/// destination asset, a recipient and a refund account. `None` for anything else.
 pub fn verify(response: &str, key: &str) -> Option<Quote> {
     if response.len() > MAX_QUOTE_BYTES {
         return None;
@@ -115,6 +120,8 @@ pub fn verify(response: &str, key: &str) -> Option<Quote> {
         destination_asset: text(request, "destinationAsset")?,
         recipient: text(request, "recipient")?,
         recipient_type: text(request, "recipientType")?,
+        refund_to: text(request, "refundTo")?,
+        refund_type: text(request, "refundType")?,
     })
 }
 

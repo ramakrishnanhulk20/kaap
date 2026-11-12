@@ -1,6 +1,8 @@
 //! The functions the bindings export, as plain Rust: JSON or text in, JSON or text out, and a fixed
-//! error text out. Each one hands its input to one kaap-core function and adds no rule of its own,
-//! so the CLI and the browser decide exactly what the sealed job decides (C14).
+//! error text out. Each one hands its input to one kaap-core function, so the CLI and the browser
+//! decide exactly what the sealed job decides (C14). The one rule added here is the sealed job's
+//! own: `analyze` judges with prices only beside a payment history, since the sealed job reads
+//! both or neither.
 //!
 //! Three things change shape on the way in, because JavaScript cannot carry them as they are: a
 //! proposal kind and a policy arrive as their exact JSON text, a 64-bit time arrives as a decimal
@@ -79,9 +81,12 @@ struct TextInput {
 
 /// Runs `kaap_core::analyze` and returns `{analysis, kind_label, description}`, where
 /// `description` holds the reasons the description check gave (`describe::outcome`) so a reader
-/// can see why it agreed or contradicted. Errors on an input that does not read as the shape
-/// above, a policy kaap-core cannot canonicalise, a nonce that is not 32 bytes of base64, or a
-/// time that is not a whole number.
+/// can see why it agreed or contradicted. Prices given with no history are left out, so every
+/// move of value keeps UNKNOWN_VALUE (high): a price alone would clear that finding while
+/// NEW_RECIPIENT and LARGE_AMOUNT, which need the history, are skipped, and a payment of any size
+/// to a stranger would read low. Errors on an input that does not read as the shape above, a
+/// policy kaap-core cannot canonicalise, a nonce that is not 32 bytes of base64, or a time that is
+/// not a whole number.
 pub fn analyze(input_json: &str) -> Result<String, Error> {
     let input: AnalyzeInput = serde_json::from_str(input_json).map_err(|_| Error("the analyze input is not the expected shape"))?;
     let policy_before = match input.policy_before_json {
@@ -106,6 +111,7 @@ pub fn analyze(input_json: &str) -> Result<String, Error> {
         None => None,
         Some(text) => Some(text.parse::<u64>().map_err(|_| Error("block_timestamp_ns is not a whole number"))?),
     };
+    let prices = if input.history.is_some() { input.prices } else { Prices::default() };
     let input = ProposalInput {
         network: input.network,
         dao: input.dao,
@@ -114,7 +120,7 @@ pub fn analyze(input_json: &str) -> Result<String, Error> {
         kind_json: input.kind_json.into_bytes(),
         policy_before,
         history: input.history,
-        prices: input.prices,
+        prices,
         dao_version: input.dao_version,
         supplied_text,
         guard_account: input.guard_account,

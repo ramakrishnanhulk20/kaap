@@ -29,6 +29,11 @@ pub struct ProposalInput {
     pub policy_before: Option<Value>,
     /// `None` means the history is not available (guide `history_available: false`).
     pub history: Option<History>,
+    /// Prices mean something only together with `history`: a price clears UNKNOWN_VALUE, while
+    /// NEW_RECIPIENT and LARGE_AMOUNT are judged only against a history, so prices without one
+    /// would let a payment of any size to a stranger read low. The wasm door (kaap-core-wasm
+    /// `api::analyze`) and the sealed job hand `analyze` both or neither; a new caller must do
+    /// the same.
     pub prices: Prices,
     pub dao_version: Option<String>,
     pub supplied_text: Option<SuppliedText>,

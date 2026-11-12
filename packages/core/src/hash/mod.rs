@@ -53,7 +53,7 @@ pub fn check(input: &ProposalInput) -> (Vec<Effect>, Vec<FindingCode>) {
         }
     }
     let texts = Texts::read(input);
-    let supplied_for = requests.iter().position(|r| texts.supplied_hash.is_some_and(|h| h[..] == r.payload[..]));
+    let supplied_for = verified_request(&requests, texts.supplied_hash);
     let mismatch = input.supplied_text.as_ref().filter(|_| supplied_for.is_none()).map(|t| t.standard);
     for (i, request) in requests.iter().enumerate() {
         let described = texts.described.iter().find(|(_, hash)| hash[..] == request.payload[..]);
@@ -71,20 +71,40 @@ pub fn check(input: &ProposalInput) -> (Vec<Effect>, Vec<FindingCode>) {
     (sheet.effects, sheet.codes)
 }
 
+/// True when `input`'s supplied text hashes to the payload of one of its own `sign` requests, the
+/// test `check` counts the text by. Every rule that reads what the text says asks it first, so a
+/// text that verifies nothing adds to no finding (C6). The one rule that reads an unmatched text
+/// is HASH_MISMATCH, which reports exactly that it matched nothing.
+pub(crate) fn supplied_text_verifies(input: &ProposalInput) -> bool {
+    let Some(call) = sign::read_call(&input.kind_json) else { return false };
+    let requests: Vec<Request> = call.signs().filter_map(|action| sign::read_request(&action.args).ok()).collect();
+    verified_request(&requests, supplied_hash(input)).is_some()
+}
+
+/// The first request whose payload is `supplied_hash`.
+fn verified_request(requests: &[Request], supplied_hash: Option<[u8; 32]>) -> Option<usize> {
+    requests.iter().position(|r| supplied_hash.is_some_and(|h| h[..] == r.payload[..]))
+}
+
+/// The hash the supplied text would sign, or `None` when there is no text or it cannot be hashed
+/// at all (a NEP-461 text whose message is not base64), which then matches no payload.
+fn supplied_hash(input: &ProposalInput) -> Option<[u8; 32]> {
+    input.supplied_text.as_ref().and_then(|t| match t.standard {
+        TextStandard::Nep413 => Some(nep413_hash(&t.message, &t.nonce, &t.recipient, None)),
+        TextStandard::Nep461 => base64_bytes(&t.message).map(|bytes| nep461_hash(&bytes)),
+    })
+}
+
 /// The texts a proposal comes with, each with the hash it would sign.
 struct Texts {
-    /// `None` when there is no supplied text, or when it cannot be hashed at all (a NEP-461
-    /// text whose message is not base64), which then matches no payload.
+    /// `supplied_hash` of the proposal.
     supplied_hash: Option<[u8; 32]>,
     described: Vec<(Vec<u8>, [u8; 32])>,
 }
 
 impl Texts {
     fn read(input: &ProposalInput) -> Self {
-        let supplied_hash = input.supplied_text.as_ref().and_then(|t| match t.standard {
-            TextStandard::Nep413 => Some(nep413_hash(&t.message, &t.nonce, &t.recipient, None)),
-            TextStandard::Nep461 => base64_bytes(&t.message).map(|bytes| nep461_hash(&bytes)),
-        });
+        let supplied_hash = supplied_hash(input);
         let described = delegate::in_description(&input.description)
             .into_iter()
             .map(|bytes| {

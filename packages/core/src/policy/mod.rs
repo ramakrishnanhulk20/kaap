@@ -13,8 +13,17 @@ pub mod sputnik;
 
 pub use roles::GUARD_ROLE;
 
+pub(crate) use change::Replaced;
+
 use crate::decode::value::read_kind;
 use crate::types::{Effect, FindingCode, ProposalInput};
+
+/// The roles `input`'s policy kind replaces (POLICY_REPLACES_ROLE), measured as `decode` measures
+/// them for the finding; empty for every other kind and when the policy before is not known.
+pub(crate) fn replaced_roles(input: &ProposalInput) -> Vec<Replaced> {
+    let Some((variant, body)) = read_kind(&input.kind_json) else { return Vec::new() };
+    change::replaced(&variant, &body, input.policy_before.as_ref())
+}
 
 /// Returns the policy and governance effects and findings for `input`, and nothing for a
 /// Transfer, a FunctionCall (`decode::value` and `hash` own those) or bytes that are not one of

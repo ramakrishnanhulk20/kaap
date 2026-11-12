@@ -1,4 +1,5 @@
-// 1Click quotes and the payee behind a deposit address (C7). The signature rebuild is proven on
+// 1Click quotes and the payees behind a deposit address, its recipient and its refund account
+// (C7). The signature rebuild is proven on
 // the three signed quotes in 1Click's own SDK tests, which a staging key signed; the pinned
 // production key must refuse them. Not covered here: a quote signed by the production key (two
 // keyless quote requests on 2 Nov 2026 returned HTTP 400, so through `check` the mapping is shown
@@ -55,6 +56,8 @@ fn the_sdk_quotes_verify_against_the_key_that_signed_them() {
             destination_asset: "nep141:eth-0xdac17f958d2ee523a2206206994597c13d831ec7.stft.near".into(),
             recipient: "0xcac3C41676deF4FE375E57118f3eB83A99105577".into(),
             recipient_type: "DESTINATION_CHAIN".into(),
+            refund_to: "bc1q6mte80265ghwq4vsrpm9lnaz46uvdreu9z8wly".into(),
+            refund_type: "ORIGIN_CHAIN".into(),
         }
     );
     assert_eq!(verify(STAGING_STATUS_QUOTE_RESPONSE, STAGING_KEY), Some(quote), "the status endpoint's shape, nulls and order");
@@ -103,6 +106,8 @@ fn quote(recipient: &str, destination: &str, recipient_type: &str) -> Quote {
         destination_asset: destination.into(),
         recipient: recipient.into(),
         recipient_type: recipient_type.into(),
+        refund_to: DAO.into(),
+        refund_type: "INTENTS".into(),
     }
 }
 
@@ -159,6 +164,19 @@ fn a_matching_verified_quote_names_the_real_payee() {
     );
     assert!(codes.contains(&CrossChainOut) && codes.contains(&NewRecipient), "{codes:?}");
     assert!(!paid("alice.near").1.contains(&NewRecipient), "NEW_RECIPIENT judges the quote's recipient, not the address");
+}
+
+/// A failed swap pays the quote's `refundTo`, so a refund to anyone but the DAO is a second payee.
+#[test]
+fn a_refund_to_anyone_but_the_dao_is_a_second_payee() {
+    let codes = |refund_to: &str| {
+        let mut quote = quote("alice.near", ETH_USDC, "DESTINATION_CHAIN");
+        quote.refund_to = refund_to.into();
+        intents::judge(&[transfer(DEPOSIT, "5000000")], "intents.far", DEADLINE_NS, &[quote], &input(true)).1
+    };
+    assert!(!codes(DAO).contains(&NewRecipient), "a refund to the DAO pays nobody new");
+    assert!(codes("stranger.near").contains(&NewRecipient), "the recipient was paid before, the refund account never");
+    assert!(!codes("alice.near").contains(&NewRecipient), "a refund account paid before is judged like any payee");
 }
 
 #[test]

@@ -1,5 +1,6 @@
 // Pins the JavaScript-facing functions to kaap-core itself: `analyze` through its JSON input gives
-// kaap-core's own answer on every answer-key record, `read_proposal` keeps the kind's exact text
+// kaap-core's own answer on every answer-key record once prices that come with no payment history
+// are left out, which is the one rule the door adds, `read_proposal` keeps the kind's exact text
 // and refuses a duplicate key, the scoreboards give today's numbers, the enrolment template is
 // generated from Sputnik's label list and arms the guard on the NEAR Business role setup,
 // `who_acts` names who files and approves on that setup, `eval_input` hands the sealed job's eval
@@ -44,7 +45,8 @@ fn analyze_through_json_matches_kaap_core_on_every_record() {
         let out: Value = serde_json::from_str(&api::analyze(&input.to_string()).unwrap()).unwrap();
 
         // kaap-core directly, with the policy read through the same canonical parser the sealed job
-        // uses, so any difference is the wrapper's.
+        // uses and no prices where there is no history, so any other difference is the wrapper's.
+        let priced = history.is_some();
         let direct = analyze(&ProposalInput {
             network: serde_json::from_value(record["network"].clone()).unwrap(),
             dao: record["dao"].as_str().unwrap().into(),
@@ -53,7 +55,7 @@ fn analyze_through_json_matches_kaap_core_on_every_record() {
             kind_json: kind.into_bytes(),
             policy_before: policy.map(|p| serde_json::from_slice(&kaap_core::canonical_policy(p.as_bytes()).unwrap()).unwrap()),
             history: history.map(|h| serde_json::from_value(h).unwrap()),
-            prices: Prices { usd_by_token: prices.usd_by_token.clone() },
+            prices: if priced { Prices { usd_by_token: prices.usd_by_token.clone() } } else { Prices::default() },
             dao_version: context["dao_version"].as_str().map(str::to_string),
             supplied_text: None,
             guard_account: None,
@@ -64,6 +66,52 @@ fn analyze_through_json_matches_kaap_core_on_every_record() {
         checked += 1;
     }
     assert!(checked > 300, "{checked}");
+}
+
+/// A priced USDT payment to a stranger through the door, with and without a payment history.
+fn priced_payment(history: Option<Value>) -> (Value, ProposalInput) {
+    let tokens = std::fs::read_to_string(repo().join("packages/core/tests/fixtures/tokens.json")).unwrap();
+    let prices = api::prices_from_tokens(&tokens).unwrap();
+    assert!(prices.usd_by_token.contains_key("usdt.tether-token.near"));
+    let kind = r#"{"Transfer": {"token_id": "usdt.tether-token.near", "receiver_id": "stranger.near", "amount": "1000000000000", "msg": null}}"#;
+    let description = "Pay 1000000 USDT to stranger.near";
+    let input = json!({
+        "network": "mainnet", "dao": "family-bank.sputnik-dao.near", "proposal_id": 7,
+        "description": description, "kind_json": kind, "history": history, "prices": prices,
+    });
+    let out: Value = serde_json::from_str(&api::analyze(&input.to_string()).unwrap()).unwrap();
+    let direct = ProposalInput {
+        network: kaap_core::Network::Mainnet,
+        dao: "family-bank.sputnik-dao.near".into(),
+        proposal_id: 7,
+        description: description.into(),
+        kind_json: kind.as_bytes().to_vec(),
+        policy_before: None,
+        history: history.map(|h| serde_json::from_value(h).unwrap()),
+        prices,
+        dao_version: None,
+        supplied_text: None,
+        guard_account: None,
+        config_before: None,
+        block_timestamp_ns: None,
+    };
+    (out["analysis"].clone(), direct)
+}
+
+#[test]
+fn a_priced_payment_with_no_history_keeps_its_unknown_value() {
+    let (analysis, direct) = priced_payment(None);
+    assert_eq!(analysis["risk_floor"], "high", "{analysis}");
+    assert!(analysis["findings"].as_array().unwrap().iter().any(|f| f["code"] == "UNKNOWN_VALUE"), "{analysis}");
+    assert_eq!(analyze(&direct).risk_floor, kaap_core::Severity::Low, "kaap-core alone, handed the price, reads it low");
+}
+
+#[test]
+fn a_priced_payment_with_a_history_is_judged_as_kaap_core_judges_it() {
+    let history = json!({ "approved_payments_before": 3, "median_payment_usd_before": 2000000.0, "recipients_paid_before": ["stranger.near"] });
+    let (analysis, direct) = priced_payment(Some(history));
+    assert_eq!(analysis, serde_json::to_value(analyze(&direct)).unwrap());
+    assert_eq!(analysis["risk_floor"], "low", "{analysis}");
 }
 
 #[test]
@@ -94,8 +142,16 @@ fn the_scoreboards_give_todays_numbers() {
     assert_eq!(pick("policy", 0), (129, 129));
     assert_eq!((pick("policy", 1), pick("policy", 2), pick("policy", 3)), ((97, 97), (97, 97), (97, 97)));
     assert_eq!(pick("describe", 0), (356, 373));
-    assert_eq!((pick("describe", 1), pick("describe", 2), pick("describe", 3)), ((373, 373), (373, 373), (337, 337)));
-    assert_eq!((pick("value", 0), pick("value", 2), pick("value", 3)), ((205, 205), (205, 205), (147, 147)));
+    // planted #44 and #46 rest on instruction words alone, which no longer cause a veto (decided
+    // 12 Nov 2026): each was critical with must_veto before and is high without it after; the
+    // label says critical with must_veto (engine-stricter-than-key.md).
+    assert_eq!((pick("describe", 1), pick("describe", 2), pick("describe", 3)), ((373, 373), (373, 373), (335, 337)));
+    // Five Burrow calls that can pay an account other than the DAO are unknown calls, high, where
+    // answer key v2.3 says `defi_call`, low (packages/core/docs/answer-key-notes/
+    // engine-stricter-than-key.md): burrow #1395, #1399 and #1465 (add_asset_farm_reward) and
+    // #1499 and #1634 (update_asset naming a beneficiary). Each was low with no finding before
+    // and is high with UNKNOWN_CALL and veto_allowed after; the label says low.
+    assert_eq!((pick("value", 0), pick("value", 2), pick("value", 3)), ((200, 205), (200, 205), (142, 147)));
     assert!((0..5).all(|i| pick("hash", i) == (42, 42)), "codes, floor, veto fields and effects: {:?}", rows("hash"));
 }
 

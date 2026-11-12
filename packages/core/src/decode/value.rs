@@ -19,7 +19,7 @@ use super::json::{self, Parsed};
 use super::known::{self, is_lookalike, Known};
 use crate::canonical::canonical_kind;
 use crate::enrolment;
-use crate::types::{Effect, FindingCode, MsgKind, ProposalInput, Prices, StakingOp, WrapOp};
+use crate::types::{Effect, FindingCode, History, MsgKind, ProposalInput, Prices, StakingOp, WrapOp};
 
 /// Sputnik stores native NEAR as an empty `token_id` (`OLD_BASE_TOKEN`); the guide writes it
 /// `near`.
@@ -227,13 +227,19 @@ fn value_codes(moves: &[Move], input: &ProposalInput, codes: &mut Vec<FindingCod
     let Some(history) = &input.history else {
         return;
     };
-    let paid_before = |payee: &String| history.recipients_paid_before.contains(payee);
-    if moves.iter().any(|m| m.payee.as_ref().is_some_and(|p| !paid_before(p))) {
+    if moves.iter().any(|m| m.payee.as_deref().is_some_and(|p| new_payee(p, Some(history)))) {
         codes.push(FindingCode::NewRecipient);
     }
     if history.median_payment_usd_before.is_some_and(|median| priced_total > LARGE_FACTOR * median) {
         codes.push(FindingCode::LargeAmount);
     }
+}
+
+/// The one NEW_RECIPIENT test, for every payee Kaap judges: true when `payee` is not, byte for
+/// byte, an account the history says was paid before. False with no history, since the guide
+/// judges NEW_RECIPIENT only when the history is available.
+pub(crate) fn new_payee(payee: &str, history: Option<&History>) -> bool {
+    history.is_some_and(|h| !h.recipients_paid_before.iter().any(|paid| paid == payee))
 }
 
 /// USD value of one move from the price list, keyed by the exact token id (C3). A missing,
@@ -387,7 +393,7 @@ fn known_effects(
         Known::Wrap => wrap(receiver, method, args, deposit, &input.dao),
         Known::Intents => intents::method(method, args, &input.dao),
         Known::BulkPayment if method == "approve_list" => approve_list(receiver, args, deposit),
-        Known::Defi(protocol) => {
+        Known::Defi(protocol) if protocol.keeps_value(method, args) => {
             let mut decoded = Decoded::default();
             let effect = Effect::DefiCall {
                 protocol: protocol.name().into(),
@@ -402,7 +408,7 @@ fn known_effects(
             guard_enrol(receiver, args, deposit)
         }
         Known::Other => token_method(receiver, method, args, &input.dao),
-        Known::Signer | Known::BulkPayment => Err(Refusal::Unreadable),
+        Known::Signer | Known::BulkPayment | Known::Defi(_) => Err(Refusal::Unreadable),
     }
 }
 

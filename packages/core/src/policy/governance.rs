@@ -41,7 +41,7 @@ pub(crate) fn decode(variant: &str, body: &Value, config_before: Option<&Value>)
         "BountyDone" => object(body, &["bounty_id", "receiver_id"], &[]).and_then(|map| {
             let receiver = text(map, "receiver_id")?;
             let id = map["bounty_id"].as_u64()?;
-            Some(other(variant, format!("Marks bounty {id} done by {receiver}")))
+            Some(other(variant, format!("Pays bounty {id} to {receiver}, in the token and amount the bounty holds")))
         }),
         "Vote" => body.is_null().then(|| other(variant, "Signal-only proposal, nothing is executed".into())),
         "FactoryInfoUpdate" => object(body, &["factory_info"], &[])
@@ -57,11 +57,15 @@ pub(crate) fn decode(variant: &str, body: &Value, config_before: Option<&Value>)
 /// The guide section 4 codes a governance kind fires on its own: CODE_UPGRADE for the two upgrade
 /// kinds, which replace code Kaap cannot read (ruling 5), and OTHER_RISKY_KIND for a new staking
 /// contract, which decides every later token vote, and a factory change, which decides every later
-/// self-upgrade (C2). Bounties and Vote fire nothing, as the table says.
+/// self-upgrade (C2). BountyDone pays its receiver a token and an amount that live in the DAO's
+/// state, not in the kind, so it is a move of value of unknown size: UNKNOWN_VALUE, as for any
+/// payment Kaap cannot price (C2; stricter than the guide's table, which fires nothing on bounties).
+/// AddBounty and Vote fire nothing.
 fn findings(variant: &str) -> Vec<FindingCode> {
     match variant {
         "UpgradeSelf" | "UpgradeRemote" => vec![FindingCode::CodeUpgrade],
         "SetStakingContract" | "FactoryInfoUpdate" => vec![FindingCode::OtherRiskyKind],
+        "BountyDone" => vec![FindingCode::UnknownValue],
         _ => Vec::new(),
     }
 }

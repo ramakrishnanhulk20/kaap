@@ -4,6 +4,8 @@
 //! policy before and the policy after always go through the same parser and the same comparison
 //! (standard 2).
 
+use std::collections::BTreeSet;
+
 use serde_json::{json, Map, Value};
 
 use super::arming::{may_reject, one_reject_decides};
@@ -133,7 +135,7 @@ fn findings(edit: &Edit, before: &Policy, after: &Policy, change: &Change, guard
     if has_duplicate_names(after) {
         codes.push(FindingCode::PolicyDuplicateRoleNames);
     }
-    if matches!(edit, Edit::Full(_) | Edit::AddOrUpdateRole(_)) && replaces_approving_role(before, after) {
+    if replaces_whole_roles(edit) && !replaced_names(before, after).is_empty() {
         codes.push(FindingCode::PolicyReplacesRole);
     }
     if lowers_threshold(before, after) {
@@ -156,15 +158,55 @@ fn findings(edit: &Edit, before: &Policy, after: &Policy, change: &Change, guard
     codes
 }
 
-/// True when a role name that can approve, before or after, ends up covering someone it did not
+/// The two kinds that replace whole roles, member sets included (guide section 4,
+/// POLICY_REPLACES_ROLE).
+fn replaces_whole_roles(edit: &Edit) -> bool {
+    matches!(edit, Edit::Full(_) | Edit::AddOrUpdateRole(_))
+}
+
+/// The role names that can approve, before or after, and end up covering someone they did not
 /// cover before (POLICY_REPLACES_ROLE). Holders are compared whole, so a Group turned into
 /// Everyone, or into a token role, is a replacement too.
-fn replaces_approving_role(before: &Policy, after: &Policy) -> bool {
-    names(after).into_iter().any(|name| {
-        count(before, name) > 0
-            && (can_approve(before, name) || can_approve(after, name))
-            && !Holders::of(after, name).within(&Holders::of(before, name))
-    })
+fn replaced_names<'a>(before: &Policy, after: &'a Policy) -> Vec<&'a str> {
+    names(after)
+        .into_iter()
+        .filter(|name| {
+            count(before, name) > 0
+                && (can_approve(before, name) || can_approve(after, name))
+                && !Holders::of(after, name).within(&Holders::of(before, name))
+        })
+        .collect()
+}
+
+/// A role name a policy kind replaces (POLICY_REPLACES_ROLE), and who it newly covers.
+pub(crate) struct Replaced {
+    pub name: String,
+    /// The accounts the name covers after the change and not before. `None` when it also comes to
+    /// cover everyone, or token holders it did not, which no list of accounts can name.
+    pub accounts: Option<Vec<String>>,
+}
+
+/// The roles the policy kind `variant` with this `body` replaces against `before`, read, applied
+/// and measured exactly as `decode` does for the finding, so the description check names the same
+/// roles the finding counts (standard 2). Empty when the kind does not read, is not one of the two
+/// whole-role kinds, or the policy before is missing or does not read.
+pub(crate) fn replaced(variant: &str, body: &Value, before: Option<&Value>) -> Vec<Replaced> {
+    let (Some(before), Some(edit)) = (before.and_then(Policy::from_json), Edit::read(variant, body)) else {
+        return Vec::new();
+    };
+    if !replaces_whole_roles(&edit) {
+        return Vec::new();
+    }
+    let after = edit.apply(&before);
+    replaced_names(&before, &after)
+        .into_iter()
+        .map(|name| {
+            let (was, now) = (Holders::of(&before, name), Holders::of(&after, name));
+            let beyond_accounts = !Holders { accounts: BTreeSet::new(), ..now.clone() }.within(&was);
+            let accounts = (!beyond_accounts).then(|| now.accounts.difference(&was.accounts).cloned().collect());
+            Replaced { name: name.to_string(), accounts }
+        })
+        .collect()
 }
 
 /// True when, on some kind, a role name that can approve it after the change could not before,

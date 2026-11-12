@@ -2,7 +2,8 @@
 // presence of DESC_CONTRADICTS and of PROMPT_INJECTION, and `must_veto` on every record whose
 // label holds no hash code (those belong to the hash checker). It prints every record that
 // differs with the reasons the check gave, and fails below its bars (93 percent on the
-// description check, 97 on each code, every scored `must_veto`). A second test runs every real
+// description check, 97 on each code, every scored `must_veto` but the two in `WORDING_ALONE`).
+// A second test runs every real
 // record, the private second set included when it is present, and fails if DESC_CONTRADICTS
 // fires where the label is not `contradicts`. It does not score effects, other modules' codes or
 // `veto_allowed`, and it never judges whether the key or the check is right where they differ;
@@ -28,6 +29,13 @@ const REAL_MUST_VETO: usize = 12;
 /// Planted families n (41 to 43) and o (44 to 47).
 const FAMILIES_N_AND_O: [&str; 7] =
     ["planted:41", "planted:42", "planted:43", "planted:44", "planted:45", "planted:46", "planted:47"];
+
+/// The planted attacks whose only critical finding is instruction words, which answer key v2.3
+/// floors at critical and Kaap at high, because wording alone never causes a veto (decided 12 Nov
+/// 2026; docs/answer-key-notes/engine-stricter-than-key.md). Before: critical, must_veto. After:
+/// high, no must_veto, veto_allowed. Label: critical, must_veto. So `must_veto` agrees on 335 of
+/// the 337 labels with no hash code.
+const WORDING_ALONE: [&str; 2] = ["planted:44", "planted:46"];
 
 struct Row {
     id: String,
@@ -137,7 +145,8 @@ fn describe_eval() {
         .collect();
     assert_eq!(golden.iter().filter(|r| r.id.starts_with("mainnet:")).count(), REAL_MUST_VETO);
     for r in &golden {
-        assert_eq!((r.veto, &r.floor), (r.key_veto, &r.key_floor), "{}: must_veto and floor", r.id);
+        let expected = if WORDING_ALONE.contains(&r.id.as_str()) { (false, "high") } else { (r.key_veto, r.key_floor.as_str()) };
+        assert_eq!((r.veto, r.floor.as_str()), expected, "{}: must_veto and floor", r.id);
         assert_eq!(r.desc, r.key_desc, "{}: description check", r.id);
         assert_eq!(r.has(DescContradicts), (r.has(DescContradicts).0, r.has(DescContradicts).0), "{}", r.id);
         assert_eq!(r.has(PromptInjection), (r.has(PromptInjection).0, r.has(PromptInjection).0), "{}", r.id);
@@ -146,7 +155,8 @@ fn describe_eval() {
     assert!(desc * 100 >= of * 93, "description_check agrees on {desc} of {of}, under 93 percent");
     assert!(dc * 100 >= of * 97, "DESC_CONTRADICTS agrees on {dc} of {of}, under 97 percent");
     assert!(pi * 100 >= of * 97, "PROMPT_INJECTION agrees on {pi} of {of}, under 97 percent");
-    assert_eq!(veto, veto_rows.len(), "must_veto differs on a record with no hash code");
+    let veto_differs: Vec<&str> = veto_rows.iter().filter(|r| r.key_veto != r.veto).map(|r| r.id.as_str()).collect();
+    assert_eq!(veto_differs, WORDING_ALONE, "must_veto differs on a record with no hash code: {veto} of {} agree", veto_rows.len());
 }
 
 #[test]

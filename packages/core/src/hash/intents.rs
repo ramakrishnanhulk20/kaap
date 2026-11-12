@@ -22,7 +22,9 @@
 //! so LARGE_AMOUNT judges its total. A swap's `gives` count there as value leaving with no payee.
 //!
 //! A transfer to a 1Click deposit address keeps that address as its payee, so NEW_RECIPIENT judges
-//! it, unless a verified quote names the real payee (C7, `quote_payout`).
+//! it, unless a verified quote names the real payee (C7, `quote_payout`). Such a quote also names
+//! the account 1Click refunds when the swap fails; unless that is the DAO, NEW_RECIPIENT judges it
+//! too.
 
 use base64::Engine as _;
 use num_bigint::BigUint;
@@ -30,7 +32,7 @@ use serde_json::{json, Map, Value};
 
 use super::quote::{payout_chain, Quote};
 use crate::decode::account::is_account_id;
-use crate::decode::value::base_units;
+use crate::decode::value::{base_units, new_payee};
 use crate::types::{Effect, FindingCode, ProposalInput, TokenAmount};
 
 /// The kinds `decode::value` reads exactly as the text writes them.
@@ -76,10 +78,15 @@ pub fn judge(
     for item in intents {
         let kind = item.get("intent").and_then(Value::as_str).unwrap_or_default();
         let read = match kind {
-            "transfer" => {
-                let paid = quote_payout(item, deadline_ns, quotes).unwrap_or_else(|| item.clone());
-                text.decoded(paid, input)
-            }
+            "transfer" => match quote_payout(item, deadline_ns, quotes) {
+                Some((paid, quote)) => {
+                    if quote.refund_to != input.dao {
+                        text.refunds.push(quote.refund_to.clone());
+                    }
+                    text.decoded(paid, input)
+                }
+                None => text.decoded(item.clone(), input),
+            },
             _ if DECODED_KINDS.contains(&kind) => text.decoded(item.clone(), input),
             "native_withdraw" => native_withdraw(item).is_some_and(|sent| text.decoded(sent, input)),
             "storage_deposit" => text.storage_deposit(item, input),
@@ -103,6 +110,8 @@ struct Reading {
     alone: Vec<Effect>,
     /// The tokens the swaps give, as the text writes their ids, with the amounts.
     gives: Vec<(String, BigUint)>,
+    /// The refund accounts of the quotes that mapped a transfer, where that account is not the DAO.
+    refunds: Vec<String>,
     dangerous: bool,
 }
 
@@ -180,6 +189,11 @@ impl Reading {
             } else {
                 self.dangerous = true;
             }
+        }
+        // A refund account is paid the same funds when the swap fails, so it is judged as a payee
+        // by the same NEW_RECIPIENT test, without counting the funds a second time.
+        if self.refunds.iter().any(|refund| new_payee(refund, input.history.as_ref())) {
+            codes.push(FindingCode::NewRecipient);
         }
         if self.dangerous {
             codes.push(FindingCode::HashTextDangerous);
@@ -279,11 +293,11 @@ fn executed(signed: &[Value], gives: &[(String, BigUint)], input: &ProposalInput
 }
 
 /// A `transfer` of one token to a quote's deposit address, rewritten as the withdrawal the quote
-/// promises: the same token and amount, to the quote's recipient on its payout chain. Only a
-/// quote whose deposit address, origin asset, `amountIn` (whole base units) and deadline (to
-/// the nanosecond) all equal the transfer's and the text's maps it. `None` leaves the transfer
-/// as written, its deposit address the payee.
-fn quote_payout(item: &Map<String, Value>, deadline_ns: i128, quotes: &[Quote]) -> Option<Map<String, Value>> {
+/// promises: the same token and amount, to the quote's recipient on its payout chain, with the
+/// quote that mapped it. Only a quote whose deposit address, origin asset, `amountIn` (whole base
+/// units) and deadline (to the nanosecond) all equal the transfer's and the text's maps it. `None`
+/// leaves the transfer as written, its deposit address the payee.
+fn quote_payout<'q>(item: &Map<String, Value>, deadline_ns: i128, quotes: &'q [Quote]) -> Option<(Map<String, Value>, &'q Quote)> {
     if item.get("intent")?.as_str()? != "transfer" {
         return None;
     }
@@ -301,7 +315,7 @@ fn quote_payout(item: &Map<String, Value>, deadline_ns: i128, quotes: &[Quote]) 
         let (contract, id) = token_id.strip_prefix("nep245:")?.split_once(':')?;
         json!({"intent": "mt_withdraw", "token": contract, "token_ids": [id], "amounts": [amount.to_string()], "receiver_id": quote.recipient, "chain": chain})
     };
-    withdrawal.as_object().cloned()
+    Some((withdrawal.as_object().cloned()?, quote))
 }
 
 /// An intent Kaap does not read, as an `unknown_call` on the verifier named after its kind (or

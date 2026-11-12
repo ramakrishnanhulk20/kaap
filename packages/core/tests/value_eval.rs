@@ -1,10 +1,11 @@
 // Scores `analyze` on the answer-key records whose label holds only value-type effects: the
 // effects multiset, the set of codes `decode::value` owns, and the veto fields on the records
 // whose label carries no description, prompt or hash code. It prints the table and every record
-// that differs, then fails below its bars (98 percent on effects, 97 on owned codes, every scored
-// veto field). It does not score the codes of other modules, the risk floor or the description
-// check, and it never judges whether the key or the decoder is right where they differ;
-// docs/answer-key-notes/value-decoder.md does that.
+// that differs, then fails unless the effects and the scored veto fields differ from the key on
+// exactly the records in `STRICTER_THAN_KEY`, and below 97 percent on owned codes. It does not
+// score the codes of other modules, the risk floor or the description check, and it never judges
+// whether the key or the decoder is right where they differ; docs/answer-key-notes/value-decoder.md
+// and engine-stricter-than-key.md do that.
 
 mod common;
 
@@ -50,6 +51,19 @@ const OTHER_MODULES: [FindingCode; 6] =
 /// 205 of the 373 records, counted on 29 Oct 2026. A different count means the key or the filter
 /// changed, and the bars below would silently measure something else.
 const VALUE_RECORDS: usize = 205;
+
+/// The value records Kaap reads more strictly than answer key v2.3, measured 12 Nov 2026
+/// (docs/answer-key-notes/engine-stricter-than-key.md). Each is a Burrow call that can pay an
+/// account other than the DAO. Before: `defi_call`, no finding, low, veto_allowed false. After:
+/// `unknown_call`, UNKNOWN_CALL, high, veto_allowed true. Label: `defi_call`, no finding, low,
+/// veto_allowed false. So effects agree on 200 of 205 and the scored veto fields on 142 of 147.
+const STRICTER_THAN_KEY: [&str; 5] = [
+    "mainnet:burrow.sputnik-dao.near:1395", // add_asset_farm_reward
+    "mainnet:burrow.sputnik-dao.near:1399", // add_asset_farm_reward
+    "mainnet:burrow.sputnik-dao.near:1465", // add_asset_farm_reward
+    "mainnet:burrow.sputnik-dao.near:1499", // update_asset naming a beneficiary
+    "mainnet:burrow.sputnik-dao.near:1634", // update_asset naming a beneficiary
+];
 
 struct Row {
     id: String,
@@ -109,9 +123,18 @@ fn value_eval() {
         }
     }
 
-    assert!(effects * 100 >= of * 98, "effects agree on {effects} of {of}, under 98 percent");
+    let differing = |differs: fn(&Row) -> bool| {
+        let mut ids: Vec<&str> = rows.iter().filter(|r| differs(r)).map(|r| r.id.as_str()).collect();
+        ids.sort_unstable();
+        ids
+    };
+    assert_eq!(differing(|r| r.effects.is_some()), STRICTER_THAN_KEY, "effects agree on {effects} of {of}");
     assert!(codes * 100 >= of * 97, "owned codes agree on {codes} of {of}, under 97 percent");
-    assert_eq!(veto, veto_of, "must_veto or veto_allowed differ where the label has no description or hash code");
+    assert_eq!(
+        differing(|r| r.veto.is_some()),
+        STRICTER_THAN_KEY,
+        "must_veto or veto_allowed differ where the label has no description or hash code: {veto} of {veto_of} agree"
+    );
 }
 
 fn value_only(record: &Value) -> bool {

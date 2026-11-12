@@ -1,6 +1,7 @@
 // Checks the section 4 severity table and the DESC_CONTRADICTS value-or-control rule on
 // hand-built effects. It does not check that any decoder produces those effects, and it does not
-// check the labelled answer key; the evaluation runner (tests/eval.rs) does both.
+// check the labelled answer key; the evaluation runner (tests/eval.rs) does both. One row departs
+// from the guide on purpose: PROMPT_INJECTION is high, not critical (decided 12 Nov 2026).
 
 use kaap_core::severity::severity;
 use kaap_core::*;
@@ -27,7 +28,7 @@ fn table_covers_all_24_codes_with_the_guide_severities() {
         (HashMismatch, Severity::Critical),
         (HashTextDangerous, Severity::Critical),
         (PolicyDuplicateRoleNames, Severity::Critical),
-        (PromptInjection, Severity::Critical),
+        (PromptInjection, Severity::High),
         (DescContradicts, Severity::High),
         (PolicyAddsApprover, Severity::High),
         (PolicyLowersThreshold, Severity::High),
@@ -64,7 +65,7 @@ fn min_severity_covers_all_24_codes_and_never_exceeds_the_severity_in_context() 
         (HashMismatch, Severity::Critical),
         (HashTextDangerous, Severity::Critical),
         (PolicyDuplicateRoleNames, Severity::Critical),
-        (PromptInjection, Severity::Critical),
+        (PromptInjection, Severity::High),
         (DescContradicts, Severity::High),
         (PolicyAddsApprover, Severity::High),
         (PolicyLowersThreshold, Severity::High),
@@ -153,6 +154,23 @@ fn guard_weakened_alongside_counts_as_control() {
         Severity::Critical
     );
     assert_eq!(desc_severity(&[], &[FindingCode::GuardWeakened]), Severity::Critical);
+}
+
+#[test]
+fn a_measured_control_finding_counts_as_control() {
+    // A role name new in the policy that approves through tokens shows in no member, permission
+    // or vote field; only the findings measured on the policy before and after show the grant.
+    let new_role = [effect(json!({"type": "policy_change", "roles_added": ["community"]}))];
+    assert_eq!(desc_severity(&new_role, &[]), Severity::High);
+    for code in [
+        FindingCode::PolicyAddsApprover,
+        FindingCode::PolicyLowersThreshold,
+        FindingCode::PolicyReplacesRole,
+        FindingCode::GuardWeakened,
+    ] {
+        assert_eq!(desc_severity(&new_role, &[code]), Severity::Critical, "{code:?}");
+    }
+    assert_eq!(desc_severity(&new_role, &[FindingCode::PolicyRemovesMember, FindingCode::PolicyBeforeUnknown]), Severity::High);
 }
 
 #[test]

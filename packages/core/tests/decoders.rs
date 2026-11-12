@@ -1,8 +1,8 @@
 // The first true decoders, each tested on three named records of the answer key: the Transfer
-// kind, AddMemberToRole with and without the policy before, the Transfer description checks, and
-// the high fallback for kinds nothing decodes. It does not cover NEW_RECIPIENT, LARGE_AMOUNT,
-// LOOKALIKE_TOKEN or any FunctionCall decoding (tests/value_*.rs), the other policy kinds
-// (tests/policy_*.rs), or description claims beyond NEAR amounts and recipients
+// kind, AddMemberToRole with and without the policy before, the Transfer description checks, the
+// high fallback for kinds nothing decodes, and a bounty payout. It does not cover NEW_RECIPIENT,
+// LARGE_AMOUNT, LOOKALIKE_TOKEN or any FunctionCall decoding (tests/value_*.rs), the other policy
+// kinds (tests/policy_*.rs), or description claims beyond NEAR amounts and recipients
 // (tests/describe_*.rs). Agreement with the whole key is the evaluation runner's job, not this
 // file's.
 
@@ -294,4 +294,16 @@ fn a_kind_the_policy_engine_decodes_gets_its_own_code() {
         assert_eq!(codes(&a), expected, "{shown}");
         assert_eq!(a.risk_floor, floor, "{shown}");
     }
+}
+
+#[test]
+fn a_bounty_payout_is_value_of_a_size_the_kind_does_not_show() {
+    let a = analyze(&input_with_kind(br#"{"BountyDone":{"bounty_id":0,"receiver_id":"stranger.near"}}"#, true));
+    assert_eq!(codes(&a), vec![UnknownValue]);
+    assert_eq!(a.risk_floor, Severity::High);
+    assert!(
+        matches!(&a.effects[..], [Effect::OtherKind { kind, summary }] if kind == "BountyDone" && summary.contains("stranger.near")),
+        "{:?}",
+        a.effects
+    );
 }

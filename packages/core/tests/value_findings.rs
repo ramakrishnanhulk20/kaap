@@ -1,7 +1,8 @@
 // Each finding `decode::value` owns (ATTACHED_DEPOSIT, NEW_RECIPIENT, LARGE_AMOUNT,
 // UNKNOWN_VALUE, CROSS_CHAIN_OUT, LOOKALIKE_TOKEN, UNKNOWN_CALL, ARGS_NOT_JSON,
 // INTENTS_KEY_CHANGE), firing and not firing on named answer-key records, plus duplicate keys
-// (standard 2) and exact receivers (C3) on kinds built here. It does not cover the description,
+// (standard 2), exact receivers (C3) and the DeFi methods known to keep value with the DAO, on
+// kinds built here. It does not cover the description,
 // prompt or hash codes, the policy codes, random kinds (value_props.rs), or how much of the
 // whole key agrees (value_eval.rs).
 
@@ -156,6 +157,57 @@ fn a_duplicate_key_in_args_or_msg_is_a_finding_not_a_reading() {
     let in_msg = call("wrap.near", "ft_transfer_call", &args, "1");
     assert!(matches!(&in_msg.effects[..], [Effect::UnknownCall { method, .. }] if method == "ft_transfer_call"));
     assert!(codes(&in_msg).contains(&ArgsNotJson) && codes(&in_msg).contains(&UnknownCall));
+}
+
+/// One call with no attached NEAR beyond the security deposit, under a text that claims nothing.
+fn defi(receiver: &str, method: &str, args: &str) -> Analysis {
+    let mut input = input_of(&record(PLANTED, "planted:67"), &census_prices()).unwrap();
+    input.description = "For the council to review.".into();
+    let action = json!({
+        "method_name": method,
+        "args": base64::engine::general_purpose::STANDARD.encode(args),
+        "deposit": "1",
+        "gas": "30000000000000",
+    });
+    input.kind_json = serde_json::to_vec(&json!({"FunctionCall": {"receiver_id": receiver, "actions": [action]}})).unwrap();
+    analyze(&input)
+}
+
+#[test]
+fn a_defi_call_is_known_only_where_the_protocol_pays_nobody_but_the_dao() {
+    let lp = r#"{"receiver_id": "stranger.near", "token_id": ":79", "amount": "10000000000000000000000000", "msg": ""}"#;
+    let a = defi("v2.ref-finance.near", "mft_transfer_call", lp);
+    assert!(matches!(&a.effects[..], [Effect::UnknownCall { method, .. }] if method == "mft_transfer_call"), "{:?}", a.effects);
+    assert!(codes(&a).contains(&UnknownCall));
+    assert_eq!(a.risk_floor, Severity::High);
+
+    let config = |beneficiaries: &str| {
+        format!(r#"{{"token_id": "wrap.near", "asset_config": {{"reserve_ratio": 2500, "beneficiaries": {beneficiaries}, "extra_decimals": 0}}}}"#)
+    };
+    let burrow = "contract.main.burrow.near";
+    for (method, args) in [
+        ("execute", r#"{"actions": [{"Withdraw": {"token_id": "wrap.near"}}, {"Withdraw": {"token_id": "usdt.tether-token.near", "amount": "5"}}]}"#.to_string()),
+        ("update_asset_limit", r#"{"token_id": "eth.bridge.near", "borrowed_limit": "6"}"#.to_string()),
+        ("enable_asset_capacity", r#"{"token_id": "wrap.near", "can_deposit": true}"#.to_string()),
+        ("update_asset", config("{}")),
+    ] {
+        let a = defi(burrow, method, &args);
+        assert!(matches!(&a.effects[..], [Effect::DefiCall { method: m, .. }] if m == method), "{method}: {:?}", a.effects);
+        assert_eq!(a.risk_floor, Severity::Low, "{method}: {:?}", a.findings);
+    }
+    for (method, args) in [
+        ("execute", r#"{"actions": [{"Withdraw": {"token_id": "wrap.near"}}, {"ForceClose": {"account_id": "x.near"}}]}"#.to_string()),
+        ("execute", r#"{"actions": []}"#.to_string()),
+        ("update_asset", config(r#"{"stranger.near": 10000}"#)),
+        ("add_asset_farm_reward", r#"{"farm_id": "NetTvl", "reward_token_id": "wrap.near", "new_reward_per_day": "1", "new_booster_log_bases": {}, "reward_amount": "1"}"#.to_string()),
+        ("claim_prot_fee", r#"{"token_id": "wrap.near"}"#.to_string()),
+    ] {
+        let a = defi(burrow, method, &args);
+        assert!(matches!(&a.effects[..], [Effect::UnknownCall { .. }]), "{method} {args}: {:?}", a.effects);
+        assert_eq!(a.risk_floor, Severity::High, "{method} {args}");
+    }
+    let swap = defi("dclv2.ref-labs.near", "swap", r#"{"pool_ids": ["a|b|100"], "input_token": "a", "amount": "1"}"#);
+    assert!(matches!(&swap.effects[..], [Effect::UnknownCall { .. }]), "{:?}", swap.effects);
 }
 
 #[test]

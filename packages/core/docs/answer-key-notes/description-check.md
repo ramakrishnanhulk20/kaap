@@ -2,7 +2,10 @@
 
 From `cargo test -p kaap-core --test describe_eval -- --nocapture` and
 `cargo test -p kaap-core --test eval -- --nocapture` on 2 Nov 2026, over the 373 records of
-`eval/real` and `eval/planted` (guide v2.3 with rulings 28 and 29 of 2 Nov).
+`eval/real` and `eval/planted` (guide v2.3 with rulings 28 and 29 of 2 Nov). Since 12 Nov 2026
+PROMPT_INJECTION is high, so planted 44 and 46, whose only critical was that finding, floor at
+high without `must_veto`, where the key says critical: `must_veto` agrees on 335 of the 337 labels
+with no hash code (`engine-stricter-than-key.md`).
 
 | measure | agree | of | bar |
 |---|---|---|---|
