@@ -3,6 +3,11 @@
 .env
 .env.*
 !.env.example
+**/.env
+**/.env.*
+!**/.env.example
+**/.claude
+docs
 **/node_modules
 **/target
 **/dist
