@@ -48,4 +48,9 @@ still "$story_frames" "null" end.jpg
 still 1 "$phone_cut" first-phone.jpg
 still "$story_frames" "$phone_cut" end-phone.jpg
 
+# The picture a link to the site shows when it is shared: the last frame of the story, cut to the
+# 1200 by 630 that link previews use, keeping the right-hand side where the door is tied. Next.js
+# serves a file with this name in the app folder as the page's share picture.
+ffmpeg -y -loglevel error -i "$frames/frame_$(printf '%04d' "$story_frames").png" \n  -vf "crop=ih*1200/630:ih:iw-ih*1200/630:0,scale=1200:630:flags=lanczos" -q:v 2 -pix_fmt yuvj444p \n  "$here/../../packages/web/app/opengraph-image.jpg"
+
 ls -l "$dest"
