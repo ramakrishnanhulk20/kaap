@@ -33,3 +33,4 @@ coverage/
 # Internal build plan: not public
 work-orders/
 packages/web/AGENTS.md
+packages/web/.next-*/

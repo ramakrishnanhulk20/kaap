@@ -25,6 +25,7 @@ import { RpcError } from './rpc.js';
 import { cryptoFresh, type Fresh } from './sealing.js';
 import { render as renderSealText, SealRefused, sealText } from './sealtext.js';
 import { render as renderSubscription, subscribe, WorkerRefused } from './subscribe.js';
+import { terminalJson } from './text.js';
 import { NoVerdict, outcome, render as renderVerify, verify } from './verify.js';
 
 export interface Env {
@@ -83,9 +84,11 @@ export async function main(argv: string[], env: Env, io: Io): Promise<number> {
     return 0;
   }
 
+  // `check --json` is the one JSON output; it goes through `terminalJson` like any other output
+  // goes through `shown`.
   const json = command.command === 'check' && command.json;
   const fail = (code: number, message: string, extra: Record<string, unknown> = {}) => {
-    if (json) io.out(JSON.stringify({ ok: false, reason: message, ...extra }, null, 2));
+    if (json) io.out(terminalJson({ ok: false, reason: message, ...extra }));
     else io.err(message);
     return code;
   };
@@ -95,7 +98,7 @@ export async function main(argv: string[], env: Env, io: Io): Promise<number> {
     switch (command.command) {
       case 'check': {
         const { report, decimals } = await check({ ...deps, repoRoot: env.repoRoot }, command);
-        io.out(json ? JSON.stringify({ ok: true, ...report }, null, 2) : renderCheck(report, decimals));
+        io.out(json ? terminalJson({ ok: true, ...report }) : renderCheck(report, decimals));
         return 0;
       }
       case 'eval':

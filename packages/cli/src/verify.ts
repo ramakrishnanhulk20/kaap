@@ -302,10 +302,14 @@ export async function verify(deps: Deps & { repoRoot: string }, request: VerifyR
   if (v !== null) {
     const again = core.verdictHash(v);
     checks.push(check(again === signedHash, `format: a version 1 verdict, and kaap-verdict encodes its fields back to exactly the signed bytes (hash ${short(signedHash)})`, 'format: kaap-verdict does not encode the fields back to the signed bytes'));
+    // The verdict reader takes any safe integer, and past 8.64e15 ms a date holds no time at all.
+    const expiry = new Date(v.expires_at_ms);
+    const realTime = !Number.isNaN(expiry.getTime());
     facts.push(
       `  risk ${v.risk}, floor ${v.floor}, findings ${v.findings.join(', ') || 'none'}, AI ${v.ai_status}${v.model_id ? ` (${oneLine(v.model_id, 80)})` : ''}`,
-      `  read at block ${v.block_height}, expires ${new Date(v.expires_at_ms).toISOString()}, decoder ${oneLine(v.decoder_version, 20)}`,
+      `  read at block ${v.block_height}, expires ${realTime ? expiry.toISOString() : `at ${v.expires_at_ms} ms after 1970, not a real time`}, decoder ${oneLine(v.decoder_version, 20)}`,
     );
+    if (!realTime) checks.push(fail(`expiry: the verdict expires ${v.expires_at_ms} ms after 1970, which is not a real time`));
     checks.push(
       check(
         v.network === request.network && v.dao === request.dao && v.proposal_id === request.id && v.guard === d.guard,

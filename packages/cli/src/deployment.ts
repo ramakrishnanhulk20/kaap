@@ -16,7 +16,7 @@ import { z } from 'zod';
 
 import { MAX_DEPLOYMENT_RECORDS } from './caps.js';
 import { Held, type Reader } from './chain.js';
-import type { Block, Network } from './rpc.js';
+import { type Block, isTxHash, type Network } from './rpc.js';
 import { oneLine } from './text.js';
 
 export class NoDeployment extends Error {
@@ -28,7 +28,7 @@ export class NoDeployment extends Error {
 
 const account = z.string().min(2).max(64);
 const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/);
-const txHash = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{43,44}$/);
+const txHash = z.string().refine(isTxHash);
 const edKey = z.string().regex(/^ed25519:[1-9A-HJ-NP-Za-km-z]{43,44}$/);
 
 const deploymentsSchema = z.looseObject({

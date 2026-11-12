@@ -1,8 +1,9 @@
 // The chain of deployment records (deployment.ts): this clone's own two records in order; an earlier
 // record named outside deployments/, by `..`, by an absolute path or through a link, refused before
 // it is read, while the record that names it is still used; a chain longer than four followed no
-// further; and a record named twice read once. It does not cover which record a command picks
-// (the verify, check, enroll and seal-text tests do).
+// further; a record named twice read once; and run hashes of 42 characters read, while one of 33
+// bytes is refused. It does not cover which record a command picks (the verify, check, enroll and
+// seal-text tests do).
 
 import assert from 'node:assert/strict';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -11,7 +12,7 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 
 import { MAX_DEPLOYMENT_RECORDS } from '../src/caps.js';
-import { deploymentChain, NoDeployment } from '../src/deployment.js';
+import { deploymentChain, loadDeployment, loadTextKey, NoDeployment } from '../src/deployment.js';
 import { REPO_ROOT } from './replay.js';
 
 const TODAY = JSON.parse(readFileSync(join(REPO_ROOT, 'deployments', 'testnet.json'), 'utf8')) as Record<string, unknown>;
@@ -83,4 +84,18 @@ test('a chain longer than four records is followed no further, and a record name
 
   record(root, 'deployments/b.json', 2, 'deployments/testnet.json');
   assert.deepEqual(registries(root), ['kaap-registry-1.testnet', 'kaap-registry-2.testnet']);
+});
+
+test('a record whose runs have 42-character hashes is read, and one naming 33 bytes as a run is refused', () => {
+  const root = clone();
+  const { previous: _today, ...base } = TODAY;
+  const write = (run: string) =>
+    writeFileSync(join(root, 'deployments', 'testnet.json'), JSON.stringify({ ...base, sealed: { ...(TODAY['sealed'] as object), attested_run_tx: run }, text_key: { ...(TODAY['text_key'] as object), run_tx: run } }));
+  const short = '1tJ93RwaVfE1PEMxd5rpZZuPtLCwbEaDCrNBjvAWVD';
+  write(short);
+  const d = loadDeployment(root, 'testnet');
+  assert.equal(d.attestedRunTx, short);
+  assert.equal(loadTextKey(root, d).runTx, short);
+  write('z'.repeat(44));
+  assert.throws(() => loadDeployment(root, 'testnet'), NoDeployment);
 });

@@ -9,7 +9,8 @@
 // should keep its lines goes through `shownLines` and is indented under its heading by the caller.
 // Long text is cut and says so. `check`, `verify`, `arming` and `seal-text` also pass every
 // finished line through `shown` once more (`terminalText`), so a value that reached a line without
-// its own check is still inert.
+// its own check is still inert. `check --json` prints through `terminalJson`, which writes the same
+// characters as JSON escapes, so the output is as inert and still parses to the same values.
 //
 // Not covered: letters that look like others or draw nothing (homoglyphs, combining marks, the
 // Hangul fillers) are shown as they are, since they can mislead the eye but cannot move the cursor,
@@ -46,6 +47,16 @@ export function shownLines(text: string, max = MAX_SHOWN_TEXT): string[] {
 /** A command's finished lines as the text it prints, each line through `shown` once more. */
 export function terminalText(lines: readonly string[]): string {
   return lines.map((line) => shown(line, Number.POSITIVE_INFINITY)).join('\n');
+}
+
+const jsonEscape = (c: string) => Array.from({ length: c.length }, (_, i) => `\\u${c.charCodeAt(i).toString(16).padStart(4, '0')}`).join('');
+
+/** `value` as the indented JSON a command prints, with nothing a terminal acts on: every character
+ *  `shown` escapes is written as its JSON `\u` escape, two of them above U+FFFF, so the text still
+ *  parses to `value`. JSON.stringify already escapes U+0000 to U+001F inside a string, so those in
+ *  its output are its own line breaks between values, and stay. Nothing is cut. */
+export function terminalJson(value: unknown): string {
+  return JSON.stringify(value, null, 2).replace(UNSAFE, (c) => ((c.codePointAt(0) ?? 0) < 0x20 ? c : jsonEscape(c)));
 }
 
 export function percent(part: number, whole: number): string {

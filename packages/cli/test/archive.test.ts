@@ -29,7 +29,8 @@ const unknown = (cause: string) => rpc({ error: { name: 'HANDLER_ERROR', cause: 
 const body = (r: HttpRequest) => JSON.parse(r.body ?? '{}') as { method: string; params: Record<string, unknown> };
 const height = (r: HttpRequest) => Number(body(r).params['block_id']);
 const block = (h: number) => rpc({ result: { header: { height: h, hash: `h${h}`, timestamp_nanosec: '1' }, chunks: [{ chunk_hash: `c${h}`, height_included: h, tx_root: 'r' }] } });
-const tx = (status: string) => rpc({ result: { final_execution_status: status, transaction: {}, status: {}, receipts_outcome: [] } });
+/** A transaction's outcome for the hash `r` asks about. */
+const tx = (r: HttpRequest, status: string) => rpc({ result: { final_execution_status: status, transaction: { hash: body(r).params['tx_hash'] }, status: {}, receipts_outcome: [] } });
 
 /** An archive over `hosts` whose transport gives `answer(request, how often this host was asked)`.
  *  The rate limiter keeps its own clock, so `clock.slept` counts only the waits between tries. */
@@ -87,13 +88,13 @@ test('a request is sent once per run, a node\'s final word that it has no such t
 });
 
 test('a fresh transaction is read from a live provider, asked not to wait, without reaching an archive; one not final yet moves on', async () => {
-  const fresh = archive(archiveHosts('testnet', null), (r) => (r.url === T.primary ? tx('FINAL') : assert.fail(`asked ${r.url}`)));
+  const fresh = archive(archiveHosts('testnet', null), (r) => (r.url === T.primary ? tx(r, 'FINAL') : assert.fail(`asked ${r.url}`)));
   assert.notEqual(await fresh.a.txStatus('9xTx', 'kaap-worker.testnet'), null);
   assert.deepEqual(fresh.at(), ['near-testnet.drpc.org']);
   assert.equal(body(fresh.asked[0] as HttpRequest).params['wait_until'], 'NONE');
   assert.deepEqual(fresh.a.answered, ['near-testnet.drpc.org']);
 
-  const pending = archive(archiveHosts('testnet', null), (r) => (r.url === T.primary ? tx('EXECUTED_OPTIMISTIC') : tx('FINAL')));
+  const pending = archive(archiveHosts('testnet', null), (r) => (r.url === T.primary ? tx(r, 'EXECUTED_OPTIMISTIC') : tx(r, 'FINAL')));
   await pending.a.txStatus('9xTx', 'kaap-worker.testnet');
   assert.deepEqual(pending.a.answered, ['rpc.testnet.fastnear.com']);
 });

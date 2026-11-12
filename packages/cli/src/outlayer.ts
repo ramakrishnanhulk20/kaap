@@ -18,14 +18,10 @@ import { MAX_ATTESTATION_BYTES, MAX_RETRY_WAIT_MS, MAX_VIEW_BODY_BYTES, RPC_TIME
 import type { Deployment } from './deployment.js';
 import type { Clock, RateLimiter } from './limiter.js';
 import { type HttpResponse, NetError, type Transport } from './net.js';
-import { type Block, type Network, NETWORKS, type Provider, RpcError } from './rpc.js';
+import { type Block, isTxHash, type Network, NETWORKS, type Provider, RpcError } from './rpc.js';
 import { shown } from './text.js';
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-
-/** A NEAR transaction hash: base58 of 32 bytes. Every transaction hash this file prints or puts
- *  into a URL has this shape. */
-export const TX_HASH = /^[1-9A-HJ-NP-Za-km-z]{43,44}$/;
 
 /** A block hash, also base58 of 32 bytes, at any length base58 can write 32 bytes in. */
 const BLOCK_HASH = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -43,8 +39,10 @@ export type SealedOutput = z.output<typeof outputSchema>;
 
 const inputSchema = z.looseObject({ network: z.string(), dao: z.string(), proposal_id: z.number().int().nonnegative() });
 
+/** Every transaction hash this file prints or puts into a URL has passed `isTxHash`, here or in
+ *  `readAttestation`. */
 const txSchema = z.looseObject({
-  hash: z.string().regex(TX_HASH),
+  hash: z.string().refine(isTxHash),
   signer_id: z.string(),
   receiver_id: z.string(),
   actions: z.array(z.unknown()),
@@ -199,9 +197,11 @@ async function blockByHash(archival: Provider, hash: string): Promise<Block> {
   return { height: read.data.header.height, hash, timestampNs: read.data.header.timestamp_nanosec };
 }
 
-/** The run `tx` as the archival node knows it, or null when it does not. An answer for any other
- *  transaction is refused as no answer (`unavailable`), so `kaap verify` shows the run unread: its
- *  hash would otherwise be printed, and put into the attestation's address, as this run's. */
+/** The run `tx` as the archival node knows it, or null when it does not. An `Archive` moves on from
+ *  a node that answers for another transaction to the next node in its list (rpc.ts); an answer for
+ *  another transaction that still arrives is refused as no answer (`unavailable`), so `kaap verify`
+ *  shows the run unread: its hash would otherwise be printed, and put into the attestation's
+ *  address, as this run's. */
 export async function readRun(archival: Provider, tx: string, sender: string, outlayer: string): Promise<Run | null> {
   const outcome = await archival.txStatus(tx, sender);
   if (outcome === null) return null;
@@ -282,7 +282,7 @@ export type AttestationRead = { found: true; attestation: Attestation; url: stri
  *  each through the rate limiter. Any other answer, a 404 included, is OutLayer's word. */
 export async function readAttestation(network: Network, tx: string, transport: Transport, limiter: RateLimiter, clock: Clock): Promise<AttestationRead> {
   const base = `${NETWORKS[network].outlayer}/attestations/by-tx/`;
-  if (!TX_HASH.test(tx)) return { found: false, why: 'the run named is not a NEAR transaction hash, so OutLayer was not asked', url: base, unanswered: false };
+  if (!isTxHash(tx)) return { found: false, why: 'the run named is not a NEAR transaction hash, so OutLayer was not asked', url: base, unanswered: false };
   const url = `${base}${tx}`;
   let response: HttpResponse | null = null;
   let why = 'OutLayer could not be reached';

@@ -1,10 +1,10 @@
 // `kaap seal-text` against a stand-in chain and a stand-in worker that opens the text with the
 // sealed program's key and seals an explanation back: the encryption against the round-trip
 // script's own code on fixed inputs, the judged answer printed as the worker's report with its
-// explanation opened, an explanation carrying terminal controls, every refusal before anything
+// explanation opened, a run hash of 42 characters included, an explanation carrying terminal controls, every refusal before anything
 // reaches the worker (a guard on other code or one the providers differ on, no text key, a key the
 // guard's key did not sign, a text that does not hash to the payload, a text too long for the run's
-// input), every answer the worker's POST /texts gives, with its model id when judged, and two
+// input, counted with the sealed program's own longest verdict life), every answer the worker's POST /texts gives, with its model id when judged, and two
 // privacy claims, each checked on the bytes: the request holds no plaintext, and nothing is written
 // to a file while the command runs. The stand-in chain answers the guard's and registry's code and
 // keys as both providers did live on 12 Nov. It does not cover the real worker or OutLayer (only a live testnet run reaches them), the
@@ -20,6 +20,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 
+import { MAX_EXPIRES_IN_MS } from '../src/caps.js';
 import { Core } from '../src/core.js';
 import { main } from '../src/main.js';
 import { type HttpRequest, type HttpResponse, NetError, type Transport } from '../src/net.js';
@@ -314,9 +315,11 @@ test('a sealed text comes back judged: the verdict, the veto and the explanation
   assert.match(out, /^confirm it from the chain: kaap verify kaap-dao-1029064008\.testnet 41 --network testnet$/m);
   assert.doesNotMatch(out, /verified by Kaap|^verdict$/m);
 
-  const quiet = await run({ worker: judging([], { veto: 'not_needed', risk: 'low', floor: 'low', findings: [], ai_status: 'unavailable', model_id: null }) });
-  assert.equal(quiet.code, 0);
-  for (const line of ['  veto: not needed', '  findings: none', '  AI: unavailable, no model answered']) assert.ok(quiet.out.split('\n').includes(line), line);
+  // A run hash of 42 characters: 32 bytes whose first is zero.
+  const shortRun = '1tJ93RwaVfE1PEMxd5rpZZuPtLCwbEaDCrNBjvAWVD';
+  const quiet = await run({ worker: judging([], { veto: 'not_needed', risk: 'low', floor: 'low', findings: [], ai_status: 'unavailable', model_id: null, run_tx: shortRun }) });
+  assert.equal(quiet.code, 0, quiet.err);
+  for (const line of ['  veto: not needed', '  findings: none', '  AI: unavailable, no model answered', `  sealed run: https://testnet.nearblocks.io/txns/${shortRun}`]) assert.ok(quiet.out.split('\n').includes(line), line);
 });
 
 test("an explanation that carries terminal controls and imitates Kaap's lines prints each of its lines indented under its heading, escaped", async () => {
@@ -350,6 +353,16 @@ test("a text too long for the sealed run's 32 KiB input is refused before any re
   assert.equal(over.out, '');
   assert.match(over.err, /^the text is too long for Kaap's sealed program: with it, the sealed run's input would be \d{5} bytes, and the program reads at most 32768 \(about 24 KiB of text\)\. Nothing was sent\.$/);
   assert.equal(over.toWorker.length, 0);
+});
+
+test("the run's input is counted with the longest verdict life the sealed program accepts, 15 minutes", () => {
+  // The worker writes the expiry into the run's input; this command sends none, and must not count
+  // with a longer one than the sealed program takes.
+  const source = readFileSync(join(REPO_ROOT, 'packages', 'sealed', 'src', 'input.rs'), 'utf8');
+  const sealed = /^pub const MAX_EXPIRES_IN_MS: u64 = ([\d_]+);$/m.exec(source)?.[1];
+  assert.ok(sealed, 'input.rs still names MAX_EXPIRES_IN_MS');
+  assert.equal(MAX_EXPIRES_IN_MS, Number(sealed.replaceAll('_', '')));
+  assert.ok(MAX_EXPIRES_IN_MS <= 900_000);
 });
 
 test("the request to the worker holds no plaintext: the text is in none of the bytes sent, plain or as base64", async () => {

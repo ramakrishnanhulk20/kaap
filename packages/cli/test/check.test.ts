@@ -2,8 +2,8 @@
 // amount sent, with and without prices, a NEAR Business confidential payment, Kaap's testnet DAO,
 // a DAO's call enrolling in Kaap's guard, an account that is not Sputnik code, two providers that
 // disagree or cannot be compared, the read-only promise, and the terminal escaping of attacker text:
-// a description whose line breaks imitate Kaap's own lines, and every string of a report set to each
-// of 300 hostile strings. The fixtures were recorded while 1Click's list answered HTTP 521, so the
+// a description whose line breaks imitate Kaap's own lines, every string of a report set to each of
+// 300 hostile strings, and `--json` output that carries no such character raw yet parses back. The fixtures were recorded while 1Click's list answered HTTP 521, so the
 // priced cases serve the census's own 1Click list instead.
 // The testnet fixtures were recorded under the 29 Oct deployment and read through the real chain of
 // records: Kaap's guard is the one the DAO is enrolled with, else today's.
@@ -238,6 +238,19 @@ test("a description whose line breaks imitate Kaap's own lines stays on its one 
   assert.equal(lines.filter((l) => l.startsWith('must_veto:')).length, 1, out);
   assert.equal(lines.filter((l) => l === 'findings').length, 1, out);
   assert.ok(lines.includes('description: Pay alice\\nfindings\\n  none\\nrisk floor: low\\nmust_veto: false'), out);
+});
+
+test('check --json writes every control, direction and zero-width character as an escape, and parses back to the same description', async () => {
+  // NEL, the right-to-left override, a zero-width space, DEL, the line separator, and a tag
+  // character above U+FFFF, which takes a pair of escapes.
+  const raw = ['\u0085', '‮', '​', '\u007f', ' ', '\u{e0041}'];
+  const description = `Pay alice${raw.join('x')} 5 NEAR`;
+  const { code, out } = await run('check-survival-132', ['--json'], (t) => t, describing(description));
+  assert.equal(code, 0, out);
+  for (const c of raw) assert.ok(!out.includes(c), `U+${c.codePointAt(0)?.toString(16)} is raw`);
+  assert.ok(!carriesHostile(out));
+  assert.match(out, /\\u0085x\\u202ex\\u200bx\\u007fx\\u2028x\\udb40\\udc41 5 NEAR/);
+  assert.equal((JSON.parse(out) as { description: string }).description, description);
 });
 
 test('every string of a check report, set to each of 300 hostile strings, prints with no control, direction or zero-width character and starts no line', async () => {

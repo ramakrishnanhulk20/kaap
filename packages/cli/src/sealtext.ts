@@ -26,7 +26,7 @@ import { contractBlock, contractsAsRecorded, Refused as SealRefused, stopUnlessA
 import { type Core, CoreError, type ProposalRead } from './core.js';
 import { describeDeployment, enrolledDeployment, loadTextKey, type TextKey } from './deployment.js';
 import { type HttpResponse, NetError, type Transport } from './net.js';
-import { type Block, type Network, RpcError } from './rpc.js';
+import { type Block, isTxHash, type Network, RpcError } from './rpc.js';
 import { explanationContext, type Fresh, openSealed, SEALED_PREFIX, SealingError, sealTo, textContext, textKeySigned } from './sealing.js';
 import { WorkerRefused } from './subscribe.js';
 import { oneLine, shown, shownLines, terminalText, utc } from './text.js';
@@ -174,7 +174,7 @@ const severity = z.enum(['low', 'medium', 'high', 'critical', 'unknown']);
 /** The worker's 200 answer to POST /texts (packages/worker/HOSTING.md), and nothing else. */
 const judgedSchema = z.strictObject({
   status: z.literal('judged'),
-  run_tx: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{43,44}$/),
+  run_tx: z.string().refine(isTxHash),
   risk: severity,
   floor: severity,
   findings: z.array(z.string().regex(/^[A-Z_]{3,40}$/)).max(32),
@@ -267,7 +267,8 @@ export async function sealText(deps: Deps & { repoRoot: string; fresh: Fresh }, 
 }
 
 /** The sealed run's input as the worker writes it (packages/worker/src/judge.ts `input`), counted
- *  with the longest verdict life the worker allows, so never shorter than the worker counts it. */
+ *  with the longest verdict life the sealed program takes, so never shorter than any input of a run
+ *  it would judge. */
 function runInputBytes(request: SealTextRequest, guard: string, ciphertext: string, replyKey: Buffer): number {
   const input = { v: 1, network: request.network, guard, dao: request.dao, proposal_id: request.id, expires_in_ms: MAX_EXPIRES_IN_MS, text_ciphertext: ciphertext, reply_key: replyKey.toString('hex') };
   return Buffer.byteLength(JSON.stringify(input));

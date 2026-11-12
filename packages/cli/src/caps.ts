@@ -75,10 +75,11 @@ export const MAX_TEXT_FILE_BYTES = 64 * 1024;
  *  about 24 KiB for the ciphertext itself. */
 export const MAX_RUN_INPUT_BYTES = 32_768;
 
-/** The longest verdict life the sealed job takes (input.rs `MAX_EXPIRES_IN_MS`) and the worker's
- *  KAAP_VERDICT_TTL_MS allows. The run input is counted with it, so never shorter than the worker
- *  counts it. */
-export const MAX_EXPIRES_IN_MS = 3_600_000;
+/** The longest verdict life the sealed program takes, 15 minutes: packages/sealed/src/input.rs
+ *  `MAX_EXPIRES_IN_MS`, which this must never exceed. The worker writes the expiry into each run's
+ *  input and `kaap seal-text` sends none; it counts a run's input with this one, so never shorter
+ *  than any input the sealed program reads. */
+export const MAX_EXPIRES_IN_MS = 900_000;
 
 /** POST /texts answers once the sealed run has landed, about 10 to 30 seconds when it goes well.
  *  Node's fetch stops waiting for an answer's headers after 5 minutes whatever is asked, so that is

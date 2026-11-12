@@ -8,8 +8,18 @@ import { MAX_PAGE_BODY_BYTES, MAX_RETRY_WAIT_MS, MAX_VIEW_BODY_BYTES, RATE_LIMIT
 import type { Clock } from './limiter.js';
 import type { RateLimiter } from './limiter.js';
 import { NetError, type Transport } from './net.js';
+import { shown } from './text.js';
+import { base58 } from './verdict.js';
 
 export type Network = 'mainnet' | 'testnet';
+
+/** A NEAR transaction hash: base58 of exactly 32 bytes, at whatever length base58 writes them (44
+ *  characters mostly, 43 about one time in 18, 42 about one in a million). Base58 never writes 32
+ *  bytes in more than 44 characters, so a longer text is refused before it is decoded, which takes
+ *  time in the square of its length. */
+export function isTxHash(text: string): boolean {
+  return text.length <= 44 && base58(text)?.length === 32;
+}
 
 export interface NetworkConfig {
   /** Two independent providers, read at the same block and compared (C22). */
@@ -370,10 +380,12 @@ type Outcome = { host: string; result: Record<string, unknown> } | { host: strin
 
 /** One read asked of a list of hosts in turn. Each host gets the tries `Provider.call` gives it,
  *  with an HTTP 429 that carries no Retry-After waited out for 2 s, then 5 s, before the request
- *  moves on; it fails only when every host has failed. A host that answered 429 starts no request
- *  for `RATE_LIMIT_REST_MS` and is asked only after the others. Within one run the same request
- *  (method and params) is sent once and its outcome reused, except a failure every host gave. The
- *  reads stay single-node: which host answered is recorded, never compared. */
+ *  moves on; a host that answers a `tx` request for another transaction is moved on from at once,
+ *  since that is no answer to what was asked. The read fails only when every host has failed, so a
+ *  transaction is unread only when no host gave the one asked for. A host that answered 429 starts
+ *  no request for `RATE_LIMIT_REST_MS` and is asked only after the others. Within one run the same
+ *  request (method and params) is sent once and its outcome reused, except a failure every host
+ *  gave. The reads stay single-node: which host answered is recorded, never compared. */
 export class Archive extends Provider {
   readonly #hosts: Host[];
   readonly #clock: Clock;
@@ -472,6 +484,11 @@ export class Archive extends Provider {
       }
       if (liveTx && result['final_execution_status'] !== 'FINAL') {
         failures.push(`${name} does not hold it as final yet`);
+        continue;
+      }
+      const answered = isRecord(result['transaction']) ? result['transaction']['hash'] : undefined;
+      if (method === 'tx' && answered !== params['tx_hash']) {
+        failures.push(`${name} answered for transaction ${shown(String(answered), 50)} when asked for ${shown(String(params['tx_hash']), 50)}`);
         continue;
       }
       if (height !== null) for (const h of lacked) h.goneAt = Math.max(h.goneAt, height);

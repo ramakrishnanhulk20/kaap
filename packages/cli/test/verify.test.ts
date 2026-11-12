@@ -9,20 +9,23 @@
 // asked before the public ones, and OutLayer's API dropping a connection (asked again) or never
 // answering (its checks unread). Then every check passing, then the same answers with a flipped
 // signature bit, a wrong wasm hash and a wrong caller in OutLayer's attestation, a tampered
-// receivers hash, a receiver whose code differs at the verdict's block, and the live providers
-// disagreeing on a receiver's code now, each failing its check and the command; OutLayer's record
+// receivers hash, an expiry past any time a date can hold, a receiver whose code differs at the
+// verdict's block, and the live providers disagreeing on a receiver's code now, each failing its
+// check and the command; OutLayer's record
 // changed against its TDX quote, its quote rewritten to the Legacy hash, and a record whose quote
 // is rewritten to match it but whose fields or time disagree with the chain, each failing the
 // binding check; the guard and registry of the record that holds the verdict checked first, at the
 // final block (each recording carries both providers' answers for that block, from the archive
 // where the providers no longer keep it), with a guard on other code or holding an access key
-// failing and providers that differ leaving it unread; a node answering, or a chunk listing, a run
-// under another hash or a terminal escape, which is unread and never reaches the output; every line
+// failing and providers that differ leaving it unread; an archive answering a run with another
+// transaction, passed over for the next archive, the run unread only when no archive gives it; a
+// node answering, or a chunk listing, a run under a terminal escape, which is unread and never
+// reaches the output; every line
 // of a report with 300 hostile strings added; a receiver redeployed since the verdict, which warns;
 // no verdict for a proposal; what the command reads; the accounts the receivers hash covers, on the
 // sealed job's own cases; a
-// verdict from another decoder warning without failing; and the verdict reader and the ed25519
-// check on their own. It does not cover Intel's signature on the TDX quote or OutLayer's approval
+// verdict from another decoder warning without failing; and the verdict reader, the ed25519 check
+// and what a transaction hash is on their own. It does not cover Intel's signature on the TDX quote or OutLayer's approval
 // of its measurements (the CLI does not check them and says so), a receivers hash over a called
 // contract recorded live (the 29 Oct payment is native NEAR, so it covers the DAO alone), the live
 // chain changing after the recording (only a live run sees it), or a verdict with an AI answer
@@ -37,8 +40,9 @@ import { Core } from '../src/core.js';
 import { RateLimiter } from '../src/limiter.js';
 import { main } from '../src/main.js';
 import { type HttpRequest, NetError, type Transport } from '../src/net.js';
-import { NETWORKS } from '../src/rpc.js';
-import { base58, BadVerdict, decodeVerdict, ed25519Valid, edKeyBytes, signedBytes } from '../src/verdict.js';
+import { readAttestation } from '../src/outlayer.js';
+import { isTxHash, NETWORKS } from '../src/rpc.js';
+import { base58, BadVerdict, decodeVerdict, ed25519Valid, edKeyBytes, sha256Hex, signedBytes } from '../src/verdict.js';
 import { calledAccounts, decoderCheck, render, verify } from '../src/verify.js';
 import { carriesHostile, forgedCounts, hostileStrings, taint } from './hostile.js';
 import { answering, fakeClock, load, replay, REPO_ROOT, UNKNOWN_TODAY, withoutAllowedReads } from './replay.js';
@@ -341,6 +345,22 @@ test('a tampered receivers hash in the verdict fails the receivers check', async
   assert.match(out, /the guard has not voted with this verdict/);
 });
 
+test('a verdict whose expiry is past any time a date can hold fails a check that says so, and verify exits 5 without a crash', async () => {
+  // 9e15 ms is a whole number the verdict reader takes, but past the last time a JavaScript date
+  // holds (8.64e15 ms, the year 275760).
+  const far = editView('latest', (value) => {
+    const record = value as { verdict: string };
+    const bytes = Buffer.from(record.verdict, 'base64');
+    bytes.writeBigUInt64LE(9_000_000_000_000_000n, bytes.length - 8);
+    return { ...record, verdict: bytes.toString('base64'), verdict_hash: sha256Hex(signedBytes(bytes)), expires_at_ms: 9e15 };
+  });
+  const { code, out } = await run(far, neverVoted);
+  assert.equal(code, 5, out);
+  assert.equal(line(out, /^fail {2}expiry/), 'fail  expiry: the verdict expires 9000000000000000 ms after 1970, which is not a real time');
+  assert.match(out, /^ {2}read at block 275266740, expires at 9000000000000000 ms after 1970, not a real time, decoder 0\.1\.0$/m);
+  assert.match(line(out, /registry's summary/), /^pass/, 'the registry shows the same expiry');
+});
+
 test('a called contract whose code at the verdict\'s block is not what the verdict pinned fails the receivers check', async () => {
   const redeployed = (r: HttpRequest, text: string) => {
     if (r.url !== ARCHIVE || params(r).params?.request_type !== 'view_account') return text;
@@ -455,22 +475,45 @@ test('an attestation naming another caller fails', async () => {
   assert.match(line(out, /the run: OutLayer's attestation/), /^fail {2}the run: OutLayer's attestation: caller kaap-impostor\.testnet, not kaap-worker-1029053612\.testnet \(attestation from OutLayer's API alone; chain read from archival-rpc\.testnet\.fastnear\.com, one node per read, not compared\)$/);
 });
 
-test('a node answering a run with another transaction\'s hash leaves that run unread, never a pass', async () => {
-  const verdictRun = await run(editTx(VERDICT_RUN, (t) => (t['hash'] = KEY_RUN)));
-  assert.equal(verdictRun.code, 6, verdictRun.out);
-  assert.match(line(verdictRun.out, /^unread {2}sealed run/), new RegExp(`^unread {2}sealed run: could not be read: archival-rpc\\.testnet\\.fastnear\\.com: answered for transaction ${KEY_RUN} when asked for ${VERDICT_RUN}$`));
-  assert.doesNotMatch(verdictRun.out, /^ {2}(pass|fail) {2}sealed run/m);
-  const keyRun = await run(editTx(KEY_RUN, (t) => (t['hash'] = VERDICT_RUN)));
-  assert.equal(keyRun.code, 6, keyRun.out);
-  assert.match(line(keyRun.out, /^unread {2}the key's run/), new RegExp(`^unread {2}the key's run 7HvniWe5\\.\\.\\.: could not be read \\(archival-rpc\\.testnet\\.fastnear\\.com: answered for transaction ${VERDICT_RUN} when asked for ${KEY_RUN}\\)$`));
-  assert.doesNotMatch(keyRun.out, /^ {2}pass {2}the key's run/m);
+/** Both archives answering from the recording of the first, and those in `wrong` answering the run
+ *  `hash` with the transaction `other` names instead. */
+function wrongRun(hash: string, other: string, wrong: readonly string[]) {
+  return (t: Transport): Transport => async (r) => {
+    const answer = await t(r.url === SECOND_ARCHIVE ? { ...r, url: ARCHIVE } : r);
+    if (!wrong.includes(r.url) || params(r).method !== 'tx' || !r.body?.includes(hash)) return answer;
+    const body = JSON.parse(answer.text) as { result?: { transaction?: Record<string, unknown> } };
+    if (body.result?.transaction) body.result.transaction['hash'] = other;
+    return { ...answer, text: JSON.stringify(body) };
+  };
+}
+
+test('a node answering a run with another transaction is passed over for the next archive, and the run is unread only when no node gives the one asked', async () => {
+  const both = (asked: string, other: string) => [ARCHIVE, SECOND_ARCHIVE].map((url) => `${new URL(url).host.replaceAll('.', '\\.')} answered for transaction ${other} when asked for ${asked}`).join('; ');
+  const second = /chain read from (archival-rpc\.testnet\.fastnear\.com and )?archival-rpc\.testnet\.near\.org( and archival-rpc\.testnet\.fastnear\.com)?, one node per read, not compared\)$/;
+
+  const verdictRun = await run(undefined, wrongRun(VERDICT_RUN, KEY_RUN, [ARCHIVE]));
+  assert.equal(verdictRun.code, 0, verdictRun.out);
+  assert.match(line(verdictRun.out, /^pass {2}sealed run/), new RegExp(`^pass {2}sealed run: transaction ${VERDICT_RUN} returned exactly this verdict and signature`));
+  assert.match(line(verdictRun.out, /^pass {2}sealed run/), second);
+  const verdictNone = await run(undefined, wrongRun(VERDICT_RUN, KEY_RUN, [ARCHIVE, SECOND_ARCHIVE]));
+  assert.equal(verdictNone.code, 6, verdictNone.out);
+  assert.match(line(verdictNone.out, /^unread {2}sealed run/), new RegExp(`^unread {2}sealed run: could not be read: no node answered: .*; ${both(VERDICT_RUN, KEY_RUN)}$`));
+  assert.doesNotMatch(verdictNone.out, /^ {2}(pass|fail) {2}sealed run/m);
+
+  const keyRun = await run(undefined, wrongRun(KEY_RUN, VERDICT_RUN, [ARCHIVE]));
+  assert.equal(keyRun.code, 0, keyRun.out);
+  assert.match(line(keyRun.out, /^pass {2}the key's run 7HvniWe5\.\.\.: its attested output/), second);
+  const keyNone = await run(undefined, wrongRun(KEY_RUN, VERDICT_RUN, [ARCHIVE, SECOND_ARCHIVE]));
+  assert.equal(keyNone.code, 6, keyNone.out);
+  assert.match(line(keyNone.out, /^unread {2}the key's run/), new RegExp(`^unread {2}the key's run 7HvniWe5\\.\\.\\.: could not be read \\(no node answered: .*; ${both(KEY_RUN, VERDICT_RUN)}\\)$`));
+  assert.doesNotMatch(keyNone.out, /^ {2}pass {2}the key's run/m);
 });
 
 test('a run whose hash is X and a terminal escape is refused where a node answers it or lists it, and no escape reaches the output', async () => {
   const attack = 'X\u001b[8m';
   const answered = await run(editTx(VERDICT_RUN, (t) => (t['hash'] = attack)));
   assert.equal(answered.code, 6, answered.out);
-  assert.match(line(answered.out, /^unread {2}sealed run/), new RegExp(`answered for transaction X\\\\u\\{1b\\}\\[8m when asked for ${VERDICT_RUN}$`));
+  assert.match(line(answered.out, /^unread {2}sealed run/), new RegExp(`answered for transaction X\\\\u\\{1b\\}\\[8m when asked for ${VERDICT_RUN};`));
   const listed = await run(editChunkTx(VERDICT_RUN, (t) => (t['hash'] = attack)));
   assert.equal(listed.code, 6, listed.out);
   assert.match(line(listed.out, /^unread {2}sealed run/), /: a transaction from kaap-worker-1029053612\.testnet to outlayer\.testnet in block \d+ is not readable$/);
@@ -658,4 +701,28 @@ test('the verdict reader refuses what kaap-verdict would not write, and ed25519 
   assert.equal(edKeyBytes('ed25519:0OIl'), null, 'characters outside base58');
   assert.equal(edKeyBytes('secp256k1:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN'), null);
   assert.deepEqual(base58('111'), Buffer.from([0, 0, 0]));
+});
+
+/** 32 bytes that start with a zero byte and a one, which base58 writes in 42 characters. */
+const HASH_42 = '1tJ93RwaVfE1PEMxd5rpZZuPtLCwbEaDCrNBjvAWVD';
+
+test('a transaction hash is base58 of exactly 32 bytes at any length, and OutLayer is asked for one of 42 characters', async () => {
+  assert.equal(HASH_42.length, 42);
+  assert.equal(base58(HASH_42)?.toString('hex'), `0001${'00'.repeat(26)}6b616170`);
+  assert.ok(isTxHash(HASH_42) && isTxHash(VERDICT_RUN) && isTxHash(KEY_RUN));
+  const wide = 'z'.repeat(44);
+  assert.equal(base58(wide)?.length, 33);
+  assert.ok(!isTxHash(wide), '44 base58 characters that decode to 33 bytes');
+  const outside = `${HASH_42.slice(0, 20)}l${HASH_42.slice(20)}`;
+  assert.equal(outside.length, 43);
+  assert.ok(!isTxHash(outside), 'a character outside base58');
+
+  const asked: string[] = [];
+  const clock = fakeClock();
+  const read = await readAttestation('testnet', HASH_42, async (r) => {
+    asked.push(r.url);
+    return { status: 404, text: '' };
+  }, new RateLimiter(5, clock), clock);
+  assert.deepEqual(asked, [`${NETWORKS.testnet.outlayer}/attestations/by-tx/${HASH_42}`]);
+  assert.equal(read.found ? '' : read.why, 'OutLayer answered HTTP 404');
 });
