@@ -393,8 +393,8 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ℹ pass 116
 ℹ fail 0
 
-ℹ tests 133
-ℹ pass 133
+ℹ tests 145
+ℹ pass 145
 ℹ fail 0
 ```
 
