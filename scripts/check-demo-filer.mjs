@@ -52,26 +52,38 @@ async function main() {
   const proposal = { description: f.description, kind: f.kind };
   console.log(`Kaap demo filer check, ${new Date().toISOString()}: key ${f.public_key} of ${f.account_id}`);
 
+  // Each attack counts as refused only when the network gives the reason the key's own limits
+  // give. A call that fails for any other reason, a provider that did not answer included, proves
+  // nothing about the key and is not counted.
+  const FULL_ACCESS = /requires full access|RequiresFullAccess/;
   const attacks = [
-    ['vote to approve request #2 on the treasury', () => call(limited, dao, 'act_proposal', { id: 2, action: 'VoteApprove' }, 100n * TGAS)],
-    ['send 1 yoctoNEAR out of the member account', () => send(limited, state.owner.account_id, [actions.transfer(1n)])],
-    ['call add_proposal on a different contract', () => call(limited, guard, 'add_proposal', { proposal }, 30n * TGAS)],
-    ['call add_proposal with a deposit attached', () => call(limited, dao, 'add_proposal', { proposal }, 30n * TGAS, 1n)],
-    ['add another key to the member account', () => send(limited, f.account_id, [actions.addFullAccessKey(PublicKey.fromString(KeyPair.fromRandom('ed25519').getPublicKey().toString()))])],
+    ['vote to approve request #2 on the treasury', () => call(limited, dao, 'act_proposal', { id: 2, action: 'VoteApprove' }, 100n * TGAS), /does not allow method|MethodNameMismatch/],
+    ['send 1 yoctoNEAR out of the member account', () => send(limited, state.owner.account_id, [actions.transfer(1n)]), FULL_ACCESS],
+    ['call add_proposal on a different contract', () => call(limited, guard, 'add_proposal', { proposal }, 30n * TGAS), /does not match transaction receiver|ReceiverMismatch/],
+    ['call add_proposal with a deposit attached', () => call(limited, dao, 'add_proposal', { proposal }, 30n * TGAS, 1n), /Deposit is not allowed|DepositWithFunctionCall/],
+    ['add another key to the member account', () => send(limited, f.account_id, [actions.addFullAccessKey(PublicKey.fromString(KeyPair.fromRandom('ed25519').getPublicKey().toString()))]), FULL_ACCESS],
   ];
   let refused = 0;
-  for (const [what, attempt] of attacks) {
+  for (const [what, attempt, expected] of attacks) {
     try {
       const r = await attempt();
-      if (r.failure) {
+      const why = r.failure ? JSON.stringify(r.failure) : '';
+      if (r.failure && expected.test(why)) {
         refused += 1;
-        console.log(`PASS  refused on chain: ${what} (${reasonOf(JSON.stringify(r.failure))}): ${txLink(r.hash)}`);
+        console.log(`PASS  refused on chain: ${what} (${reasonOf(why)}): ${txLink(r.hash)}`);
+      } else if (r.failure) {
+        console.log(`UNSURE  failed on chain for another reason, which proves nothing about the key: ${what} (${reasonOf(why)}): ${txLink(r.hash)}`);
       } else {
         console.log(`FAIL  went through: ${what}: ${txLink(r.hash)}`);
       }
     } catch (e) {
-      refused += 1;
-      console.log(`PASS  refused before it ran: ${what} (${reasonOf(String(e?.message ?? e))})`);
+      const why = String(e?.message ?? e);
+      if (expected.test(why)) {
+        refused += 1;
+        console.log(`PASS  refused before it ran: ${what} (${reasonOf(why)})`);
+      } else {
+        console.log(`UNSURE  did not run, for a reason that proves nothing about the key: ${what} (${reasonOf(why)})`);
+      }
     }
   }
 
