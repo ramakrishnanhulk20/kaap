@@ -466,3 +466,26 @@ What the hole allowed while it was open: asking for more tokens than the limit, 
 ### What this does not cover
 
 One press and one attack, on the host's first day. Not shown: the watcher staying up for days or coming back by itself after a crash, a caller on IPv6 (the attack ran over IPv4), and the site's limits behind its own host, where it is not deployed yet. The watcher still runs on free RPC providers.
+
+## 12 Nov 2026: an account that is no treasury, enrolled and turned away
+
+Anyone can enrol an account in the guard: `enroll` asks only for its storage. Until the evening of 12 Nov the watcher took up every enrolled account, read it, judged it and paid for it, and a made-up proposal counter could keep it busy. A review found that the same day. The watcher now takes up an account only when both providers list it, its code is a Sputnik DAO release and its policy gives the guard a deciding reject, and it takes at most 50 new requests of one treasury a pass (rule C36 in the threat model).
+
+`bash scripts/attack-fake-enrolment.sh kaap-member-1029064001.testnet` runs the attack against the live guard and the hosted watcher. The account is the demo treasury's member, a plain account with no contract:
+
+```
+Kaap fake-enrolment attack, 2026-11-12T16:09:00Z: kaap-member-1029064001.testnet into kaap-guard-1111072803.testnet, watcher https://watcher-production-2350aa2a.up.railway.app
+before: the watcher watches {"watching":1,"daos":["kaap-dao-1111072928.testnet"]}
+enrolling kaap-member-1029064001.testnet, which is no Sputnik DAO:
+Transaction ID: A2wwnfuMc51ZFS6jTJ3iUvNbsKgPfaxibLSaNvoy18Za
+the watcher's status page lists it as: [{"dao":"kaap-member-1029064001.testnet","reason":"not_a_sputnik_dao"}]
+during: the watcher watches {"watching":1,"daos":["kaap-dao-1111072928.testnet"]}
+unenrolling kaap-member-1029064001.testnet:
+Transaction ID: HG6oZza6Akct23yuAg8ZajRPgTKM9c79qa83fBAje5Z4
+after: listed no more: yes; the watcher watches {"watching":1,"daos":["kaap-dao-1111072928.testnet"]}
+RESULT: pass, the account was turned away as not_a_sputnik_dao, the watched treasuries did not change, and the watcher account signed nothing in that time
+```
+
+The two transactions: [enrolled](https://testnet.nearblocks.io/txns/A2wwnfuMc51ZFS6jTJ3iUvNbsKgPfaxibLSaNvoy18Za), [unenrolled](https://testnet.nearblocks.io/txns/HG6oZza6Akct23yuAg8ZajRPgTKM9c79qa83fBAje5Z4). Just before it, with the same build of the watcher, a fake theft filed from the site's button (request #16) was rejected by the guard about 45 seconds after the press ([the guard's vote](https://testnet.nearblocks.io/txns/2L8H9vwSbgjarSfutEhqihxNFQmo6mXQ44uyDc9cEQ5M)), so the new rule did not cost the real treasury its protection.
+
+What this does not cover: an account that runs Sputnik's code and arms the guard is a treasury as far as the watcher can tell, and costs it up to its daily caps like any other; a contract with a made-up counter was run against the watcher's tests, not against the live one; and a Sputnik release newer than the watcher's list is turned away until the list gains it.

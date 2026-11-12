@@ -328,7 +328,7 @@ NEAR has no contract verification service like Etherscan's, so `kaap verify` doe
 
 On 12 Nov 2026 the watcher itself ran against the same deployment and got four more fake thefts rejected with no script's help, two of them filed from the site's button. One of those votes was held for almost eight minutes because a free RPC provider stopped answering, and PROOF.md says exactly what happened. It also holds the output of `scripts/check-demo-filer.mjs`, which attacks the button's key five ways.
 
-Later that day the watcher moved to its host. There it rejected a fifth fake theft, filed from the site's button, in about 44 seconds. A live attack on its per-caller limit, `scripts/attack-caller-limit.mjs`, then found a real hole: the watcher believed an address header that the host's proxy does not vouch for. It was closed within the hour, and PROOF.md shows the attack's output before and after.
+Later that day the watcher moved to its host. There it rejected a fifth fake theft, filed from the site's button, in about 44 seconds. A live attack on its per-caller limit, `scripts/attack-caller-limit.mjs`, then found a real hole: the watcher believed an address header that the host's proxy does not vouch for. It was closed within the hour, and PROOF.md shows the attack's output before and after. A second attack, `scripts/attack-fake-enrolment.sh`, enrols an account that is no treasury in the guard, which anyone can do: the hosted watcher turned it away and spent nothing on it.
 
 Those scripts sign with Kaap's own testnet keys, so in another clone they stop with "no key". The commands in "Try it in two minutes" check what those runs left on chain, and need none.
 
