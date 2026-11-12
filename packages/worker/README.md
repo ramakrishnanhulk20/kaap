@@ -25,7 +25,17 @@ Daily caps on runs, records and NEAR spent are set in `.env` (see `.env.example`
 
 ## HTTP routes
 
-Four, listed with their limits in `ARCHITECTURE.md`, section 6 (b): `GET /status`, `GET /text-key`, `POST /subscribe` and `POST /texts`.
+Five, listed with their limits in `ARCHITECTURE.md`, section 6 (b): `GET /status`, `GET /text-key`, `POST /subscribe`, `POST /texts` and `GET /proposal`, which shows what the watcher did with one request of a watched treasury: its verdict summary and its transaction ids.
+
+## As a container
+
+`Dockerfile` builds the watcher from source, from the repository root:
+
+```bash
+docker build -f packages/worker/Dockerfile -t kaap-watcher .
+```
+
+The image holds no key. It expects the key file on a mounted disk, waits for it, and takes every other setting from the environment. `HOSTING.md` has the steps for Railway, and the two RPC providers to use.
 
 ## Tests
 

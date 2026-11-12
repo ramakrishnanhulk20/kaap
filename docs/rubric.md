@@ -15,6 +15,7 @@ Short names used below:
 | `social`, Social Money | Kaap is something a treasury does with Sputnik DAO, not a new multisig: a member of a reject-only role, added by the treasury's own vote | `packages/contracts/guard/src/lib.rs`, `packages/core/src/policy/sputnik.rs` | `cargo test -p kaap-guard --test guard_sandbox`, against the real Sputnik DAO 3.2 binary | [the guard's reject vote](https://testnet.nearblocks.io/txns/AWWzynnmDdCYaKeSJA66Kr3h7DxW6ni9Sh6uHtH6v4M9) |
 | `security`, AI Security and Defense | A policy engine that reads what a request does, and an AI that is given no key: it can raise a risk, and only plain code can justify a veto | `packages/core/src/floor.rs`, `packages/verdict/src/severity.rs`, `packages/sealed/src/verdict.rs` | `check`, and `cargo test -p kaap-core` | [the sealed run that judged request #1](https://testnet.nearblocks.io/txns/az5yNU7xixz2Qwrt8g4pNhygJTpceRqHJTK2zv7NF3J) |
 | `privacy`, Privacy and Private AI | The reader runs in Intel TDX on OutLayer, asks a model on NEAR AI Cloud and checks its attestation, and opens a member's sealed text that nobody else can read | `packages/sealed/src/attest/`, `packages/sealed/src/texts.rs` | `verify`, and `cargo test -p kaap-sealed` | [the attested run that printed the text key](https://testnet.nearblocks.io/txns/DWRwVAcwpoVo5yfMHVVmWRw4S9QGNNj9XVioMDjobXBW) |
+| `security`, again | The site's one write, the "try it yourself" button, uses a function-call access key that can file a request on the demo treasury and do nothing else | `scripts/setup-demo-filer.mjs`, `packages/web/lib/demo.ts` | `PROOF.md`, "The try-it key, attacked": five other uses, each refused by the network | [the key being added](https://testnet.nearblocks.io/txns/24uPirozvafA72gHjXtmzp6PrgwaAKmVhEYywjgbrm9H) |
 | `open`, Open Innovation | A guard that can stop a theft and cannot make one is a new shape for an AI with authority over money | `README.md`, "What Kaap does" | `verify` | the four transactions under "A theft stopped" in the README |
 
 The README's "NEAR tools used" table lists each NEAR tool with the files that use it.
@@ -28,6 +29,7 @@ The README's "NEAR tools used" table lists each NEAR tool with the files that us
 | The contracts are locked | `scripts/deploy-contracts-testnet.sh` | `verify`, lines "guard keys" and "registry keys" | [guard key deleted](https://testnet.nearblocks.io/txns/6qEFvNiz5Guw1w2XaA6cS36kkRVhAJbPTtijgPEcTssM), [registry key deleted](https://testnet.nearblocks.io/txns/GxMNoCaecyMRfF5k1dqtsxB4uCydKz8fUpzBkMm9gUF1) |
 | The rule port matches Sputnik's own code | `packages/core/src/policy/sputnik.rs` | `cargo test -p kaap-core-diff`, which runs both against the same inputs in a sandbox | |
 | The verdict's bytes cannot drift | `packages/verdict/src/verdict.rs` | `cargo test -p kaap-verdict --test pinned` | |
+| The watcher does it with no script's help | `packages/worker/src/worker.ts` | `PROOF.md`, "12 Nov 2026: the watcher by itself": four requests, one of them held and why | [a reject the watcher sent](https://testnet.nearblocks.io/txns/G1WRfaAc8tS1jVemCntMivnovBiBEJq7S5Cptfcqxufc) |
 | The whole path works on a live network | `scripts/prove.mjs` | `PROOF.md`, the record of two runs | [filed](https://testnet.nearblocks.io/txns/GaQuPteeaiPAqjow7ezLC7f2HqxbBHv53erE1N4C7g9A), [judged](https://testnet.nearblocks.io/txns/az5yNU7xixz2Qwrt8g4pNhygJTpceRqHJTK2zv7NF3J), [recorded](https://testnet.nearblocks.io/txns/2T8fbLoy9gkFkbLThTMPsbRCf4RckfZVMVBvwvfqePmy), [rejected](https://testnet.nearblocks.io/txns/AWWzynnmDdCYaKeSJA66Kr3h7DxW6ni9Sh6uHtH6v4M9) |
 | Test counts | | README, "Test results" | |
 
@@ -36,6 +38,7 @@ The README's "NEAR tools used" table lists each NEAR tool with the files that us
 | What to check | File | How |
 |---|---|---|
 | The first screen says what Kaap is and shows a real request, with no wallet | `packages/web/components/landing/Hero.tsx` | open the site |
+| A judge can make the core thing happen, not only read about it | `packages/web/components/check/TryIt.tsx` | on `/check`, press "File the fake theft" and watch the guard reject it, step by step, where Kaap's watcher is running |
 | A hash turns into what it really does | `packages/web/components/check/CheckTool.tsx` | on `/check`, press "Read the demo treasury's hash-only request", then "Use the words saved for this demo request" |
 | Every number on the site comes from the chain or from a record in this repo | `packages/web/data/`, written by `packages/web/scripts/proof-data.mjs` and `capture-hash-proposal.mjs` | read the scripts |
 | The site says what is not live | `packages/web/components/landing/Proof.tsx`, `packages/web/content/docs/trust/limits.mdx` | the table "What is live" on the home page, and the Limits page in the docs |

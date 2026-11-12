@@ -69,7 +69,8 @@ No wallet, no key and no test tokens are needed for any step here.
 2. Press **Read the demo treasury's hash-only request**. You see request #7, "Authenticate DAO for confidential intents", one finding, `HASH_UNVERIFIED`, and the line "The guard will not veto this. Members decide." Kaap cannot read a bare hash and says so.
 3. Press **Use the words saved for this demo request**. Kaap checks that the words hash to the request's 64 characters, then reads them. You see a second effect, an intents key change that adds a key, the findings `HASH_TEXT_DANGEROUS` (critical) and `INTENTS_KEY_CHANGE` (high), and "Kaap's guard must veto this."
 4. Go back to the home page and press **Watch a theft get stopped**. You see request #1: it says "Monthly salary payment to alice...", it pays `a1ice...`, and under it are the four transactions of the run that rejected it, each a link to the explorer.
-5. Now a real one. On the check screen type a mainnet treasury, for example `marketing.sputnik-dao.near`, set **Network** to **Mainnet**, and press **Read it**. Kaap reads its latest request from two providers at one final block.
+5. Under the check, press **File the fake theft**. This files a real request on the demo treasury, and the page shows each step as it lands: read in sealed hardware, verdict, the guard's reject, the record, each with its transaction. It needs Kaap's watcher to be running; where it is not, the page says so.
+6. Now a real one. On the check screen type a mainnet treasury, for example `marketing.sputnik-dao.near`, set **Network** to **Mainnet**, and press **Read it**. Kaap reads its latest request from two providers at one final block.
 
 To run the site yourself, with Node 24, from a clone of this repository:
 
@@ -288,6 +289,7 @@ flowchart TB
 - `kaap check` and `kaap verify`, with no keys, on any machine with Node 24.
 - A public record of every verdict in the registry, and an evidence record of what the AI check found.
 - The evaluation, with its misses published: [packages/sealed/AI-EVAL.md](packages/sealed/AI-EVAL.md).
+- A button that files a fake theft on the demo treasury, so you can watch the guard reject it live. The site files it with a key that can do nothing else.
 - A paid check of one's own for one cent through an OutLayer payment key. Its verdict is signed with a key derived for the payer, so it can never veto.
 
 ## NEAR tools used
@@ -300,6 +302,7 @@ flowchart TB
 | NEAR AI Cloud | The second opinion, from a model on sealed hardware. The reader checks the model's Intel TDX quote and the signature on its answer | `packages/sealed/src/ai.rs`, `packages/sealed/src/attest/tdx.rs`, `packages/sealed/src/attest/signature.rs` |
 | Chain Signatures (`v1.signer`) | Kaap recognises a request that asks the treasury to sign a hash, and recomputes that hash from a supplied text | `packages/core/src/hash/sign.rs`, `packages/core/src/hash/nep.rs`, `packages/core/src/hash/delegate.rs` |
 | NEAR Intents | Reads what the intents inside a signed text authorise, decodes calls on `intents.near`, checks 1Click quotes, and prices tokens from the 1Click token list | `packages/core/src/hash/intents.rs`, `packages/core/src/decode/intents.rs`, `packages/core/src/hash/quote.rs`, `packages/sealed/src/prices.rs` |
+| Function-call access keys | The site's "try it yourself" button files with a key NEAR limits to one method on one contract, so the site holds nothing that can vote or pay | `scripts/setup-demo-filer.mjs`, `scripts/check-demo-filer.mjs`, `packages/web/lib/demo.ts` |
 | NEAR RPC | Every read is made at one final block on two providers that must agree | `packages/sealed/src/reads.rs`, `packages/cli/src/chain.ts` |
 | near-api-js 7.4.0 | The deploy, setup and proof scripts, and the watcher | `scripts/prove.mjs`, `scripts/setup-demo-dao.mjs`, `packages/worker/src` |
 
@@ -323,7 +326,9 @@ NEAR has no contract verification service like Etherscan's, so `kaap verify` doe
 
 [PROOF.md](PROOF.md) is the record of `node scripts/prove.mjs` on 11 Nov 2026: a member files a disguised payment, the sealed reader judges it, the verdict is recorded, the guard rejects it, a replay of the same verdict is refused, and an honest payment passes through untouched. It passed twice in a row on fresh requests.
 
-That script signs with Kaap's own testnet keys, so in another clone it stops with "no key". The commands in "Try it in two minutes" check what those runs left on chain, and need none.
+On 12 Nov 2026 the watcher itself ran against the same deployment and got four more fake thefts rejected with no script's help, two of them filed from the site's button. One of those votes was held for almost eight minutes because a free RPC provider stopped answering, and PROOF.md says exactly what happened. It also holds the output of `scripts/check-demo-filer.mjs`, which attacks the button's key five ways.
+
+Those scripts sign with Kaap's own testnet keys, so in another clone they stop with "no key". The commands in "Try it in two minutes" check what those runs left on chain, and need none.
 
 ## Build and test everything
 
@@ -386,8 +391,8 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ℹ pass 107
 ℹ fail 0
 
-ℹ tests 130
-ℹ pass 130
+ℹ tests 132
+ℹ pass 132
 ℹ fail 0
 ```
 
@@ -506,6 +511,7 @@ What you still have to trust, and what Kaap does not do:
 - **OutLayer and Intel's sealed hardware.** A verdict is only as good as the promise that the reader ran unmodified. That promise says which program ran. It does not say the program is free of bugs.
 - **NEAR AI's availability.** The AI's opinion is only there when NEAR AI's chat service answers. When it does not, the verdict is signed on the plain-code rules alone and says so.
 - **Two RPC providers.** If both were wrong in the same way, Kaap would be wrong too.
+- **Free RPC providers.** The watcher never acts on one provider alone, so when one stops answering, a vote waits. On 12 Nov 2026 one vote waited almost eight minutes for that reason.
 - **Speed.** The veto has to land before enough approvers sign. A treasury whose rules let one signature execute a request leaves no time for any guard.
 - **Unreadable requests.** A hash nobody explains is flagged, not vetoed.
 - **No independent audit** has been done.

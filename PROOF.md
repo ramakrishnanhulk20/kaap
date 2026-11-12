@@ -382,3 +382,45 @@ What went wrong on the way that day:
 - The retry stopped on `actions.addKey is not a function`: near-api-js 7.4.0 exports `addFullAccessKey`. That line was fixed.
 - The next run's payee parent, funded with 0.05 NEAR, could not afford the third payee. Each account creation must show about 0.0175 NEAR up front. That parent, `m1-1029070926.kaap-member-1029064001.testnet`, holds its two payees and 0.0158 NEAR. The parent now gets 0.1 NEAR.
 - Two key files in `~/.near-credentials/testnet` belong to accounts that were never made (`kaap-m1-1029070403`, `m1-1029070538.kaap-member-1029064001`). They are harmless.
+
+## 12 Nov 2026: the watcher by itself, and the try-it key
+
+The runs above had a script play the watcher. On 12 Nov 2026 the watcher itself ran on one machine (`bash scripts/run-worker-local.sh`) against the same deployment, and four fake thefts were filed while it ran. Nothing but the watcher sent a transaction after each filing.
+
+| Request | Filed by | Seconds to the guard's reject | AI answer | Sealed run | Guard's vote | Record |
+|---|---|---|---|---|---|---|
+| #8 | `scripts/file-attack.mjs`, the member's key | 61.6 | did not answer in time | [De7LAV9c...](https://testnet.nearblocks.io/txns/De7LAV9ctgVifL4xXRRskHwhLtBTYDzvPTZfhEQZoKbQ) | [2qsVGxvx...](https://testnet.nearblocks.io/txns/2qsVGxvxG7YwnXy7PUoubmJEnpX9F36XkvphmsW4y6PE) | [AA1z4eyi...](https://testnet.nearblocks.io/txns/AA1z4eyiPEZ8MZdEKDpNsnHrK6WKHzxbeGYr3NpaE4v2) |
+| #9 | `scripts/check-demo-filer.mjs`, the filing-only key | 40.1 | verified | [6ZpRoT8C...](https://testnet.nearblocks.io/txns/6ZpRoT8Cvu2aj5QvWt7VkT5QYY9iNCjZcu3ZFjsZWMEL) | [G1WRfaAc...](https://testnet.nearblocks.io/txns/G1WRfaAc8tS1jVemCntMivnovBiBEJq7S5Cptfcqxufc) | [w56wsMGK...](https://testnet.nearblocks.io/txns/w56wsMGKfog8XV6J9Mhc9SfVJBcwFD8SeYSKfgUnCPX) |
+| #10 | the site's button | 462, held | verified | [FeqrFYwP...](https://testnet.nearblocks.io/txns/FeqrFYwPeBDbjdYZ2HxoKrbPbBwuVtyV69iRTx25fyJ7) | [5fNFrszf...](https://testnet.nearblocks.io/txns/5fNFrszf5kVVLbVnJmNvibAhgVk5x4eqVwfKm981aZ3K) | [3hYb18SB...](https://testnet.nearblocks.io/txns/3hYb18SBYSpxvt7dKoFJpY69ZC1djwg3bKNTJ7VbzYtQ) |
+| #11 | the site's button | about 44 | verified | [FgFUZqma...](https://testnet.nearblocks.io/txns/FgFUZqmaZ9ujWSq24RXo9ssBsyedNcPQpxiJ63Q8bGjc) | [Byx1V6XQ...](https://testnet.nearblocks.io/txns/Byx1V6XQQVzqaa1W7w7PioyhrFkRNJJ8EkBATq6J28ca) | [aLyiv1uQ...](https://testnet.nearblocks.io/txns/aLyiv1uQn6eXD9PiR4vx3peAuDvAPz3SiSW84L1zCKH) |
+
+Every verdict was critical, with the findings DESC_CONTRADICTS and UNKNOWN_VALUE, and every request ended Rejected by the guard's vote alone. On its first start the watcher also read the five requests already open on the treasury (#2, #4, #5, #6, #7), rated each high with a verified AI answer, recorded each verdict and voted on none, as it should: two are honest payments and three ask for a signature over a hash nobody has explained.
+
+### The vote that was held
+
+Request #10 is the one to read closely. The watcher never acts on one RPC provider alone, and that day its second provider, fastnear's free testnet endpoint, had begun refusing its requests seven minutes after it started. The verdict for #10 was signed and recorded 54 seconds after the filing, but the vote was held: `veto_held` on the status page, "live state not agreed" in the log, retried every 15 seconds. The watcher was then restarted on two other free providers, dRPC and Intear, and the vote landed about 40 seconds later, inside the verdict's ten-minute life. Request #11, on those providers, took about 44 seconds.
+
+Two things this shows. A provider that will not answer delays a vote and never causes a wrong one. And a guard that depends on free providers can be late: had the verdict expired first, the watcher would have needed a fresh sealed run. `packages/worker/HOSTING.md` now names dRPC and Intear, and says what to watch for.
+
+### The try-it key, attacked
+
+The site's button files with an access key of the demo member that NEAR limits to one method on one contract. `node scripts/check-demo-filer.mjs --wait` tries five other uses, then the one allowed use:
+
+```
+Kaap demo filer check, 2026-11-12T11:47:20.005Z: key ed25519:9q7PNx97fjXi1wBbXtvgNdPwy4WtcixW6rfSAFc96X51 of kaap-member-1029064001.testnet
+PASS  refused before it ran: vote to approve request #2 on the treasury (sending Bpgqx8WfGX1sxDG6q37cJAhdPaSqPEHCzxmvbNp5pbFe failed: Access key does not allow method act_proposal)
+PASS  refused before it ran: send 1 yoctoNEAR out of the member account (sending Ap2c8rL6txfdRMdQM77TKpysGCUKpe7gVSP5MuQ9Vxdk failed: Access key requires full access)
+PASS  refused before it ran: call add_proposal on a different contract (sending 3vttdWVaGxeU2gMh8QcFGsKq3gzjHb8V6AZjVnGyHSYm failed: Access key receiver kaap-dao-1111072928.testnet does not match transaction receiver kaap-guard-1111)
+PASS  refused before it ran: call add_proposal with a deposit attached (sending 7xEMffZ9Kx7WieF6rvBJB4A4uDwZFiiHEw7j7APHV8qU failed: Deposit is not allowed with function call)
+PASS  refused before it ran: add another key to the member account (sending DbXeeUofuX6p7PsKskdSP7WGGpWQBg9qXZfviZFZY9BX failed: Access key requires full access)
+PASS  the one allowed call: filed request #9 at block 277358632 (2026-11-12T11:47:24.201Z): https://testnet.nearblocks.io/txns/2BKYGWpiH6J6vjEcrWuymvNY68W8iWEabrj9MVscAjaM
+now waiting for the watcher; this script sends nothing more
+status: Rejected, seen at final 40.1 s after the filing block; votes: {kaap-guard-1111072803.testnet: Reject}
+RESULT: pass, 5 of 5 attacks refused, and the guard alone rejected the filed request
+```
+
+Each refusal comes from the network, before the transaction runs, so none of them is a promise made by Kaap's code.
+
+### What this does not cover
+
+These runs were on one machine, for about half an hour. They do not show the watcher staying up for days, restarting by itself after a crash on a host, or holding its limits behind a hosting platform's proxy.

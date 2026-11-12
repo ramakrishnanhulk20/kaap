@@ -1,6 +1,6 @@
 # Kaap architecture
 
-As built on 11 Nov 2026, with the status lines, the web app and the notes on the next guard version brought up to date on 12 Nov 2026. Every statement here was checked against the code in `packages/` or read from NEAR testnet. Security rules cited as C1 to C31 are in `docs/security/threat-model.md`, section C.
+As built on 11 Nov 2026, with the status lines, the web app and the notes on the next guard version brought up to date on 12 Nov 2026. Every statement here was checked against the code in `packages/` or read from NEAR testnet. Security rules cited as C1 to C35 are in `docs/security/threat-model.md`, section C.
 
 - Contracts: live on NEAR testnet. `kaap-guard-1111072803.testnet` and `kaap-registry-1111072803.testnet`, deployed 11 Nov 2026 from commit `413a74a`, with no access keys. Section 5 describes these two as they run on chain.
 - Next guard version: written and tested, not deployed. The code in `packages/contracts/guard` is one version ahead of the guard on chain. It adds a 24-hour wait on a change of the accepted key, a strict mode each DAO can choose, a 900 Tgas minimum and a size limit on `veto`. `packages/contracts/guard/README.md` and `packages/contracts/GAS.md` describe that version.
@@ -62,6 +62,8 @@ flowchart LR
   CLI -- "accepted_key, is_enrolled, veto_result" --> GUARD
   CLI -- "attestations by transaction" --> OLAPI
   WEB -- "check: the views the CLI reads, 2 providers" --> DAO
+  WEB -- "try it: add_proposal, signed with a filing-only key" --> DAO
+  WEB -- "GET /proposal" --> W
 ```
 
 The only alert channel built is Telegram (`packages/worker/src/alerts.ts`). Members subscribe with a one-time token from `POST /subscribe` and the bot's `/start` command.
@@ -145,12 +147,12 @@ An arrow points from a package to the one built on it. The contracts compile in 
 | kaap-sealed | Checks the input and the payment, opens a sealed text, reads two providers at one final block, reads prices and history on mainnet only, runs kaap-core, asks the model and checks its attestation, signs the verdict, publishes the evidence | OutLayer, Intel TDX; live on testnet | no stored state; the OutLayer keystore holds its `verdict` signing key and `texts` key for this project and caller, and the program never sees the signing secret |
 | kaap-guard | The only member of a DAO's guard role; casts VoteReject on a verdict that passes eight checks, and nothing else (C15, C19) | NEAR contract; live on testnet | owner, accepted key, network, enrolled DAOs, used-verdict hashes |
 | kaap-registry | Append-only record of every verdict the sealed key signed; a newer one supersedes, nothing is overwritten (C13) | NEAR contract; live on testnet | accepted key, network, verdict records |
-| Worker | Watches each enrolled DAO's counter, starts sealed runs, checks each verdict, vetoes, records, alerts on Telegram, serves four HTTP routes, raises health signals (C18, C21, C22, C27) | one Node 24 process; built and tested, not hosted yet | the worker account's key in a file, the Telegram bot token, a SQLite store (DAOs, judgements, runs, spend, subscriptions, tokens, alerts) |
+| Worker | Watches each enrolled DAO's counter, starts sealed runs, checks each verdict, vetoes, records, alerts on Telegram, serves five HTTP routes, raises health signals (C18, C21, C22, C27) | one Node 24 process; built and tested, not hosted yet | the worker account's key in a file, the Telegram bot token, a SQLite store (DAOs, judgements, runs, spend, subscriptions, tokens, alerts) |
 | kaap-worker-bridge | kaap-core's hashes, verdict decoding and veto rule for the worker | plain wasm inside the worker | nothing |
 | kaap CLI | `check`, `verify`, `enroll`, `arming`, `seal-text`, `subscribe`, `eval`, `census`; reads only and sends no transaction (C31) | the reader's own machine, Node 24 | nothing; `seal-text` keeps one reply key in memory for its one request |
 | kaap-core-wasm | kaap-core for JavaScript, every rule exactly as the sealed program runs it (C14) | the CLI and the web app's `/api/check`; a browser can load the same build | nothing |
 | kaap-core-diff | Checks kaap-core's policy rules against the real Sputnik 3.2 binary | tests in a local sandbox | nothing |
-| Web app | The landing page, the check screen, the docs and `/api/check`. The route runs the CLI's own `check` on the server, from a bundle in `packages/web/engine` that carries kaap-core-wasm, so the site reads a proposal exactly as the CLI does. It reads the chain and sends no transaction | one Next.js 16 app (`packages/web`); built, not hosted yet | no key and no database; `/api/check` keeps call counts and 20 seconds of answers in memory |
+| Web app | The landing page, the check screen, the docs and `/api/check`. The route runs the CLI's own `check` on the server, from a bundle in `packages/web/engine` that carries kaap-core-wasm, so the site reads a proposal exactly as the CLI does. It reads the chain, and sends one kind of transaction: the try-it button's filing on the demo treasury | one Next.js 16 app (`packages/web`); built, not hosted yet | one key, the filing-only key of the demo member (C32), and no database; `/api/check` keeps call counts and 20 seconds of answers in memory |
 
 ## 5. Contracts
 
@@ -281,7 +283,7 @@ Account reads: `view_access_key_list` on each contract gives `{"keys":[]}` for b
 
 ### (b) The worker's HTTP routes
 
-The worker has no public address yet. As built it listens on `127.0.0.1:8787` (`KAAP_HTTP_HOST`, `KAAP_HTTP_PORT`), meant to sit behind an HTTPS proxy on the same machine (`packages/worker/HOSTING.md`). These four routes are every route in `packages/worker/src/status.ts`. Every answer is JSON with `cache-control: no-store`; any other path gives 404 `not_found`, and a wrong method 405 `method_not_allowed` with an `allow` header.
+The worker has no public address yet. As built it listens on `127.0.0.1:8787` (`KAAP_HTTP_HOST`, `KAAP_HTTP_PORT`), meant to sit behind an HTTPS proxy on the same machine (`packages/worker/HOSTING.md`). These five routes are every route in `packages/worker/src/status.ts`. Every answer is JSON with `cache-control: no-store`; any other path gives 404 `not_found`, and a wrong method 405 `method_not_allowed` with an `allow` header.
 
 | Route | Request body | Response | Limits |
 |---|---|---|---|
@@ -290,7 +292,20 @@ The worker has no public address yet. As built it listens on `127.0.0.1:8787` (`
 | `POST /subscribe` | exactly `{"dao": <account id>}` | 200 `{dao, token, expires_at, start_command, telegram_link}`; 400 `bad_request` with `expected`; 404 `not_enrolled`; 413 `body_too_large` | body at most 1 KiB; 10 tokens per client address an hour, then 429 `too_many_requests` with `retry-after`; a token lives 15 minutes and works once |
 | `POST /texts` | exactly `{"dao", "proposal_id", "text_ciphertext", "reply_key"}` | 200 `{status: "judged", run_tx, risk, floor, findings, ai_status, model_id, explanation, veto}`, where `model_id` is null when no model answered, `explanation` is `sealed:<base64>` and `veto` is `started` or `not_needed`; 400 `bad_request`; 404 `dao_not_watched`; 409 `proposal_not_open`; 429 `too_many_requests`; 503 `over_budget`; 502 `{error: "run_failed", reason}`; 500 `internal` | body at most 64 KiB; the ciphertext canonical base64 of 1 byte to 48 KiB; the run's whole input at most 32 KiB; `reply_key` 64 hex of a usable X25519 key; 3 texts per client address an hour by default (`KAAP_TEXTS_PER_ADDRESS_HOUR`); the answer waits for the sealed run, about 40 s, and at worst about four and a half minutes |
 
-The client address is the connecting address, or, for a connection from loopback, the last entry of `X-Forwarded-For` (`clientAddress`). Only `/status` and `/text-key` send `access-control-allow-origin: *`. `/subscribe` and `/texts` send no CORS header and answer an `OPTIONS` request with 405, so as built a page served from another origin cannot read their answers.
+| `GET /proposal?dao=<account>&id=<n>` (or `HEAD`) | none | 200 `{v: 1, network, dao, proposal_id, state, verdict: {risk, floor, findings, ai_status, verdict_hash, vetoable} or null, veto, record, txs: [{kind, tx, state, outcome}]}`; 400 `bad_request` with `expected`; 404 `dao_not_watched` or `not_seen` | answers only for a watched DAO; every value is one of the worker's own words, a hash, a finding code or a transaction id (C34) |
+
+The client address is the connecting address, or, for a connection from loopback, the last entry of `X-Forwarded-For` (`clientAddress`). With `KAAP_HTTP_PROXY=platform`, for a host whose own proxy fronts every connection, that last entry is used for every request (C35). `/status`, `/text-key` and `/proposal` send `access-control-allow-origin: *`. `/subscribe` and `/texts` send no CORS header and answer an `OPTIONS` request with 405, so as built a page served from another origin cannot read their answers.
+
+### (b2) The site's own routes
+
+| Route | What it does | Limits |
+|---|---|---|
+| `GET /api/check?dao=&network=&id=`, and `POST` with a supplied text | Runs the CLI's `check` on the server and returns its report | 8 calls a minute per caller, 2 at once, the same plain question kept for 20 s |
+| `GET /api/demo/attack` | `{on}`: whether this host holds the filing-only key | |
+| `POST /api/demo/attack` with the header `x-kaap-demo: 1` | Files the prepared fake theft on the demo treasury with the filing-only key, or names the filing already in flight: `{ok, id, tx, already}` (C32, C33) | 2 presses in 10 minutes per caller, one filing in flight, 40 filings in 24 hours counted from the chain |
+| `GET /api/demo/status?id=<n>` | Where one demo filing stands, from the treasury, the registry and the watcher's `GET /proposal`: status, verdict summary, whether the guard rejected it, the run, veto and record transaction ids | 90 asks a minute per caller, each answer kept 1.5 s |
+
+The filing-only key is an access key of the demo member, `ed25519:9q7PNx97fjXi1wBbXtvgNdPwy4WtcixW6rfSAFc96X51`, added in [24uPiroz...](https://testnet.nearblocks.io/txns/24uPirozvafA72gHjXtmzp6PrgwaAKmVhEYywjgbrm9H). NEAR itself limits it to `add_proposal` on `kaap-dao-1111072928.testnet`, with no deposit. `scripts/check-demo-filer.mjs` tries five other uses and each is refused by the network.
 
 ### (c) OutLayer
 

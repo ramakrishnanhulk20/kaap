@@ -72,7 +72,7 @@ rate. Mainnet sealed runs are priced in dollars: $0.001 base fee per run (OutLay
 | **B. DigitalOcean Basic droplet, 1 GB** | $6.00 ($4.00 for 512 MB) | the same systemd service; billed by the hour up to the monthly price, deleted after judging | the same | create an account with a card, create the droplet, add the deploy SSH key |
 | **C. Hetzner Cloud, smallest Regular Performance server** | from €6.49 excluding VAT (the cheaper Cost-Optimized line, from €5.99, says "currently not available") | the same systemd service; billed by the hour up to the monthly cap | the same | create an account (Hetzner may ask for ID), create the server, add the deploy SSH key |
 | **D. Fly.io, shared-cpu-1x, 512 MB, 1 GB volume** | about $3.84 ($3.69 machine, $0.15 volume); no free tier | a Machine with automatic stop turned off and a restart policy of always | stored as a Fly secret and mounted as a file | create an account with a card, write a Dockerfile and `fly.toml`, run `fly deploy` once |
-| E. Railway Hobby (used on an earlier project of ours) | $5 minimum, which covers this worker's usage | always-on service, restarts on crash | Railway has no secret files, so the key would have to sit in an environment variable, which breaks the key-in-a-file rule | not recommended for that reason |
+| **E. Railway Hobby** (used on an earlier project of ours) | $5 minimum, which covers this worker's usage | always-on service, restarts on crash | on 29 Oct Railway had no way to hold a file, so this was ruled out; since then its command line can put a file on a volume (`railway volume files upload`), so the key is a file there too | chosen on 12 Nov 2026: see "Hosting on Railway" below |
 | F. A developer's own PC, inside WSL | $0 | only while the PC stays on and awake for four weeks, through Windows updates and WSL's idle shutdown | already there | not recommended: one reboot and the guard goes quiet |
 
 ## Recommendation
@@ -85,6 +85,19 @@ free tier is not available on our account, option B at $6 is the same setup on a
 Whichever is picked, on day one the setup also adds a daily copy of the SQLite file off the
 machine, a reboot test (restart the VM and check the worker comes back by itself), and the
 balance check above, so nobody has to remember to ask whether the guard is still awake.
+
+## Hosting on Railway
+
+Chosen on 12 Nov 2026, because the plan was already paid for and its command line was already on the machine. What is set up, all from the command line:
+
+- **The image** is built from `packages/worker/Dockerfile`: one stage compiles the rules engine bridge from source, one installs the watcher's packages, and the last is plain Node with no compiler. The service variable `RAILWAY_DOCKERFILE_PATH` points Railway at that file.
+- **The disk** is one volume mounted at `/data`. It holds the SQLite file (`KAAP_WORKER_DB=/data/worker.sqlite`) and the key file (`KAAP_WORKER_CREDENTIALS_FILE=/data/keys/<account>.json`).
+- **The key file** is never in the image or a variable. Railway lets a file be placed on a volume only while the service runs, so the container starts with `packages/worker/start-on-host.sh`, which waits for the file and starts the watcher the moment it appears.
+- **The two secrets** are placed by the person who holds them, with one command that prints neither: `node scripts/railway-secrets.mjs --key-file <the watcher account's near-cli key file>`. It sets `TELEGRAM_BOT_TOKEN` from `.env` on standard input, waits for the restart, uploads the key file, and waits for `/status` to answer. `--dry-run` makes every check and places nothing.
+- **The address** is the service's Railway domain, with the target port 8787. `KAAP_HTTP_HOST=::` and `KAAP_HTTP_PORT=8787`.
+- **The proxy.** Every request reaches the container through Railway's proxy, so `KAAP_HTTP_PROXY=platform` tells the watcher to count each client by the address that proxy adds to `X-Forwarded-For`. After each deploy, check it against the live host: send `POST /subscribe` more times than the limit with a made-up `X-Forwarded-For`, and the limit must still bite.
+- **The two RPC providers** are dRPC (`https://near-testnet.drpc.org`, which also sends the transactions) and Intear (`https://testnet-rpc.intea.rs`). On 12 Nov fastnear's free testnet endpoint began refusing the watcher's steady load after seven minutes, and one vote was held for almost eight minutes because of it, since the watcher never acts on one provider alone. dRPC and Intear then ran twelve minutes with no refusal. Free providers can change their limits at any time; `veto_held` on `/status` is the sign.
+- **Only one watcher may run for one watcher account.** Stop a local one before the hosted one starts, or the two will spend each other's transaction numbers.
 
 ## Serving /status safely on the e2-micro
 

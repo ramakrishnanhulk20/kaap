@@ -8,6 +8,8 @@ One Next.js 16 app: the landing page, the check screen, the docs and the check r
 | `/check` | Reads one request of any Sputnik DAO on mainnet or testnet and shows what it will really do. No wallet |
 | `/docs` | The docs, from the files in `content/docs` |
 | `/api/check` | The check as JSON. `GET` with `dao`, `network` and an optional `id`; `POST` to supply the words behind a hash |
+| `/api/demo/attack` | The "try it yourself" button: `POST` files one prepared fake theft on the demo treasury |
+| `/api/demo/status` | Where one such filing stands: verdict, the guard's vote and the transaction ids |
 
 ## Run it
 
@@ -19,6 +21,8 @@ npm run dev
 ```
 
 Then open http://localhost:3000. It needs no environment variable and no key.
+
+One thing is switched off without a key: the "try it yourself" button. It files with `KAAP_DEMO_FILER_KEY`, an access key that NEAR limits to filing a request on the demo treasury. `scripts/setup-demo-filer.mjs` makes one and writes it to `.env.local` here; on a host it is a secret setting. Without it the button says the live demo is not switched on.
 
 ## Where the numbers come from
 

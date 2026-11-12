@@ -32,8 +32,10 @@ default KAAP_GUARD "$(state 's.guard.account_id')"
 default KAAP_REGISTRY "$(state 's.registry.account_id')"
 default KAAP_OUTLAYER outlayer.testnet
 default KAAP_SEALED_PROJECT "$(state 's.sealed.project_id')"
-default KAAP_RPC_PRIMARY https://rpc.testnet.fastnear.com
-default KAAP_RPC_SECONDARY https://near-testnet.drpc.org
+# Two free providers that held the watcher's steady load on 12 Nov 2026. fastnear's free tier began
+# refusing it after seven minutes, and a vote is held whenever one provider will not answer.
+default KAAP_RPC_PRIMARY https://near-testnet.drpc.org
+default KAAP_RPC_SECONDARY https://testnet-rpc.intea.rs
 default KAAP_WORKER_DB "$HOME/kaap-worker/testnet.sqlite"
 default KAAP_CAP_RUNS_PER_DAO_DAY 60
 default KAAP_CAP_RECORDS_PER_DAO_DAY 60
