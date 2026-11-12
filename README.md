@@ -29,6 +29,8 @@ node packages/cli/dist/src/bin.js census
 
 The full count takes about 15 minutes at five requests a second. `census --sample 200` reads a fixed sample of 200 treasuries in about a minute and a half.
 
+For context: on 29 Oct 2026 about $6.3 billion left Binance's wallets. Binance says the attackers submitted the withdrawals through an internal service they had reached, and that it has found no evidence of a leaked wallet key ([BleepingComputer, 30 Oct 2026](https://www.bleepingcomputer.com/news/security/binance-links-63-billion-crypto-theft-to-compromised-devops-laptop/)). No key is known to have been stolen. A system that was allowed to sign was misused. That is the gap Kaap is built for on a NEAR treasury: a reader between the request and the signature.
+
 ## What Kaap does
 
 Kaap reads each new request the moment it is filed, works out what it will really do, and compares that with what it says. When plain code can prove a theft, a contract that sits in the treasury as a reject-only member votes it down before the approvers sign.
@@ -510,6 +512,10 @@ What you still have to trust, and what Kaap does not do:
 - **Not hosted.** No treasury is being watched around the clock today.
 
 The limits page in the docs, [packages/web/content/docs/trust/limits.mdx](packages/web/content/docs/trust/limits.mdx), goes through each of these.
+
+## How it was built
+
+Kaap was built by one founder for NEAR HACKATHON. The code was written with AI coding tools, directed and reviewed by the founder, and the evaluation's labels were made by AI passes against a written guide, as the Evaluation section says. Work started on 20 Oct 2026, the day after the hackathon was announced, and the first commit is from 29 Oct. The libraries it depends on are listed under "NEAR tools used".
 
 ## Licence
 
