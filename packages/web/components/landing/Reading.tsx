@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { description, effectPhrase, hashHex, proposalId, sentence, withoutText, withText } from '@/lib/hashProposal';
 import { useStill } from '@/lib/useStill';
+import Tally from './Tally';
 import './reading.css';
 
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -132,6 +133,8 @@ export default function Reading() {
             </div>
           </motion.article>
         </div>
+
+        <Tally />
       </div>
     </section>
   );

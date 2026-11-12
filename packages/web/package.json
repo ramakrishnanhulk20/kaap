@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "postinstall": "fumadocs-mdx",
     "dev": "next dev",
@@ -11,6 +14,7 @@
     "start": "next start",
     "data:proposal": "node --no-warnings scripts/capture-hash-proposal.mjs",
     "data:proof": "node scripts/proof-data.mjs",
+    "data:census": "node scripts/census-data.mjs",
     "engine": "node scripts/bundle-engine.mjs"
   },
   "dependencies": {

@@ -1,0 +1,39 @@
+{
+  "source": "Written by packages/web/scripts/census-data.mjs from a live read of NEAR mainnet. Do not edit by hand.",
+  "rerun": "node packages/cli/dist/src/bin.js census",
+  "report": {
+    "block": {
+      "height": 224199451,
+      "timestamp_ns": "1794477845671050954"
+    },
+    "provider": "near.drpc.org",
+    "second_provider": "rpc.mainnet.fastnear.com",
+    "from_second": 0,
+    "factory": "sputnik-dao.near",
+    "daos": 2135,
+    "sample": null,
+    "scanned": 2135,
+    "since_365": "1762941845671050954",
+    "since_90": "1786701845671050954",
+    "ever": 1665,
+    "active_365": 734,
+    "active_90": 468,
+    "proposals_365": 10691,
+    "calls": 6830,
+    "transfers": 2006,
+    "policy_changes": 1608,
+    "sign_requests": 2622,
+    "sign_approved": 2271,
+    "sign_approved_one_voter": 2077,
+    "approved": 8652,
+    "approved_one_vote": 5182,
+    "pre_3_2": 126,
+    "unmapped": 0,
+    "pre_3_2_near": "2659373",
+    "near_usd": 3.49,
+    "unreadable": 10,
+    "requests": 4624,
+    "retried": 0,
+    "seconds": 929
+  }
+}

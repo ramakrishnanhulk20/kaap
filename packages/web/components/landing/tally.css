@@ -1,0 +1,92 @@
+.toy-tally {
+  margin-top: clamp(64px, 11svh, 120px);
+}
+
+.toy-tally-lead {
+  margin: 0;
+  font-family: var(--font-serif), serif;
+  font-size: clamp(1.4rem, 2.4vw, 2.1rem);
+  font-style: italic;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.toy-tally-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(24px, 4.5vw, 72px);
+  margin-top: clamp(24px, 4svh, 40px);
+}
+
+/* A short length of the kaappu thread over each count, the mark the page ties everything with. */
+.toy-tally-item::before {
+  content: '';
+  display: block;
+  width: 56px;
+  height: 5px;
+  margin-bottom: 18px;
+  border-radius: 3px;
+  background: repeating-linear-gradient(-55deg, var(--accent) 0 6px, #d8950a 6px 9px);
+}
+
+.toy-tally-number {
+  margin: 0;
+  font-family: var(--font-grotesk), sans-serif;
+  font-size: clamp(3rem, 7.4vw, 6.4rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 0.92;
+  letter-spacing: -0.045em;
+  color: var(--ink);
+}
+
+.toy-tally-says {
+  margin: 14px 0 0;
+  max-width: 17em;
+  font-family: var(--font-body), sans-serif;
+  font-size: clamp(15px, 1.25vw, 18px);
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.toy-tally-source {
+  margin: clamp(28px, 5svh, 48px) 0 0;
+  max-width: 64em;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono), monospace;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.toy-tally-source a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 0.2s ease;
+}
+
+.toy-tally-source a:hover {
+  text-decoration-color: var(--ink);
+}
+
+.toy-tally-source code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgb(30 26 20 / 0.07);
+  color: var(--ink);
+}
+
+@media (max-width: 760px) {
+  .toy-tally-row {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .toy-tally-says {
+    max-width: none;
+  }
+}
