@@ -8,7 +8,7 @@ A guard you cannot see the edges of is not worth trusting. These are Kaap's.
 ## What is not live
 
 - **Mainnet.** The guard and the registry are on NEAR testnet only. Kaap reads mainnet treasuries, and that is all it does there.
-- **The always-on watcher.** It is built and tested but not hosted. No treasury is being watched around the clock today. In the recorded stopped theft, a script played the watcher's part.
+- **The always-on watcher.** <WatcherStatus />
 - **The newest guard.** The version with the 24-hour delay on key changes and with strict mode is written and tested, not deployed.
 - **The newest sealed reader.** The reader on testnet is the build of 11 Nov 2026. Fixes made since then are in the code and wait for a new build. Until then, the check on this site, which runs today's rules, can rate a few requests differently from the reader on testnet.
 

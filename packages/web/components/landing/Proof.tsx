@@ -23,6 +23,8 @@ const locked = (keysLeft: number) =>
   keysLeft === 0 ? 'No key is left on the account, so nobody can change the code.' : `${keysLeft} access keys are still on the account.`;
 
 const { guard, registry, treasury, sealed, stopped, evaluation } = proof;
+// Null until the deployment record names a hosted watcher (scripts/proof-data.mjs).
+const watcher = proof.watcher as { url: string; host: string; since: string } | null;
 
 const ROWS: Row[] = [
   {
@@ -82,11 +84,23 @@ const ROWS: Row[] = [
       </>
     ),
   },
-  {
-    what: 'The always-on watcher',
-    live: false,
-    proof: <>Built and tested, but not hosted yet. In the stopped theft above, a script played its part.</>,
-  },
+  watcher
+    ? {
+        what: 'The always-on watcher',
+        live: true,
+        proof: (
+          <>
+            Hosted on {watcher.host} since {watcher.since}, watching the demo treasury. File a fake theft on the{' '}
+            <a href="/check#try">check page</a> and watch it get the guard to reject it.
+          </>
+        ),
+        link: { href: `${watcher.url}/status`, text: 'its status page' },
+      }
+    : {
+        what: 'The always-on watcher',
+        live: false,
+        proof: <>Built and tested, but not hosted yet. In the stopped theft above, a script played its part.</>,
+      },
   {
     what: 'Mainnet',
     live: false,

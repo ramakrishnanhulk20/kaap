@@ -5,6 +5,8 @@ import { accountLink, transactionLink } from '@/lib/links';
 // scripts/proof-data.mjs writes from the deploy record, the evaluation report and PROOF.md.
 
 const { guard, registry, treasury, sealed, stopped, evaluation } = proof;
+// Null until the deployment record names a hosted watcher (scripts/proof-data.mjs).
+const watcher = proof.watcher as { url: string; host: string; since: string } | null;
 
 function Tx({ hash, children }: { hash: string; children: string }) {
   return (
@@ -129,5 +131,18 @@ export function EvaluationNumbers() {
         </tr>
       </tbody>
     </table>
+  );
+}
+
+/** One sentence on whether the always-on watcher is hosted, from the deployment record. */
+export function WatcherStatus() {
+  if (!watcher) {
+    return <>It is built and tested but not hosted. No treasury is being watched around the clock today. In the recorded stopped theft, a script played the watcher&apos;s part.</>;
+  }
+  return (
+    <>
+      It is hosted on {watcher.host} since {watcher.since} and watches the demo treasury. Its <a href={`${watcher.url}/status`}>status page</a> is public. No
+      other treasury is enrolled, and it runs on free data providers, so a vote can be held when one of them does not answer.
+    </>
   );
 }

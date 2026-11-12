@@ -3,7 +3,7 @@ import { CodeBlock, Pre } from 'fumadocs-ui/components/codeblock';
 import defaultMdxComponents from 'fumadocs-ui/mdx';
 import type { MDXComponents } from 'mdx/types';
 import type { ComponentProps, CSSProperties } from 'react';
-import { EvaluationNumbers, LiveAddresses, StoppedTheft } from './Live';
+import { EvaluationNumbers, LiveAddresses, StoppedTheft, WatcherStatus } from './Live';
 import { Mermaid } from './Mermaid';
 
 const CALLOUT_STYLE = { '--callout-color': 'var(--accent)' } as CSSProperties;
@@ -26,6 +26,7 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
     LiveAddresses,
     StoppedTheft,
     EvaluationNumbers,
+    WatcherStatus,
     ...components,
   };
 }
