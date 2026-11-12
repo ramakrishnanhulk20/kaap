@@ -225,8 +225,8 @@ pub fn judge_run(input: JobInput, ai_key: Option<&str>, payer: Payer, connect: i
 /// payload proves nothing about the proposal, and nothing kaap-core reads from it may reach a
 /// verdict (C6, C8). That covers a proposal with no `sign` payload at all and one whose text is
 /// already in its description, where kaap-core reports no mismatch but still reads the supplied
-/// text: words in it addressed to a model are PROMPT_INJECTION, a critical finding the guard would
-/// veto on. A text that matched but whose deadline has passed still counts here, because it is the
+/// text: words in it addressed to a model are PROMPT_INJECTION, a high finding that would alarm
+/// members. A text that matched but whose deadline has passed still counts here, because it is the
 /// proposal's own text; kaap-core reads it as one that can never execute.
 fn supplied_text_verified_a_payload(analysis: &Analysis) -> bool {
     let from_the_text = analysis.effects.iter().any(|e| matches!(e, Effect::SignRequest { text_source: Some(TextSource::Planted), .. }));

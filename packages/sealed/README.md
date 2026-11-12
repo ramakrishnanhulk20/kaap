@@ -314,7 +314,7 @@ worker and its database only ever hold ciphertext.
    `sign` whose text the description already carries. Each gets
    `{"reason":"text_does_not_match","status":"refused","v":1}` after the reads, with no signature,
    no AI request and no evidence. Without this, words in a stranger's text written as an
-   instruction to the model would be PROMPT_INJECTION, a critical finding the guard vetoes on.
+   instruction to the model would be PROMPT_INJECTION, a high finding that alarms members.
 5. The verdict's `explanation` field is `sealed:<base64>`: the explanation encrypted to `reply_key`
    in the same layout, under `kaap-explanation-v1\n<network>\n<dao>\n<proposal id>\n<reply key
    hex>`. `explanation_hash` is the hash of that printed field, as for any verdict, so no hash of
