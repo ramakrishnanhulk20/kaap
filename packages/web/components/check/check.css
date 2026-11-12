@@ -1,0 +1,586 @@
+.kc {
+  /* Risk colours are colder than the turmeric accent, so an alarm never reads as decoration. */
+  --critical: #c4283c;
+  --high: #8f2f63;
+  --medium: #2b4da0;
+  --low: #1e8753;
+  --unknown: #586271;
+  --sheet: #fcf7ea;
+  --stamp-red: #dc3a26;
+  --stamp-blue: #2b4da0;
+
+  position: relative;
+  min-height: 100svh;
+  padding: 96px 0 96px;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.kc-inner {
+  width: min(980px, calc(100% - 64px));
+  margin-inline: auto;
+}
+
+.kc-title {
+  margin: 12px 0 0;
+  max-width: 14em;
+  font-family: var(--font-grotesk), sans-serif;
+  font-size: clamp(2.1rem, 5vw, 4rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+
+.kc-lede {
+  margin: 18px 0 0;
+  max-width: 36em;
+  font-family: var(--font-body), sans-serif;
+  font-size: clamp(16px, 1.3vw, 18.5px);
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* The form sits on a page from an account book, like the "what is live" table. */
+.kc-form {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 124px auto;
+  gap: 12px;
+  align-items: end;
+  margin-top: clamp(28px, 5svh, 44px);
+  padding: 22px 22px 22px clamp(40px, 6vw, 68px);
+  border-radius: 10px;
+  background: var(--sheet);
+  box-shadow:
+    0 1px 0 rgb(30 26 20 / 0.06),
+    0 18px 40px -20px rgb(72 48 12 / 0.34);
+  overflow: hidden;
+}
+
+.kc-form::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: clamp(16px, 2.6vw, 30px);
+  width: 5px;
+  border-left: 1.5px solid rgb(220 58 38 / 0.6);
+  border-right: 1.5px solid rgb(220 58 38 / 0.6);
+  pointer-events: none;
+}
+
+.kc-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.kc-field-name {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.kc-input {
+  width: 100%;
+  height: 46px;
+  padding: 0 14px;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 26%, transparent);
+  border-radius: 8px;
+  background: #fffdf6;
+  font-family: var(--font-mono), monospace;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.kc-input::placeholder {
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+}
+
+.kc-input:focus-visible,
+.kc-net button:focus-visible,
+.kc-link:focus-visible,
+.kc-step:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.kc-net {
+  display: inline-grid;
+  grid-auto-flow: column;
+  height: 46px;
+  padding: 3px;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 26%, transparent);
+  border-radius: 8px;
+  background: #fffdf6;
+}
+
+.kc-net button {
+  padding: 0 14px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font-family: var(--font-body), sans-serif;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.kc-net button[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.kc-go {
+  height: 46px;
+}
+
+.kc-tries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 16px 0 0;
+  font-family: var(--font-body), sans-serif;
+  font-size: 14.5px;
+  color: var(--muted);
+}
+
+.kc-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.kc-link:hover {
+  text-decoration-color: var(--ink);
+}
+
+/* Waiting: the lantern swings while the chain is read. */
+.kc-wait {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 40px;
+  font-family: var(--font-body), sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.kc-wait svg {
+  flex: none;
+  width: 40px;
+  height: auto;
+  transform-origin: 50% 0%;
+  animation: kc-swing 1.6s ease-in-out infinite alternate;
+  filter: drop-shadow(0 0 14px rgb(255 200 96 / 0.85));
+}
+
+@keyframes kc-swing {
+  from {
+    rotate: -9deg;
+  }
+  to {
+    rotate: 9deg;
+  }
+}
+
+.kc-note {
+  margin-top: 36px;
+  padding: 18px 22px;
+  border-left: 5px solid var(--critical);
+  border-radius: 4px 10px 10px 4px;
+  background: var(--sheet);
+  font-family: var(--font-body), sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.kc-note b {
+  display: block;
+  margin-bottom: 2px;
+  font-family: var(--font-grotesk), sans-serif;
+  font-size: 18px;
+}
+
+/* The answer is a sheet of airmail paper held to the light, as in the film. */
+.kc-sheet {
+  margin-top: 40px;
+  padding: 13px;
+  border-radius: 12px;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--stamp-red) 0 11px,
+    var(--sheet) 11px 22px,
+    var(--stamp-blue) 22px 33px,
+    var(--sheet) 33px 44px
+  );
+  box-shadow:
+    0 1px 0 rgb(30 26 20 / 0.06),
+    0 22px 44px -20px rgb(72 48 12 / 0.36);
+}
+
+.kc-sheet-body {
+  padding: clamp(22px, 3.4vw, 40px);
+  border-radius: 5px;
+  background: var(--sheet);
+}
+
+.kc-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 18px;
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.kc-part {
+  margin: 26px 0 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.kc-says {
+  margin: 8px 0 0;
+  font-family: var(--font-serif), serif;
+  font-size: clamp(21px, 2.4vw, 30px);
+  font-weight: 600;
+  line-height: 1.18;
+  letter-spacing: -0.012em;
+  overflow-wrap: anywhere;
+}
+
+.kc-effects {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.kc-effect {
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  font-family: var(--font-body), sans-serif;
+  font-size: 16.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.kc-effect-kind {
+  font-family: var(--font-grotesk), sans-serif;
+  font-weight: 700;
+}
+
+.kc-effect-fields {
+  margin-top: 8px;
+}
+
+.kc-effect-fields summary {
+  cursor: pointer;
+  font-family: var(--font-body), sans-serif;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.kc-effect dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 3px 14px;
+  margin: 6px 0 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.kc-effect dt {
+  color: var(--muted);
+}
+
+.kc-effect dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.kc-findings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.kc-finding {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 11px;
+  border: 1.5px solid var(--tone);
+  border-radius: 6px;
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--tone);
+}
+
+.kc-finding::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tone);
+}
+
+.kc-verdict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
+  margin-top: 30px;
+  padding-top: 24px;
+  border-top: 1.5px solid color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+.kc-risk {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 7px;
+  background: var(--tone);
+  font-family: var(--font-mono), monospace;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fff8ec;
+}
+
+.kc-verdict-words {
+  font-family: var(--font-grotesk), sans-serif;
+  font-size: clamp(18px, 1.9vw, 23px);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+
+.kc-fine {
+  margin: 14px 0 0;
+  font-family: var(--font-body), sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.kc-fine b {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.kc-trail {
+  margin-top: 26px;
+  padding: 2px 0 0;
+  border-top: 1.5px solid color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+.kc-trail-words {
+  margin: 8px 0 0;
+  max-width: 38em;
+  font-family: var(--font-body), sans-serif;
+  font-size: 16.5px;
+  line-height: 1.5;
+}
+
+.kc-trail ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  font-family: var(--font-body), sans-serif;
+  font-size: 14.5px;
+}
+
+.kc-trail li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  counter-increment: step;
+}
+
+.kc-trail li::before {
+  content: counter(step);
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--ink);
+  font-family: var(--font-mono), monospace;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--bg);
+}
+
+.kc-trail li:not(:last-child)::after {
+  content: '';
+  width: 22px;
+  height: 5px;
+  margin-left: 2px;
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(-56deg, rgb(30 26 20 / 0.3) 0 1.2px, rgb(30 26 20 / 0) 1.2px 6px), var(--accent);
+}
+
+.kc-text {
+  display: grid;
+  gap: 12px;
+  margin-top: 26px;
+  padding: 2px 0 0;
+  border-top: 1.5px solid color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+.kc-text .kc-fine {
+  margin-top: 0;
+}
+
+.kc-area {
+  height: 108px;
+  padding: 11px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.kc-text-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.kc-text-go {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.kc-details {
+  margin-top: 22px;
+  font-family: var(--font-body), sans-serif;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.kc-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.kc-details dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 18px;
+  margin: 12px 0 0;
+  line-height: 1.5;
+}
+
+.kc-details dd {
+  margin: 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 12.5px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.kc-steps {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.kc-step {
+  height: 40px;
+  padding: 0 14px;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 30%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  font-family: var(--font-body), sans-serif;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.kc-step:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.kc-step:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+@media (max-width: 859px) {
+  .kc {
+    padding-top: 80px;
+  }
+
+  .kc-inner {
+    width: calc(100% - 40px);
+  }
+
+  .kc-form {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    padding: 18px 16px 18px 38px;
+  }
+
+  .kc-form::before {
+    left: 14px;
+  }
+
+  .kc-field--wide,
+  .kc-go {
+    grid-column: 1 / -1;
+  }
+
+  .kc-text-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kc-wait svg {
+    animation: none;
+  }
+}

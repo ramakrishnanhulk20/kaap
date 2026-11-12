@@ -1,0 +1,88 @@
+{
+  "network": "testnet",
+  "deployed_at": "2026-10-29T06:12:11Z",
+  "deployed_by": "scripts/deploy-contracts-testnet.sh",
+  "accepted_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
+  "guard": {
+    "account_id": "kaap-guard-1029061211.testnet",
+    "code_hash": "77fyhhxdRnHzb8efe9HBYL8C3KcUpEbbRjLvrNyqoxbP",
+    "code_sha256": "5adbadb5282e0cf43ab9347d73249ce092be06fd7120aa6294a8bee5797dec76",
+    "owner": "kaap-owner-1029061211.testnet",
+    "deploy_and_init_tx": "HTxwP7wQ52QLAGT2g7iYx6qGyUjdGFhGNcUXSJ66QVmD",
+    "full_access_key_deleted_tx": "8yok6DJwfpVK6413YktPP75VJoTPowy7e4cDFHwqFKwK",
+    "access_keys_left": 0
+  },
+  "registry": {
+    "account_id": "kaap-registry-1029061211.testnet",
+    "code_hash": "65Y2p3NqwjE8z8oXdzvRPjDWux2SXmHrxxzAhpqwPdqY",
+    "code_sha256": "4b73d851018e8e955b1037b4fa397380eb2638698f8eaea734eb1f9fa787539f",
+    "deploy_and_init_tx": "3kdTPkQpADXfzjFLUbM7KHWzxRFj9UdFx2YwiCpbhBSJ",
+    "full_access_key_deleted_tx": "Bin4nWQAJLx8jaJ2GuovuSAwHLmknTNRCrvd3U8VML19",
+    "access_keys_left": 0
+  },
+  "owner": {
+    "account_id": "kaap-owner-1029061211.testnet",
+    "held_by": "Kaap's founder; the key is only in ~/.near-credentials/testnet/kaap-owner-1029061211.testnet.json inside WSL on the founder's machine"
+  },
+  "sealed": {
+    "project_id": "kaap-worker-1029053612.testnet/kaap-sealed",
+    "worker_account": "kaap-worker-1029053612.testnet",
+    "signing_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
+    "attested_run_tx": "7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC",
+    "attestation_url": "https://testnet-api.outlayer.ai/attestations/by-tx/7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC"
+  },
+  "dao": {
+    "set_up_by": "scripts/setup-demo-dao.mjs",
+    "member": {
+      "account_id": "kaap-member-1029064001.testnet",
+      "held_by": "Kaap's founder; the key is only in ~/.near-credentials/testnet/kaap-member-1029064001.testnet.json inside WSL on the founder's machine"
+    },
+    "account_id": "kaap-dao-1029064008.testnet",
+    "deploy_and_init_tx": "77VM5xSUk3ry9Yp2xDU1etyFTf5451g8E6D6RNrdRpav",
+    "code_hash": "DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF",
+    "code_sha256": "bf6f951ee5e45968e3367fa857bebf8bc80badec183998c2239c487237e0d7f6",
+    "policy_from": {
+      "source": "the role setup of a live NEAR Business treasury on mainnet, read 29 Oct 2026, members removed",
+      "saved_in": "deployments/near-business-policy.json"
+    },
+    "members": {
+      "Requestor": [
+        "kaap-owner-1029061211.testnet",
+        "kaap-member-1029064001.testnet"
+      ],
+      "Admin": [
+        "kaap-member-1029064001.testnet",
+        "kaap-owner-1029061211.testnet"
+      ],
+      "Approver": [
+        "kaap-owner-1029061211.testnet",
+        "kaap-member-1029064001.testnet"
+      ],
+      "guard": [
+        "kaap-guard-1029061211.testnet"
+      ]
+    },
+    "approver_vote": "transfer and call need 2 of 2 Approvers, so one approval never executes a proposal",
+    "guard_role": "guard: [kaap-guard-1029061211.testnet], VoteReject on 16 labels (all but remove_member_from_role), threshold 1",
+    "enrolment": {
+      "proposal_id": 0,
+      "add_proposal_tx": "26XwzGhSTfWGseSo7DbmUWLW7oUVqkzBWqA2kPwrq9sm",
+      "vote_txs": [
+        "2Vecmijonji1eNvzzMC27WYhJWwCtGzox9JYy15dU2sc",
+        "CBhdoDc1F1PGTFRgjJL5RrEu3BbHoLZB9efS9GyCaZHu"
+      ],
+      "status": "Approved",
+      "enrolled": true
+    },
+    "checked_at": "2026-10-29T07:20:07.404Z",
+    "full_access_key_deleted_tx": "4giSEanWSMba3yPoBZkrKAjNs6mUprFXG4dsBntrweP4",
+    "access_keys_left": 0
+  },
+  "text_key": {
+    "key": "09bc21bb1621d1d9a2ce1783375341a199038084e5239e120de823809a1b2f6a",
+    "signature": "FKzWgOvxNLgnJhj/qOOFGPCZJHcDuYLpKegGQ9RJTQ1EdGqRwkgX33Tg53yvR5dhxPd7kZcHHiH9JCSEBJa6AA==",
+    "public_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
+    "run_tx": "4EoaigPGidMBU8FqeDJ5SHMZVJapHjXph88AFNM9pKgn",
+    "build": "e1192b2806dd088541a87794808949fbe35ee5b3422405f07c224f4c02130527"
+  }
+}

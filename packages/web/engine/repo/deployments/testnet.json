@@ -1,0 +1,95 @@
+{
+  "network": "testnet",
+  "deployed_at": "2026-11-11T07:28:03Z",
+  "deployed_by": "scripts/deploy-contracts-testnet.sh",
+  "previous": "deployments/testnet-2026-10-29.json",
+  "built_from": {
+    "commit": "413a74aa91256a8c8603d1f84df33fde64abbcd3",
+    "build": "cargo near build non-reproducible-wasm --locked, as scripts/deploy-contracts-testnet.sh runs it (cargo-near 0.22.0, Rust 1.93.0)",
+    "rebuilt": "built twice, in ~/kaap-target and in a second target folder; both builds gave the code_sha256 recorded for each contract"
+  },
+  "accepted_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
+  "guard": {
+    "account_id": "kaap-guard-1111072803.testnet",
+    "code_hash": "DrjaN1zVz4cxvvxbxhM6rVZsqy8SrBunmMbyeqbsr4R4",
+    "code_sha256": "bf09d7bbb48f312eb4043bd7b585f3b02bbe9d8b7d5bc0bf31fec9319c663767",
+    "owner": "kaap-owner-1029061211.testnet",
+    "deploy_and_init_tx": "DEta1bNNm4gRYLqhZJ2HfwDnVtz294dgyEyLfiQVzsK1",
+    "full_access_key_deleted_tx": "6qEFvNiz5Guw1w2XaA6cS36kkRVhAJbPTtijgPEcTssM",
+    "access_keys_left": 0
+  },
+  "registry": {
+    "account_id": "kaap-registry-1111072803.testnet",
+    "code_hash": "3Kro1EgWDYAawFx8RHUwVGTKmJvp9bAUeRL65cwGAoZz",
+    "code_sha256": "228c21366ffdaf58f31a6e3550fd9898bc9ae65d1182f7a9e84d2df3c07fb2c9",
+    "deploy_and_init_tx": "53xJksmZUhokY6rVNzXNcnadxAUEaN1RWPkdhJwMwiT7",
+    "full_access_key_deleted_tx": "GxMNoCaecyMRfF5k1dqtsxB4uCydKz8fUpzBkMm9gUF1",
+    "access_keys_left": 0
+  },
+  "owner": {
+    "account_id": "kaap-owner-1029061211.testnet",
+    "held_by": "Kaap's founder; the key is only in ~/.near-credentials/testnet/kaap-owner-1029061211.testnet.json inside WSL on the founder's machine"
+  },
+  "sealed": {
+    "project_id": "kaap-worker-1029053612.testnet/kaap-sealed",
+    "worker_account": "kaap-worker-1029053612.testnet",
+    "signing_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
+    "attested_run_tx": "7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC",
+    "attestation_url": "https://testnet-api.outlayer.ai/attestations/by-tx/7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC"
+  },
+  "dao": {
+    "set_up_by": "scripts/setup-demo-dao.mjs",
+    "member": {
+      "account_id": "kaap-member-1029064001.testnet",
+      "held_by": "Kaap's founder; the key is only in ~/.near-credentials/testnet/kaap-member-1029064001.testnet.json inside WSL on the founder's machine"
+    },
+    "account_id": "kaap-dao-1111072928.testnet",
+    "deploy_and_init_tx": "GJDgwXkEEFqrRR4p24ruZrjdvtcM3Hrp9r1RboWx3ePz",
+    "code_hash": "DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF",
+    "code_sha256": "bf6f951ee5e45968e3367fa857bebf8bc80badec183998c2239c487237e0d7f6",
+    "purpose": "Kaap demo treasury",
+    "policy_from": {
+      "source": "the role setup of a live NEAR Business treasury on mainnet, read 29 Oct 2026, members removed",
+      "saved_in": "deployments/near-business-policy.json"
+    },
+    "members": {
+      "Requestor": [
+        "kaap-owner-1029061211.testnet",
+        "kaap-member-1029064001.testnet"
+      ],
+      "Admin": [
+        "kaap-member-1029064001.testnet",
+        "kaap-owner-1029061211.testnet"
+      ],
+      "Approver": [
+        "kaap-owner-1029061211.testnet",
+        "kaap-member-1029064001.testnet"
+      ],
+      "guard": [
+        "kaap-guard-1111072803.testnet"
+      ]
+    },
+    "approver_vote": "transfer and call need 2 of 2 Approvers, so one approval never executes a proposal",
+    "guard_role": "guard: [kaap-guard-1111072803.testnet], VoteReject on 16 labels (all but remove_member_from_role), threshold 1",
+    "enrolment": {
+      "proposal_id": 0,
+      "add_proposal_tx": "FW7cfYjbeZiv66SDV7teXkmGMRDxqi8HXnczrS4ZNhLF",
+      "vote_txs": [
+        "Gj6Ne1u5hcKTvyqsTV68M5bVFKKWkoR8gS4UHqi4nh4P",
+        "3rYQZ6qqtWaXUrk64yd8Jkp5rRB7xspwmCzXPV9Tdd2x"
+      ],
+      "status": "Approved",
+      "enrolled": true
+    },
+    "full_access_key_deleted_tx": "GWAwWeDcpid7d2snZx2xY1t1qXvrFerztKgaZ7gJY2hZ",
+    "access_keys_left": 0,
+    "checked_at": "2026-11-11T07:29:59.741Z"
+  },
+  "text_key": {
+    "key": "09bc21bb1621d1d9a2ce1783375341a199038084e5239e120de823809a1b2f6a",
+    "signature": "FKzWgOvxNLgnJhj/qOOFGPCZJHcDuYLpKegGQ9RJTQ1EdGqRwkgX33Tg53yvR5dhxPd7kZcHHiH9JCSEBJa6AA==",
+    "public_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
+    "run_tx": "DWRwVAcwpoVo5yfMHVVmWRw4S9QGNNj9XVioMDjobXBW",
+    "build": "bf7bb4f86fe7b1531946d8e5b5b7bab39d3e98a3a97ecab00dd9f0e4c4d34f58"
+  }
+}

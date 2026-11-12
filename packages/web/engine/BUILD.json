@@ -1,0 +1,12 @@
+{
+  "note": "Written by packages/web/scripts/bundle-engine.mjs. Do not edit by hand.",
+  "commit": "21b09b5bcbf17b2a54e8caa69b0b04f8591e3088",
+  "sources_committed": true,
+  "wasm_sha256": "00177fedf3431e6fbad0828f9d97a52a918cfd847ebd1753ea5f806be9f83241",
+  "check_sha256": "6a83320167df1732a129e728f03e743ef0da64efa9a6846ac7174a41d68906ed",
+  "records": [
+    "packages/sealed/testnet.json",
+    "deployments/testnet.json",
+    "deployments/testnet-2026-10-29.json"
+  ]
+}
