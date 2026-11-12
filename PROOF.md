@@ -13,6 +13,8 @@ In one command, `node scripts/prove.mjs` does the following:
 
 It passed twice in a row, on fresh proposals each time (#1 and #2 in run 1, #3 and #4 in run 2).
 
+The script signs with Kaap's own testnet keys. "How to run it again" below says who can run what, and how anyone can check these runs from the chain with no key.
+
 ## What it ran against
 
 | Thing | Value |
@@ -32,6 +34,13 @@ Every id is also in `deployments/testnet.json`. The first deployment, of 29 Oct 
 
 ## How to run it again
 
+The `npm install` line below is for anyone and signs nothing. The other two need keys only Kaap holds, so in another clone they stop with "no key". Both need Node 24 and near-api-js 7.4.0 at the repo root.
+
+- `setup-demo-dao.mjs` needs the guard owner's key, `kaap-owner-1029061211.testnet`, one of the two Approvers, on every run. On the set-up DAO it then signs nothing: it checks, and rewrites `deployments/testnet.json`. A fresh setup also signs as the member and as the new DAO account, and fetches Sputnik's code with curl and python3.
+- `prove.mjs` signs as the member `kaap-member-1029064001.testnet`, the worker `kaap-worker-1029053612.testnet` (the only caller whose verdicts the guard accepts) and the run's fresh sub-account of the member.
+
+Anyone can check the runs without these keys, as "Checking it with no key" below shows.
+
 Inside WSL, with Node 24, from the repo root:
 
 ```
@@ -41,6 +50,24 @@ node scripts/prove.mjs            # exit code 0 only when every check below pass
 ```
 
 The member's and the worker's keys are read from `~/.near-credentials/testnet` and never printed. Each run makes a fresh sub-account of the member, funded by the member with 0.1 NEAR. That account creates the payees for that run, so `alice.sandbox` becomes `alice.<that account>` and the lookalike still differs by one character. A run does not use the faucet, which gives one account per machine every 11 hours or so.
+
+### Checking it with no key
+
+Anyone can check what the two runs left on chain, reading only. With near-cli-rs 0.30.1:
+
+```
+near contract call-function as-read-only kaap-dao-1111072928.testnet get_proposal json-args '{"id":1}' network-config testnet now
+near account view-account-summary kaap-dao-1111072928.testnet network-config testnet now
+```
+
+The first shows proposal #1 Rejected, with the guard's vote alone. The second shows the DAO locked, with no access keys, running Sputnik 3.2. With Node 24 and the built CLI:
+
+```
+node packages/cli/dist/src/bin.js verify kaap-dao-1111072928.testnet 1 --network testnet
+node packages/cli/dist/src/bin.js arming kaap-dao-1111072928.testnet --network testnet
+```
+
+`verify` takes any of the four proposals, #1 to #4. Build the CLI once with `npm install` at the repo root, then `npm run build` in `packages/cli`; that compiles kaap-core to wasm, so it needs the toolchain in `rust-toolchain.toml` and wasm-bindgen-cli 0.2.129. The contracts can be rebuilt and compared as `packages/contracts/guard/README.md` and `packages/contracts/registry/README.md` describe. The two planted records come from `eval/planted/planted.jsonl`: `python3 -I eval/tools/planted/generate.py` (Python 3) rebuilds that file and compares it byte for byte, and `node eval/tools/check.mjs` (Node 24) checks its labels. Neither needs a network.
 
 ## Setup output
 
@@ -218,6 +245,8 @@ RESULT: pass
 ```
 
 ## Checked afterwards with the CLI
+
+Anyone can run both commands below: they read only and hold no key. They need Node 24 and the built CLI (see "Checking it with no key").
 
 The same deployment, read by `kaap` from a clone of this repo (Node 26.7.0), at 07:33 and 08:38 UTC:
 

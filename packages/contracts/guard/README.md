@@ -33,6 +33,8 @@ There is no upgrade method, and the deploy script deletes the account's only ful
 near account list-keys kaap-guard-1111072803.testnet network-config testnet now
 ```
 
+Anyone can run it with near-cli-rs 0.30.1, and it reads only. `near account view-account-summary kaap-guard-1111072803.testnet network-config testnet now` shows both facts at once: "Account is locked (no access keys)" and the code's sha256. To rebuild and compare, check out the commit the table below names and, with cargo-near 0.22.0 and the toolchain in `rust-toolchain.toml`, run `cargo near build non-reproducible-wasm --locked --out-dir <folder>` in `packages/contracts/guard`, then `sha256sum <folder>/kaap_guard.wasm`, and compare with the sha256 below. Two builds on one machine matched it; a build on another machine has not been tried. Neither signs.
+
 A new version is a new contract. A DAO moves to it with one ordinary proposal that changes its Guard role.
 
 ## Testnet deployment
@@ -49,6 +51,8 @@ A new version is a new contract. A DAO moves to it with one ordinary proposal th
 | Explorer | https://testnet.nearblocks.io/address/kaap-guard-1111072803.testnet |
 
 Every id and hash is also in `deployments/testnet.json`. Deploy again with `KAAP_ACCEPTED_KEY=ed25519:<key> KAAP_GUARD_OWNER=<owner> bash scripts/deploy-contracts-testnet.sh`.
+
+Anyone can run it, inside Linux or WSL. It makes a new guard on fresh accounts the testnet faucet pays for and signs only as those (the deploy with `new`, then the key delete), never as Kaap's accounts. `KAAP_GUARD_OWNER` may name any testnet account, a stranger's own included, because the script never signs as the owner; left out, it makes a fresh owner account too. It needs cargo-near 0.22.0, near-cli-rs 0.30.1, python3, curl, sha256sum and the toolchain in `rust-toolchain.toml`.
 
 The first guard, `kaap-guard-1029061211.testnet` (code hash `77fyhhxdRnHzb8efe9HBYL8C3KcUpEbbRjLvrNyqoxbP`), was deployed on 29 Oct 2026 from commit `8818af0`, before the verdict format moved into `packages/verdict`. It is still on chain with no keys, and its record is kept in `deployments/testnet-2026-10-29.json`.
 

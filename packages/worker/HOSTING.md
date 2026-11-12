@@ -106,7 +106,10 @@ certificate:
        reverse_proxy 127.0.0.1:8787
    }
    ```
+   This is for whoever runs the VM, with sudo on it. It needs only Caddy and signs nothing; the
+   worker behind it is the one that holds the worker account's key file.
 4. From any other machine, `curl https://status.example.org/status` returns the health report.
+   Anyone can run it with curl, and it reads only.
 
 ### The rate limit behind the proxy
 
@@ -146,6 +149,9 @@ Check after setup, from a laptop, with an enrolled DAO's account id in place of 
 ```
 for i in $(seq 1 11); do curl -s -o /dev/null -w '%{http_code} ' -X POST https://status.example.org/subscribe -H 'content-type: application/json' -H "x-forwarded-for: 198.51.100.$i" -d '{"dao":"<dao>"}'; done; echo
 ```
+
+Anyone can run it, with bash and curl. It signs nothing; the worker only creates the unused tokens
+described next.
 
 Ten `200` and then one `429` shows that a made-up header buys nothing: all eleven requests count
 against the laptop's real address. Each `200` creates an unused subscription token that expires

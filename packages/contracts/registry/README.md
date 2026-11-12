@@ -41,8 +41,19 @@ Each record comes back with the signed bytes and the signature, so a reader can 
 | Key deleted | https://testnet.nearblocks.io/txns/GxMNoCaecyMRfF5k1dqtsxB4uCydKz8fUpzBkMm9gUF1, 0 access keys left |
 | Explorer | https://testnet.nearblocks.io/address/kaap-registry-1111072803.testnet |
 
+Anyone can check this deployment with near-cli-rs 0.30.1, reading only:
+
+```
+near account view-account-summary kaap-registry-1111072803.testnet network-config testnet now
+near contract call-function as-read-only kaap-registry-1111072803.testnet latest json-args '{"network":"testnet","dao":"kaap-dao-1111072928.testnet","proposal_id":1}' network-config testnet now
+```
+
+The first shows "Account is locked (no access keys)" and the code's sha256; the second returns the record of the attack the demo treasury's guard vetoed. To rebuild and compare, check out the commit the table names and, with cargo-near 0.22.0 and the toolchain in `rust-toolchain.toml`, run `cargo near build non-reproducible-wasm --locked --out-dir <folder>` in `packages/contracts/registry`, then `sha256sum <folder>/kaap_registry.wasm`. It signs nothing.
+
 The first registry, `kaap-registry-1029061211.testnet` (code hash `65Y2p3NqwjE8z8oXdzvRPjDWux2SXmHrxxzAhpqwPdqY`), was deployed on 29 Oct 2026 from commit `8818af0`. It is still on chain with no keys and its verdicts stay readable. Every id from that deployment is kept in `deployments/testnet-2026-10-29.json`.
 
 Deploy a registry alone with `KAAP_DEPLOY=registry KAAP_ACCEPTED_KEY=ed25519:<key> bash scripts/deploy-contracts-testnet.sh`.
+
+Anyone can run it, inside Linux or WSL. It deploys to a fresh account the testnet faucet pays for and signs only as that account (the deploy with `new`, then the key delete), never as Kaap's. It needs cargo-near 0.22.0, near-cli-rs 0.30.1, python3, curl, sha256sum and the toolchain in `rust-toolchain.toml`.
 
 Gas: a record burns about 3.4 Tgas in all, about 0.0003 NEAR. Every figure is in `../GAS.md`.
