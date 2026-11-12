@@ -1,0 +1,38 @@
+---
+title: Evaluation
+description: How often Kaap stops what it should, how often it stops what it should not, and what the AI added.
+---
+
+Kaap was measured on 373 requests: 300 real ones sampled from mainnet treasuries, and 73 written for the test, 56 attacks and 17 honest requests that resemble them. Each was labelled against a written guide by AI labelling passes that used no Kaap code, and a blind second pass on 45 of them checked the labels.
+
+Before any full run, every fifth record was set aside to tune on. The other 298 are the test, and the numbers below come from them alone.
+
+## The headline
+
+<EvaluationNumbers />
+
+"The guard would veto" means the verdict passed the guard's own veto rule. These are verdicts computed on saved requests, not votes cast on a chain.
+
+## What the numbers say
+
+**No honest request was stopped.** Not one request that should go through met the veto rule, with the AI or without it.
+
+**Every catch came from plain code.** The 41 requests Kaap would veto are the ones where ordinary code can prove what is wrong: a description that contradicts the payment, a hash whose text is dangerous, a rule change that hands over control.
+
+**The 13 it missed need judgement.** They are attacks where nothing in the request itself proves a theft, so only the AI could justify a veto. In this run the AI answered on one of the 13 and did not call it critical.
+
+**The AI added no veto.** With the AI on and off, the guard would act the same on all 298 requests. The AI ran during an outage of NEAR AI's chat service: it gave a usable, verified answer on 197 of the 298. Kaap is built so that a missing answer changes nothing: the verdict is signed on the plain-code rules alone.
+
+So today the honest claim is this: Kaap stops the thefts that can be proven from the request, and has not stopped an honest request. It does not yet stop the ones that need judgement.
+
+## Rerun it
+
+The plain-code part reruns on your machine with no network and no key:
+
+```bash
+node packages/cli/dist/src/bin.js eval
+```
+
+It prints how often the rules engine agrees with the labels, measure by measure. Where a count is short of its total, the records behind the gap are named in the repository under `packages/core/docs/answer-key-notes`.
+
+The AI part needs a NEAR AI key and a run on OutLayer, so it cannot be rerun for free. Every row of the run is saved in `eval/ai-runs`, and `packages/sealed/AI-EVAL.md` is the full report, written from those rows by a script.

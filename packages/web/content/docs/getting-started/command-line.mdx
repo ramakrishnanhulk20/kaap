@@ -1,0 +1,46 @@
+---
+title: The command line
+description: The same check on your own machine, plus the commands that verify a verdict and rerun Kaap's numbers.
+---
+
+`kaap` is a command line tool in the repository. It holds no NEAR key and sends no transaction. Every command only reads.
+
+## Build it once
+
+You need Node 24, Rust, and `wasm-bindgen-cli` 0.2.129, because the build compiles Kaap's rules engine to wasm.
+
+```bash
+npm install
+npm run build -w packages/cli
+```
+
+## Check a request
+
+```bash
+node packages/cli/dist/src/bin.js check marketing.sputnik-dao.near
+node packages/cli/dist/src/bin.js check kaap-dao-1111072928.testnet 1
+```
+
+The first reads the latest request of a mainnet treasury. The second reads request 1 of the demo treasury on testnet. An account ending in `.testnet` is read on testnet and any other on mainnet, unless `--network` says otherwise. Add `--json` for the full report.
+
+## The other commands
+
+| Command | What it does |
+|---|---|
+| `kaap verify <dao> <id>` | Checks the verdict Kaap's registry holds for a request: the sealed signature, the hashes, the sealed run on chain and its hardware attestation. Prints each check as pass, fail or unread. |
+| `kaap enroll <dao>` | Prints the two requests a member files to put a treasury under the guard, who can file and approve each, and Kaap's own reading of each draft. |
+| `kaap arming <dao>` | Says whether the guard is armed on the treasury's live rules: what it cannot reject, and any right it holds beyond rejecting. |
+| `kaap seal-text` | Hands Kaap the words behind a hash-only request, encrypted so only the sealed program can read them. |
+| `kaap eval` | Reruns the rules engine over the public evaluation set and prints the agreement tables. No network. |
+| `kaap census` | Reruns the headline numbers of the DAO census from mainnet. |
+
+Run `node packages/cli/dist/src/bin.js help` for every option.
+
+## Verify the stopped theft yourself
+
+```bash
+node packages/cli/dist/src/bin.js verify kaap-dao-1111072928.testnet 1 --network testnet
+node packages/cli/dist/src/bin.js arming kaap-dao-1111072928.testnet --network testnet
+```
+
+The first checks the verdict behind the guard's reject vote on request 1. The second shows the demo treasury's rules with the guard armed.

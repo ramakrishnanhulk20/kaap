@@ -1,0 +1,36 @@
+---
+title: Addresses and proof
+description: Every deployed account, its code, and a stopped theft you can follow transaction by transaction.
+---
+
+Everything on this page is read from the deploy record and the saved proof run in the repository. Each link opens the explorer.
+
+## What is deployed
+
+<LiveAddresses />
+
+"No access key left" means nobody, the deployer included, can change that account's code or act as it. You can confirm it on the explorer: the account's list of keys is empty.
+
+## A stopped theft, step by step
+
+<StoppedTheft />
+
+## Run the proof yourself
+
+One command files a disguised payment on the demo treasury and follows it to the guard's vote:
+
+```bash
+node scripts/prove.mjs
+```
+
+It needs keys only Kaap holds, so in your own clone it stops with "no key". What you can run without any key is the check of the result:
+
+```bash
+node packages/cli/dist/src/bin.js verify kaap-dao-1111072928.testnet 1 --network testnet
+```
+
+`PROOF.md` in the repository holds the full output of the last run, with every transaction.
+
+## The demo treasury
+
+The demo treasury is a real Sputnik DAO, version 3.2, with the role setup of a live NEAR Business treasury on mainnet: Requestor, Admin and Approver, plus Kaap's guard. Two of two Approvers must sign a payment, so one approval never executes a request.

@@ -1,3 +1,4 @@
+import { createMDX } from 'fumadocs-mdx/next';
 import type { NextConfig } from 'next';
 
 const config: NextConfig = {
@@ -9,4 +10,8 @@ const config: NextConfig = {
   outputFileTracingIncludes: { '/api/check': ['./engine/**/*'] },
 };
 
-export default config;
+// Fumadocs reads content/docs and writes the .source folder the docs route imports. It keeps
+// every setting above and only adds the loaders for .mdx files.
+const withMDX = createMDX();
+
+export default withMDX(config);

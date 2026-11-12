@@ -1,0 +1,271 @@
+/* The docs in the same look as the site: Fumadocs' colour slots are filled with Kaap's tokens,
+   and the rules below only reach inside .kaap-docs or Fumadocs' own element ids. They sit outside
+   Tailwind's layers on purpose, so they win over Fumadocs' utility classes without !important. */
+
+:root {
+  --docs-sheet: #fcf7ea;
+  --color-fd-background: var(--bg);
+  --color-fd-foreground: var(--ink);
+  --color-fd-muted: var(--docs-sheet);
+  --color-fd-muted-foreground: var(--muted);
+  --color-fd-popover: var(--docs-sheet);
+  --color-fd-popover-foreground: var(--ink);
+  --color-fd-card: var(--docs-sheet);
+  --color-fd-card-foreground: var(--ink);
+  --color-fd-border: var(--line);
+  --color-fd-primary: var(--ink);
+  --color-fd-primary-foreground: var(--bg);
+  --color-fd-secondary: var(--docs-sheet);
+  --color-fd-secondary-foreground: var(--ink);
+  --color-fd-accent: color-mix(in oklab, var(--ink) 6%, transparent);
+  --color-fd-accent-foreground: var(--ink);
+  --color-fd-ring: var(--muted);
+  --color-fd-overlay: color-mix(in oklab, var(--bg) 70%, transparent);
+}
+
+/* Fumadocs offsets its sticky columns by this height. The top bar only exists from md up. */
+.kaap-docs {
+  --fd-banner-height: 0px;
+}
+
+@media (min-width: 48rem) {
+  .kaap-docs {
+    --fd-banner-height: 4rem;
+  }
+
+  /* The bar above carries the name from md up, so the copy at the top of the sidebar goes. */
+  .kaap-docs #nd-sidebar > div:first-child > div:first-child {
+    display: none;
+  }
+}
+
+/* Sidebar */
+
+.kaap-docs #nd-sidebar,
+.kaap-docs #nd-sidebar-mobile {
+  background-color: var(--bg);
+}
+
+.kaap-docs #nd-sidebar {
+  border-inline-end: 1px solid var(--line);
+}
+
+.kaap-docs [data-search-full] {
+  background-color: var(--docs-sheet);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+}
+
+.kaap-docs [data-search-full] kbd {
+  background-color: var(--bg);
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.kaap-docs [data-search-full]:hover {
+  background-color: var(--docs-sheet);
+  color: var(--ink);
+}
+
+/* A group is a folder in content/docs. Its name is the small heading; its pages follow flush left. */
+.kaap-docs :is(#nd-sidebar, #nd-sidebar-mobile) [data-state][data-disabled]:not([id]) {
+  margin-top: 20px;
+}
+
+.kaap-docs :is(#nd-sidebar, #nd-sidebar-mobile) [data-state][data-disabled]:not([id]) > div:first-child {
+  padding: 0 0 8px 14px;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  line-height: 1.2;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.kaap-docs :is(#nd-sidebar, #nd-sidebar-mobile) [data-state][data-disabled]:not([id]) > div:last-child::before {
+  display: none;
+}
+
+/* The padding is set inline by Fumadocs to indent by depth, so it needs !important to be reset. */
+.kaap-docs :is(#nd-sidebar, #nd-sidebar-mobile) a[data-active] {
+  padding: 7px 8px 7px 14px !important;
+  border-radius: 0;
+  background-color: transparent;
+  font-size: 14.5px;
+  line-height: 1.4;
+  color: var(--muted);
+  transition: color 150ms ease-out;
+}
+
+.kaap-docs :is(#nd-sidebar, #nd-sidebar-mobile) a[data-active]:hover {
+  background-color: transparent;
+  color: var(--ink);
+}
+
+.kaap-docs :is(#nd-sidebar, #nd-sidebar-mobile) a[data-active="true"] {
+  background-color: transparent;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* The page you are on is marked with a short length of the thread. */
+.kaap-docs :is(#nd-sidebar, #nd-sidebar-mobile) a[data-active="true"]::before {
+  content: "";
+  position: absolute;
+  inset-block: 6px;
+  inset-inline-start: 0;
+  width: 4px;
+  border-radius: 2px;
+  background:
+    repeating-linear-gradient(-34deg, rgb(30 26 20 / 0.3) 0 1.2px, rgb(30 26 20 / 0) 1.2px 6px), var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kaap-docs :is(#nd-sidebar, #nd-sidebar-mobile) a[data-active] {
+    transition: none;
+  }
+}
+
+/* Page */
+
+.kaap-docs .prose {
+  --tw-prose-body: var(--muted);
+  --tw-prose-headings: var(--ink);
+  --tw-prose-lead: var(--muted);
+  --tw-prose-links: var(--ink);
+  --tw-prose-bold: var(--ink);
+  --tw-prose-counters: var(--muted);
+  --tw-prose-bullets: var(--muted);
+  --tw-prose-hr: var(--line);
+  --tw-prose-quotes: var(--ink);
+  --tw-prose-quote-borders: var(--line);
+  --tw-prose-code: var(--ink);
+  --tw-prose-th-borders: var(--line);
+  --tw-prose-td-borders: var(--line);
+  --tw-leading: 1.7;
+  font-family: var(--font-body), sans-serif;
+  font-size: 16.5px;
+  line-height: 1.7;
+  color: color-mix(in srgb, var(--ink) 82%, transparent);
+}
+
+.kaap-docs .prose :is(h2, h3, h4) {
+  font-family: var(--font-grotesk), sans-serif;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.kaap-docs .prose h2 {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.kaap-docs .prose h3 {
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.kaap-docs .prose a:not(.not-prose a, [data-card]) {
+  color: var(--ink);
+  text-decoration-line: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 150ms ease-out;
+}
+
+.kaap-docs .prose a:not(.not-prose a, [data-card]):hover {
+  text-decoration-color: var(--ink);
+}
+
+/* The heading itself is the anchor link, so it keeps the heading look and no underline. */
+.kaap-docs .prose a[data-card] {
+  color: inherit;
+  text-decoration: none;
+  font-weight: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kaap-docs .prose a:not(.not-prose a, [data-card]) {
+    transition: none;
+  }
+}
+
+.kaap-docs .prose :not(pre) > code {
+  font-family: var(--font-mono), monospace;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--ink);
+  background-color: var(--docs-sheet);
+  border: 0;
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.kaap-docs .prose :not(pre) > code::before,
+.kaap-docs .prose :not(pre) > code::after {
+  content: none;
+}
+
+/* Code blocks: the figure comes from Fumadocs' CodeBlock, with its copy button. */
+.kaap-docs figure.shiki {
+  background-color: var(--docs-sheet);
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+}
+
+.kaap-docs figure.shiki code {
+  font-family: var(--font-mono), monospace;
+}
+
+/* Tables: thin rules between rows, a small mono header, and no card around them. */
+.kaap-docs .prose table {
+  background-color: transparent;
+  border: 0;
+  border-radius: 0;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.kaap-docs .prose thead th {
+  padding: 0 16px 10px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background-color: transparent;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.kaap-docs .prose tbody td {
+  padding: 12px 16px 12px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.kaap-docs .prose tr > :last-child {
+  padding-inline-end: 0;
+}
+
+/* Long code in a cell wraps instead of pushing the table wider than the page on a desktop screen.
+   A phone is still narrower than the table, so the wrapper Fumadocs puts around it keeps its sideways scroll. */
+@media (min-width: 48rem) {
+  .kaap-docs td code {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* The next-page card's chevron hangs 4px past its box through a negative margin, which counts as sideways scroll. */
+.kaap-docs a.text-end > div.flex-row-reverse {
+  padding-inline-end: 4px;
+}

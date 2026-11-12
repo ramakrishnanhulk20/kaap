@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { Bricolage_Grotesque, Fraunces, Instrument_Sans, JetBrains_Mono, Noto_Serif_Tamil } from 'next/font/google';
 import Grain from '@/components/Grain';
-import SmoothScroll from '@/components/SmoothScroll';
 import './globals.css';
 import '@/components/site/site.css';
 
@@ -28,7 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={fonts}>
       <body>
-        <SmoothScroll>{children}</SmoothScroll>
+        {children}
         <Grain />
       </body>
     </html>

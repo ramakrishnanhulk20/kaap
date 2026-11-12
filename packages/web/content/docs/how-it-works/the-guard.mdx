@@ -1,0 +1,48 @@
+---
+title: The guard
+description: The contract that votes, the eight checks before it does, and the one vote it can cast.
+---
+
+The guard is a contract on NEAR. In an enrolled treasury it is the only member of one role, and that role can vote to reject and nothing else.
+
+## One vote, one direction
+
+The only call the guard ever makes to another contract is a vote on the treasury, and the vote is fixed in its code as reject. It cannot approve, pay, file a request or change a rule, and it holds no funds.
+
+Its role leaves out one kind of request: removing a member from a role. So the guard can never block its own removal.
+
+## The eight checks
+
+Anyone may hand the guard a verdict. The signature on it is what counts, not who carries it. Before it votes, the guard checks, in this order:
+
+1. The verdict is in the format it knows.
+2. The signature is valid for the one key it obeys, the sealed reader's.
+3. The verdict names this guard and this network.
+4. The treasury it names has enrolled.
+5. The veto rule below holds.
+6. The verdict has not expired. Kaap's watcher asks for verdicts that live ten minutes, and none can live longer than an hour.
+7. The request it was handed is, byte for byte in meaning, the request the verdict judged.
+8. The verdict has never been used before.
+
+If any check fails, the guard does nothing and says which one failed.
+
+## The veto rule
+
+The guard votes only when all of this is true:
+
+- the verdict's risk is **critical**;
+- the plain-code floor is high or critical;
+- at least one plain-code finding is high or critical in its own right, and that finding is not "the hash could not be read";
+- either the plain code alone reached critical, or the AI's answer passed every check.
+
+Two things follow. The AI alone can never cause a veto: there must be a finding from plain code behind it. And a request whose hash Kaap could not read is flagged to members but not vetoed, because "unreadable" is not proof of a theft.
+
+## Who can change it
+
+Nobody can change the guard's code. The deploy script deleted the account's only access key right after setting it up, and the contract has no upgrade method. A new version is a new contract that a treasury chooses to adopt.
+
+One thing can change: the key the guard obeys. A new build of the sealed reader has a new key, so the guard's owner, an account held by Kaap's founder, can replace it. On the guard deployed today that change takes effect at once and the guard announces it in an event.
+
+<Callout title="Built, not yet deployed">
+The next version of the guard is written and tested: a key change takes effect 24 hours after it is announced and can be cancelled, and a treasury can choose strict mode, where the guard also rejects any request whose hash Kaap could not read. It is not on testnet yet.
+</Callout>

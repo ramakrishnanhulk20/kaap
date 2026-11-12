@@ -1,0 +1,37 @@
+---
+title: Enrol a treasury
+description: Two ordinary requests of your own DAO put it under the guard. One removes it.
+---
+
+Kaap never enrols a treasury. The treasury does, by its own vote, in two requests that any member with the right role can file.
+
+<Callout title="Testnet only, for now">
+The guard is deployed on NEAR testnet. On mainnet you can check any treasury, but there is no guard to enrol in yet.
+</Callout>
+
+## The two requests
+
+1. **Add the guard's role.** A new role named for Kaap, with one member, the guard contract. The role may vote to reject, on every kind of request except removing a member from a role. That exception is what keeps the way out open.
+2. **Enrol in the guard.** A call to `enroll` on the guard contract, attaching 0.01 NEAR for storage. The guard keeps what its entry costs, about 0.0014 NEAR, and sends the rest back in the same call.
+
+## Get the exact drafts
+
+The command line prints both requests ready to file, says who in your treasury can file and who can approve each, and shows Kaap's own reading of each draft, so approvers see what they are voting on.
+
+```bash
+node packages/cli/dist/src/bin.js enroll your-treasury.sputnik-dao.testnet
+```
+
+It needs Sputnik DAO version 3, because the first request uses a kind that version added.
+
+## Check that it took
+
+```bash
+node packages/cli/dist/src/bin.js arming your-treasury.sputnik-dao.testnet
+```
+
+An enrolment counts only when the treasury's live rules match the template: the guard holds its reject-only role and nothing more. `arming` checks exactly that.
+
+## Leave
+
+File a request that removes the guard contract from its role, or one that removes the role. The guard cannot reject the first kind. Then call `unenroll` on the guard and the storage deposit comes back.

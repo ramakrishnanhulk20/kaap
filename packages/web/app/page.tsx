@@ -5,17 +5,20 @@ import Proof from '@/components/landing/Proof';
 import Reading from '@/components/landing/Reading';
 import Steps from '@/components/landing/Steps';
 import Footer from '@/components/site/Footer';
+import SmoothScroll from '@/components/SmoothScroll';
 
 export default function Home() {
   return (
-    <main>
-      <Hero />
-      <Reading />
-      <Steps />
-      <Limits />
-      <Proof />
-      <Closing />
-      <Footer />
-    </main>
+    <SmoothScroll>
+      <main>
+        <Hero />
+        <Reading />
+        <Steps />
+        <Limits />
+        <Proof />
+        <Closing />
+        <Footer />
+      </main>
+    </SmoothScroll>
   );
 }

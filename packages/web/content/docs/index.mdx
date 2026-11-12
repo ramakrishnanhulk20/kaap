@@ -1,0 +1,42 @@
+---
+title: Kaap
+description: A guard that reads every request to a NEAR treasury before it is signed, and can only say no.
+---
+
+Kaap is named after kaappu, a thread tied for protection. It is a guard for treasuries that run on Sputnik DAO, the contract most NEAR DAOs and NEAR Business treasuries use.
+
+## The problem
+
+Members of a treasury vote on what a request says, not on what it does.
+
+Most of the time the two match. Two cases break that:
+
+- **The request shows only a hash.** A treasury can be asked to approve a signature over a hash. The words behind the hash are not on the page members vote on. A request titled "Authenticate DAO for confidential intents" can, behind its hash, add a new key that controls the treasury's funds.
+- **The description says one thing and the request does another.** "Monthly salary payment to alice" can pay an account spelled `a1ice`.
+
+A member who signs either one has done nothing unusual. That is the problem.
+
+## What Kaap does
+
+1. **It reads each request.** A decoder written in plain code works out what the request will really do: who is paid, how much, which rules change, what gets signed. It checks that against the description.
+2. **It tells members in plain words.** Members who follow the treasury get the reading and its risk on Telegram.
+3. **It vetoes a theft.** Kaap's guard is a contract that holds one role in the treasury. That role can vote to reject and do nothing else.
+
+You can try the first step now on [any treasury](/check), with no wallet.
+
+## Why a treasury can give it a vote
+
+The guard cannot approve, pay, file a request or change a rule. Its role in the treasury carries one permission. It also cannot block its own removal: the one kind of request that takes a member off a role is left out of what it may reject, so one ordinary vote of the treasury removes it.
+
+The guard votes only when it is handed a verdict signed inside sealed hardware by Kaap's reader, and only when that verdict passes eight checks. A stranger cannot make it vote, and neither can Kaap's own server. [The guard](/docs/how-it-works/the-guard) lists the checks.
+
+## Why this needs NEAR
+
+- **Sputnik DAO** lets a role hold the right to reject and nothing else. That is what makes a guard that can stop a theft and never make one.
+- **OutLayer** runs Kaap's reader inside sealed hardware and gives it a signing key bound to that exact program, so the guard can tell a real verdict from a forged one.
+- **NEAR AI Cloud** gives a second opinion from a model whose answer comes with a hardware attestation, which the reader checks itself.
+- **Chain signatures and NEAR Intents** are where hash-only requests come from. A guard for them belongs on the same chain.
+
+## What is live today
+
+The guard, the registry, a demo treasury and the sealed reader are running on NEAR testnet. [Addresses and proof](/docs/how-it-works/addresses) has every account and transaction. [Limits](/docs/trust/limits) says plainly what is not there yet.

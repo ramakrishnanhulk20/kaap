@@ -1,0 +1,33 @@
+---
+title: Limits
+description: What Kaap does not do, does not catch, and has not built yet.
+---
+
+A guard you cannot see the edges of is not worth trusting. These are Kaap's.
+
+## What is not live
+
+- **Mainnet.** The guard and the registry are on NEAR testnet only. Kaap reads mainnet treasuries, and that is all it does there.
+- **The always-on watcher.** It is built and tested but not hosted. No treasury is being watched around the clock today. In the recorded stopped theft, a script played the watcher's part.
+- **The newest guard.** The version with the 24-hour delay on key changes and with strict mode is written and tested, not deployed.
+- **The newest sealed reader.** The reader on testnet is the build of 11 Nov 2026. Fixes made since then are in the code and wait for a new build. Until then, the check on this site, which runs today's rules, can rate a few requests differently from the reader on testnet.
+
+## What Kaap does not catch
+
+- **A theft that looks like an honest payment.** If nothing in the request proves it is a theft, plain code cannot justify a veto. In the evaluation Kaap missed 13 of 54 planted attacks for this reason. See [Evaluation](/docs/trust/evaluation).
+- **A request it cannot read.** A request that shows only a hash is flagged to members as unreadable. It is not vetoed, unless a member supplies the words behind the hash and they turn out dangerous.
+- **A request that passes in one step.** The veto has to land before enough approvers sign. In the recorded proof that took 24 seconds. A treasury whose rules let a single signature execute a request leaves no time for any guard.
+- **A very large request.** A rule change of more than about 200 KB is too large for the guard to vote on in one transaction.
+- **The same request, filed again.** A rejected request is closed for good, but nothing stops a member from filing it again. Kaap reads the new one afresh, and rejects it again if it is the same theft.
+
+## What you still have to trust
+
+- **Kaap's founder, for the guard's key.** The guard's code is locked, but its owner can replace the key it obeys, and on today's guard that takes effect at once. A dishonest owner could point the guard at a key of their own and reject requests. They still could not approve or move anything.
+- **OutLayer and Intel's sealed hardware.** A verdict is only as good as the promise that the reader ran unmodified.
+- **Two RPC providers.** Kaap reads the chain through two and refuses to judge when they disagree. If both were wrong in the same way, it would be wrong too.
+
+## What has not been checked
+
+- No independent security audit has been done.
+- The evaluation is 373 requests, labelled by AI passes against a written guide. It is enough to see the shape of what Kaap catches, not to promise a rate.
+- A wrong reject costs a treasury time: the request has to be filed again. In the evaluation that happened to none of 244 honest requests, which is not the same as never.

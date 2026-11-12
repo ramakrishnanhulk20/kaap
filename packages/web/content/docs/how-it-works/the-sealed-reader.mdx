@@ -1,0 +1,43 @@
+---
+title: The sealed reader
+description: The program that judges a request, where it runs, and why its verdict can be believed.
+---
+
+The sealed reader is the one part of Kaap that judges. It is a program that runs on OutLayer inside Intel TDX hardware, where neither Kaap nor OutLayer can change what it does while it runs.
+
+## What it reads
+
+For one request it reads, at a single final block and from two providers that must agree:
+
+- the request itself, exactly as the treasury stores it;
+- the treasury's rules, which decide who can approve what;
+- the code hash of the treasury and of every contract the request calls.
+
+If a read fails or the two providers differ, it signs nothing. A verdict built on a doubtful read would be worse than none.
+
+## Plain code first
+
+A decoder written in ordinary code, with no AI in it, works out what the request does. It knows payments, token transfers, NEAR Intents calls, staking, rule changes, code upgrades and signature requests. It also checks the description against those effects, and for a signature request it checks any text it is given against the hash.
+
+From that it sets a **floor**: the lowest risk the request can have. Nothing later can lower it.
+
+## The AI as a second opinion
+
+The reader then asks a model on NEAR AI Cloud. Before it believes the answer it checks the model's hardware attestation and the signature on the answer itself.
+
+- The AI can raise the risk. It can never lower it.
+- An answer that fails any check counts as high at most.
+- Only an answer that passed every check can raise a verdict to critical.
+- When the AI is unavailable, the verdict is still signed, on the plain-code rules alone.
+
+## Why the verdict can be believed
+
+The reader signs each verdict with a key that OutLayer's keystore holds for this exact program and this exact caller. The program itself never sees the secret. A different program, or the same program called by someone else, gets a different key.
+
+The guard obeys one key. So a verdict the guard accepts was produced by this program, and nobody, Kaap included, could have written it by hand.
+
+Each run also leaves an attestation with OutLayer, and the reader publishes what it checked about the AI's answer. `kaap verify` reads both back and checks them.
+
+## The words behind a hash
+
+A member who holds the text behind a hash-only request can send it to the reader. It is encrypted on the member's machine with a key only the sealed program can open. The reader checks that the text hashes to the value the request asks to sign, and only then reads it. A text that matches no hash is refused and never judged, because anyone can send one.

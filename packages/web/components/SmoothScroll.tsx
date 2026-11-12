@@ -5,7 +5,8 @@ import { usePathname } from 'next/navigation';
 import Lenis from 'lenis';
 import 'lenis/dist/lenis.css';
 
-// Lenis runs once for the whole app and is switched off while the visitor asks for reduced motion.
+// Lenis glides the landing page's scroll and is switched off while the visitor asks for reduced
+// motion. Only the landing page uses it: the docs and the check screen scroll plainly.
 export default function SmoothScroll({ children }: { children: React.ReactNode }) {
   const lenis = useRef<Lenis | null>(null);
   const pathname = usePathname();

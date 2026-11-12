@@ -1,0 +1,44 @@
+---
+title: Questions
+description: Short answers to what treasuries ask first.
+---
+
+## Can Kaap move our money?
+
+No. The guard holds one role in your treasury, and that role can vote to reject and nothing else. It cannot approve, pay, file a request or change a rule, and it holds no funds and no key of yours.
+
+## What happens if Kaap is wrong?
+
+The worst case is a rejected request that your members file again. Kaap cannot make a bad request pass. In the evaluation it would have stopped none of 244 honest requests.
+
+## What happens if Kaap is offline?
+
+Nothing is blocked. Your treasury works as it did before: members file and vote, and requests pass on your own rules. You only lose the reading and the veto for as long as it is down.
+
+## How do we remove it?
+
+With one ordinary request that takes the guard off its role. The guard cannot reject that kind of request. A second request that calls `unenroll` returns the storage deposit.
+
+## Does Kaap read our private payments?
+
+Only if a member chooses to show it. A request that signs a hash stays unreadable to Kaap, and to everyone else, unless a member sends the words behind it. Those words are encrypted on the member's machine so that only the sealed program can open them.
+
+## What does it cost?
+
+Checking a request on this site is free. Enrolling attaches 0.01 NEAR for storage, of which the guard keeps about 0.0014 and returns the rest. Anyone who wants a signed verdict for a treasury that has not enrolled can pay one cent a check through OutLayer on testnet. That verdict is signed with a key of the payer's own, so it can never cause a veto.
+
+## Why should we believe a verdict?
+
+Because of where it is signed. The reader runs inside sealed hardware on OutLayer and signs with a key that exists only for that exact program. The guard obeys that one key. `kaap verify` checks the signature, the run and its hardware attestation for any recorded verdict.
+
+## Does the AI decide?
+
+No. Plain code sets the lowest risk a request can have, and the AI can only raise it. The guard never votes on the AI's word alone: a finding from plain code must stand behind every veto.
+
+## Is it on mainnet?
+
+Not yet. Kaap reads any mainnet treasury today. Its guard votes only on testnet.
+
+## Who built it?
+
+Kaap is open source under the MIT licence and was built for the NEAR hackathon of November 2026.

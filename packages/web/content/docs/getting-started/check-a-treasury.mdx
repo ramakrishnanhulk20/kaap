@@ -1,0 +1,29 @@
+---
+title: Check a treasury
+description: Read what any Sputnik DAO request will really do, on the site, with no wallet.
+---
+
+Open [Check a treasury](/check), type the account of any Sputnik DAO on NEAR, and press **Read it**. You need no wallet and no sign-in.
+
+## What you get
+
+- **What it says.** The description, as the treasury's members see it.
+- **What it will do.** Each effect in one plain sentence, with the exact fields one click away.
+- **What Kaap found.** The findings, each with a severity.
+- **The risk**, from low to critical, and whether the guard would veto.
+- **How it was read.** The block, the two providers that agreed, the treasury's code, and where the payment history and prices came from.
+
+Leave the request number empty for the latest request, or type one. **Earlier request** and **Later request** step through the rest.
+
+## Two requests worth opening
+
+- **A theft that was stopped.** [Request 1 on the demo treasury](/check?dao=kaap-dao-1111072928.testnet&network=testnet&id=1) said it paid alice and paid a lookalike account. The page shows Kaap's reading and the four transactions that ended in the guard's reject vote.
+- **A request that shows only a hash.** [Request 7 on the demo treasury](/check?dao=kaap-dao-1111072928.testnet&network=testnet&id=7) reads as high risk and unreadable. Press **Use the words saved for this demo request** and Kaap checks that the words hash to the same value, reads them, and the risk becomes critical: the request adds a key to the treasury's funds.
+
+## What this check is and is not
+
+It is the plain-code part of Kaap, run on our server with the same code as the [command line](/docs/getting-started/command-line). It reads the chain at the newest final block from two providers, and it gives no answer if they disagree.
+
+It is not a verdict. The second opinion from the AI and the guard's vote happen only in Kaap's sealed program, for treasuries that have enrolled. The page says so under every reading.
+
+Checks are limited to a few a minute for each visitor, so the public providers are not flooded.
