@@ -7,12 +7,14 @@ description: The same check on your own machine, plus the commands that verify a
 
 ## Build it once
 
-You need Node 24, Rust, and `wasm-bindgen-cli` 0.2.129, because the build compiles Kaap's rules engine to wasm.
+You need Node 24 or newer and nothing else. Kaap's rules engine is in the repository already, compiled to WebAssembly.
 
 ```bash
-npm install
-npm run build -w packages/cli
+npm ci -w packages/cli
+npm run build:ts -w packages/cli
 ```
+
+To compile the engine yourself instead, you also need Rust and `wasm-bindgen-cli` 0.2.129, and the command is `npm run build -w packages/cli`.
 
 ## Check a request
 

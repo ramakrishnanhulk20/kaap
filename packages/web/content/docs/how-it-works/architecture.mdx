@@ -1,0 +1,141 @@
+---
+title: Architecture
+description: The parts of Kaap, how a verdict travels between them, and which code each part is built from.
+---
+
+Three drawings of the same system. The repository's `ARCHITECTURE.md` goes further: every contract method, the verdict's byte layout, and the exact reads and writes between the parts.
+
+## The parts
+
+Kaap is two contracts on NEAR, one program inside sealed hardware on OutLayer, and three tools around them: the watcher, the command line and this site. Members and their wallets stay where they are, in the treasury.
+
+```mermaid
+flowchart LR
+  subgraph NEAR["NEAR testnet"]
+    DAO["Sputnik DAO 3.2<br/>(guard role: VoteReject only)"]
+    GUARD["kaap-guard<br/>contract"]
+    REG["kaap-registry<br/>contract"]
+    OLC["outlayer.testnet<br/>contract"]
+  end
+  subgraph OutLayer["OutLayer"]
+    JOB["kaap-sealed program<br/>(Intel TDX)"]
+    OLAPI[("OutLayer API<br/>public storage, attestations")]
+  end
+  AI["NEAR AI Cloud<br/>sealed model"]
+  ONECLICK["1Click price list<br/>(mainnet runs only)"]
+  subgraph Ours["Kaap services and tools"]
+    W["Worker<br/>(built, not hosted yet)"]
+    DB[("SQLite store")]
+    CLI["kaap CLI<br/>(no keys)"]
+    WEB["Web app: /check, /docs, /api/check<br/>(built, not hosted yet)"]
+  end
+  TG["Telegram bot"]
+  MEM["DAO members<br/>and their wallets"]
+  PAYER["Anyone paying<br/>one cent a check"]
+
+  MEM -- "add_proposal, act_proposal" --> DAO
+  W -- "get_last_proposal_id every second, 2 providers" --> DAO
+  W -- "enrolled_daos, accepted_key" --> GUARD
+  W -- "request_execution, with a sealed text when one came in" --> OLC
+  OLC -- "runs the active build" --> JOB
+  JOB -- "get_proposal, get_policy, code hashes at one final block, 2 providers" --> DAO
+  JOB -- "model list, attestation, chat, signature" --> AI
+  JOB -- "token prices" --> ONECLICK
+  JOB -- "evidence record ai-evidence:(verdict hash)" --> OLAPI
+  JOB -- "signed verdict, as the run's result" --> W
+  W -- "veto(verdict, signature, kind_json)" --> GUARD
+  GUARD -- "act_proposal VoteReject" --> DAO
+  W -- "record(verdict, signature)" --> REG
+  W --- DB
+  W -- "alerts" --> TG
+  TG -- "messages" --> MEM
+  MEM -- "sealed text: kaap seal-text, POST /texts" --> W
+  PAYER -- "request_execution with attached_usd" --> OLC
+  PAYER -- "HTTPS POST /call with X-Attached-Deposit" --> OLAPI
+  CLI -- "views at one final block, 2 providers" --> DAO
+  CLI -- "latest, accepted_key" --> REG
+  CLI -- "accepted_key, is_enrolled, veto_result" --> GUARD
+  CLI -- "attestations by transaction" --> OLAPI
+  WEB -- "check: the views the CLI reads, 2 providers" --> DAO
+```
+
+Solid lines are calls that happen today. The watcher is drawn because it is built, but it is not hosted: in the recorded run a script made its calls.
+
+## A disguised payment gets vetoed
+
+The same path as [The path of a request](/docs/how-it-works/the-path-of-a-request), with every call named.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant P as Proposer
+  participant D as Sputnik DAO
+  participant W as Kaap worker
+  participant O as OutLayer (outlayer.testnet)
+  participant J as kaap-sealed (Intel TDX)
+  participant A as NEAR AI Cloud
+  participant G as kaap-guard
+  participant R as kaap-registry
+  participant M as Members
+
+  P->>D: add_proposal({proposal: {description, kind}}) with the bond
+  W->>D: get_last_proposal_id, both providers, every second
+  Note over W: a new id is taken once both providers show it at final (C21, C22)
+  W->>O: request_execution({source: Project, input_data, resource_limits}), 300 Tgas, 0.02 NEAR
+  O->>J: input {v, network, guard, dao, proposal_id, expires_in_ms}
+  J->>D: block, get_proposal({id}), get_policy(), view_account of each receiver, at one final block on 2 providers
+  Note over J: held with no signature if a read fails or the providers differ (C22), else kaap-core decodes effects, findings, floor (C1 to C3)
+  J->>A: model list, attestation report with a fresh nonce, one non-streamed chat (C10 to C12)
+  A-->>J: answer and signature
+  Note over J: risk is the higher of floor and AI risk, an unverified answer counts as high at most (C9)
+  J->>O: evidence record under ai-evidence:(verdict hash)
+  J-->>W: {verdict, signature, public_key, explanation} as the run's result
+  Note over W: key equals the guard's accepted_key, signature, names, expiry (standard 3)
+  W->>M: Telegram, CRITICAL risk on proposal N, queued beside the veto and sent at once (C24, C27)
+  Note over W: live state on both providers still matches the verdict's hashes (C4, C22)
+  W->>G: veto(verdict, signature, kind_json), 300 Tgas
+  Note over G: version, signature, guard and network, enrolled DAO, veto rule, expiry, kind hash, not used before (C9, C19)
+  G->>D: act_proposal({id, action: VoteReject, proposal: kind_json}) (C5, C15)
+  D-->>G: vote counted, proposal Rejected
+  Note over G: on_veto_result records Cast and emits veto_cast (C18)
+  W->>M: Telegram, the guard rejected proposal N
+  W->>R: record(verdict, signature), 0.02 NEAR attached (C13)
+```
+
+The veto goes out before the record, because the veto races the approvers and the record does not.
+
+## The code
+
+An arrow points from a package to the one built on it.
+
+```mermaid
+flowchart TB
+  VERDICT["packages/verdict<br/>kaap-verdict (Rust)<br/>verdict types, canonical hashes,<br/>signed verdict bytes, fixed severities"]
+  CORE["packages/core<br/>kaap-core (Rust)<br/>decoder, Sputnik rule port, hash checker,<br/>description check, risk floor, enrolment template"]
+  CONTRACTS["packages/contracts<br/>kaap-guard, kaap-registry<br/>(Rust, near-sdk 5.29.1)"]
+  SEALED["packages/sealed<br/>kaap-sealed (Rust, wasm32-wasip2,<br/>OutLayer SDK 0.2.1)"]
+  WASM["packages/core-wasm<br/>kaap-core-wasm (wasm-bindgen 0.2.129)"]
+  DIFF["packages/core-diff<br/>tests against the Sputnik 3.2 binary"]
+  BRIDGE["packages/worker/bridge<br/>kaap-worker-bridge (Rust to wasm)"]
+  WORKER["packages/worker<br/>TypeScript, Node 24, near-api-js 7.4.0,<br/>better-sqlite3 13.0.3, zod 4.6.7"]
+  CLI["packages/cli<br/>kaap (TypeScript, Node 24, zod 4.6.7)"]
+  ATTACK["packages/attack<br/>attack suite (in progress)"]
+  WEB["packages/web<br/>Next.js 16: landing page, /check, /docs,<br/>and /api/check, which runs the CLI's check"]
+
+  VERDICT --> CORE
+  VERDICT --> CONTRACTS
+  CORE --> SEALED
+  CORE --> WASM
+  CORE --> BRIDGE
+  CORE -. "dev-dependency" .-> DIFF
+  BRIDGE --> WORKER
+  WASM --> CLI
+  WASM --> ATTACK
+  WASM --> WEB
+  CLI -- "check, bundled into packages/web/engine" --> WEB
+```
+
+Two things in this drawing carry most of the trust:
+
+- **The contracts compile in one small package, `verdict`, and nothing else of Kaap.** Work on the rules engine never changes the contracts' code.
+- **Every part that judges a request runs the same engine.** The sealed reader, the command line and this site's check all run `kaap-core`, compiled from one source. The site does not have its own copy of any rule.

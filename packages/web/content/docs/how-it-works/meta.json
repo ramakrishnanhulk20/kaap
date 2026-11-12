@@ -1,4 +1,10 @@
 {
   "title": "How it works",
-  "pages": ["the-path-of-a-request", "the-sealed-reader", "the-guard", "addresses"]
+  "pages": [
+    "the-path-of-a-request",
+    "the-sealed-reader",
+    "the-guard",
+    "architecture",
+    "addresses"
+  ]
 }
