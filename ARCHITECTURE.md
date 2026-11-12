@@ -120,7 +120,6 @@ flowchart TB
   BRIDGE["packages/worker/bridge<br/>kaap-worker-bridge (Rust to wasm)"]
   WORKER["packages/worker<br/>TypeScript, Node 24, near-api-js 7.4.0,<br/>better-sqlite3 13.0.3, zod 4.6.7"]
   CLI["packages/cli<br/>kaap (TypeScript, Node 24, zod 4.6.7)"]
-  ATTACK["packages/attack<br/>attack suite (in progress)"]
   WEB["packages/web<br/>Next.js 16: landing page, /check, /docs,<br/>and /api/check, which runs the CLI's check"]
 
   VERDICT --> CORE
@@ -131,12 +130,11 @@ flowchart TB
   CORE -. "dev-dependency" .-> DIFF
   BRIDGE --> WORKER
   WASM --> CLI
-  WASM --> ATTACK
   WASM --> WEB
   CLI -- "check, bundled into packages/web/engine" --> WEB
 ```
 
-An arrow points from a package to the one built on it. The contracts compile in only kaap-verdict, so work on the analysis in kaap-core never changes their wasm. kaap-core re-exports kaap-verdict, so the sealed program, the worker's bridge, the CLI and the attack suite compute verdict bytes and hashes with the same code the guard checks them with (C14, standard 2). The worker never ports a rule to TypeScript: it hashes, decodes verdicts and applies the veto rule through the bridge.
+An arrow points from a package to the one built on it. The contracts compile in only kaap-verdict, so work on the analysis in kaap-core never changes their wasm. kaap-core re-exports kaap-verdict, so the sealed program, the worker's bridge and the CLI compute verdict bytes and hashes with the same code the guard checks them with (C14, standard 2). The worker never ports a rule to TypeScript: it hashes, decodes verdicts and applies the veto rule through the bridge.
 
 ## 4. Components
 
@@ -150,7 +148,7 @@ An arrow points from a package to the one built on it. The contracts compile in 
 | Worker | Watches each enrolled DAO's counter, starts sealed runs, checks each verdict, vetoes, records, alerts on Telegram, serves four HTTP routes, raises health signals (C18, C21, C22, C27) | one Node 24 process; built and tested, not hosted yet | the worker account's key in a file, the Telegram bot token, a SQLite store (DAOs, judgements, runs, spend, subscriptions, tokens, alerts) |
 | kaap-worker-bridge | kaap-core's hashes, verdict decoding and veto rule for the worker | plain wasm inside the worker | nothing |
 | kaap CLI | `check`, `verify`, `enroll`, `arming`, `seal-text`, `subscribe`, `eval`, `census`; reads only and sends no transaction (C31) | the reader's own machine, Node 24 | nothing; `seal-text` keeps one reply key in memory for its one request |
-| kaap-core-wasm | kaap-core for JavaScript, every rule exactly as the sealed program runs it (C14) | the CLI, the web app's `/api/check` and the attack suite; a browser can load the same build | nothing |
+| kaap-core-wasm | kaap-core for JavaScript, every rule exactly as the sealed program runs it (C14) | the CLI and the web app's `/api/check`; a browser can load the same build | nothing |
 | kaap-core-diff | Checks kaap-core's policy rules against the real Sputnik 3.2 binary | tests in a local sandbox | nothing |
 | Web app | The landing page, the check screen, the docs and `/api/check`. The route runs the CLI's own `check` on the server, from a bundle in `packages/web/engine` that carries kaap-core-wasm, so the site reads a proposal exactly as the CLI does. It reads the chain and sends no transaction | one Next.js 16 app (`packages/web`); built, not hosted yet | no key and no database; `/api/check` keeps call counts and 20 seconds of answers in memory |
 

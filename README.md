@@ -249,7 +249,6 @@ flowchart TB
   BRIDGE["packages/worker/bridge<br/>kaap-worker-bridge (Rust to wasm)"]
   WORKER["packages/worker<br/>TypeScript, Node 24, near-api-js 7.4.0,<br/>better-sqlite3 13.0.3, zod 4.6.7"]
   CLI["packages/cli<br/>kaap (TypeScript, Node 24, zod 4.6.7)"]
-  ATTACK["packages/attack<br/>attack suite (in progress)"]
   WEB["packages/web<br/>Next.js 16: landing page, /check, /docs,<br/>and /api/check, which runs the CLI's check"]
 
   VERDICT --> CORE
@@ -260,7 +259,6 @@ flowchart TB
   CORE -. "dev-dependency" .-> DIFF
   BRIDGE --> WORKER
   WASM --> CLI
-  WASM --> ATTACK
   WASM --> WEB
   CLI -- "check, bundled into packages/web/engine" --> WEB
 ```
@@ -475,7 +473,6 @@ packages/
   worker/       the always-on watcher: watches treasuries, submits vetoes, records, alerts
   cli/          the kaap command line: check, verify, enroll, arming, seal-text, eval, census
   web/          the site: landing page, /check, /docs, /api/check
-  attack/       attack scripts against the live guard (not finished)
 scripts/        deploy, demo treasury setup, the proof run, sealed builds
 deployments/    what is deployed where, with transaction ids
 eval/           the labelled requests, how they were sampled and labelled, and every AI run
