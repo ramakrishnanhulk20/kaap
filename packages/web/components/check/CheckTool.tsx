@@ -5,6 +5,7 @@ import { type CSSProperties, type FormEvent, useCallback, useEffect, useRef, use
 import type { CheckAnswer, CheckReport, Network, SuppliedText } from '@/lib/kaapCheck';
 import { plainEffect } from '@/lib/plainEffect';
 import proof from '@/data/proof.json';
+import { transactionLink } from '@/lib/links';
 import './check.css';
 
 type State =
@@ -62,7 +63,7 @@ function Trail() {
       <ol>
         {steps.map((step) => (
           <li key={step.tx}>
-            <a className="kc-link" href={`https://testnet.nearblocks.io/txns/${step.tx}`} target="_blank" rel="noreferrer">
+            <a className="kc-link" href={transactionLink(step.tx)} target="_blank" rel="noreferrer">
               {step.name}
             </a>
           </li>

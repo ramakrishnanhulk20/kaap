@@ -8,7 +8,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "capture:lab": "node --no-warnings scripts/capture-lab-fixture.mjs",
+    "data:proposal": "node --no-warnings scripts/capture-hash-proposal.mjs",
     "data:proof": "node scripts/proof-data.mjs",
     "engine": "node scripts/bundle-engine.mjs"
   },

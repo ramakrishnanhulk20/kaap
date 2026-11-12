@@ -1,13 +1,14 @@
 'use client';
 
 import { motion, useScroll, useTransform } from 'framer-motion';
+import Link from 'next/link';
 import type { CSSProperties } from 'react';
-import proof from '@/data/proof.json';
-import { description, effectPhrase, proposalId } from '@/lib/labData';
-import { useStill } from './d/useStill';
-import { Nav } from './f/Closing';
-import Film from './f/Film';
-import './f/stage.css';
+import Nav from '@/components/site/Nav';
+import { description, effectPhrase, proposalId } from '@/lib/hashProposal';
+import { STOPPED_THEFT } from '@/lib/links';
+import { useStill } from '@/lib/useStill';
+import Film from './Film';
+import './hero.css';
 
 // One twist of two-ply thread every 14px: each ply is a slanted lozenge.
 const TWIST = 14;
@@ -30,10 +31,7 @@ function Thread() {
 // script has run.
 const order = (position: number) => ({ '--i': position }) as CSSProperties;
 
-/** The check page, opened on the disguised payment the guard rejected on testnet. */
-export const STOPPED_THEFT = `/check?dao=${proof.treasury.account}&network=${proof.network}&id=${proof.stopped.proposalId}`;
-
-export default function HeroF() {
+export default function Hero() {
   const still = useStill();
   const { scrollY } = useScroll();
   const drift = useTransform(scrollY, [0, 600], [0, 36]);
@@ -42,7 +40,7 @@ export default function HeroF() {
 
   return (
     <section id="top" className="toy-hero">
-      <Nav />
+      <Nav onHome />
       <motion.div className="toy-film" style={still ? undefined : { y: drift }}>
         <Film />
       </motion.div>
@@ -72,12 +70,12 @@ export default function HeroF() {
             words what it will do, and vetoes the theft. It can reject. It can never approve or move a cent.
           </p>
           <div className="toy-actions toy-rise" style={order(4)}>
-            <a className="toy-btn toy-btn--main" href="/check">
+            <Link className="toy-btn toy-btn--main" href="/check">
               Check a treasury
-            </a>
-            <a className="toy-btn toy-btn--side" href={STOPPED_THEFT}>
+            </Link>
+            <Link className="toy-btn toy-btn--side" href={STOPPED_THEFT}>
               Watch a theft get stopped
-            </a>
+            </Link>
           </div>
           <p className="toy-live toy-rise" style={order(5)}>
             <span className="toy-live-dot" aria-hidden="true" />

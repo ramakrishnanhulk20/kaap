@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Saves one real sign-request proposal of the demo treasury, the text behind its hash, the engine's
-// answers with and without that text, and the registry's record, as lab-fixtures/hash-proposal.json.
-// The lab page reads that file, so nothing it shows is typed by hand.
+// answers with and without that text, and the registry's record, as data/hash-proposal.json.
+// The landing page reads that file, so nothing it shows of that proposal is typed by hand.
 //
-//   npm run capture:lab        (from packages/web)
+//   npm run data:proposal      (from packages/web)
 //
 // The proposal and its text come from deployments/demo-hash-text.json, which
 // scripts/hash-check-testnet.mjs writes when it files the proposal. Read-only calls to NEAR
@@ -17,7 +17,7 @@ import * as core from '../../core-wasm/pkg/kaap_core_wasm.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..', '..', '..');
-const OUT = join(HERE, '..', 'lab-fixtures', 'hash-proposal.json');
+const OUT = join(HERE, '..', 'data', 'hash-proposal.json');
 const TEXT_FILE = join('deployments', 'demo-hash-text.json');
 const RPC = 'https://rpc.testnet.fastnear.com';
 const NETWORK = 'testnet';

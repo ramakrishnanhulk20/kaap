@@ -38,3 +38,4 @@ packages/web/.next-*/
 # Renders from the art scripts
 art/world/out/
 art/world/__pycache__/
+packages/web/tsconfig.tsbuildinfo

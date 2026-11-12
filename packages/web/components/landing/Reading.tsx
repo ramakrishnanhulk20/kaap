@@ -1,8 +1,8 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { description, effectPhrase, hashHex, proposalId, sentence, withoutText, withText } from '@/lib/labData';
-import { useStill } from '../d/useStill';
+import { description, effectPhrase, hashHex, proposalId, sentence, withoutText, withText } from '@/lib/hashProposal';
+import { useStill } from '@/lib/useStill';
 import './reading.css';
 
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];

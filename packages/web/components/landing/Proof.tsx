@@ -3,15 +3,13 @@
 import { motion } from 'framer-motion';
 import type { ReactNode } from 'react';
 import proof from '@/data/proof.json';
-import { useStill } from '../d/useStill';
+import { accountLink as account, transactionLink as transaction } from '@/lib/links';
+import { useStill } from '@/lib/useStill';
 import './proof.css';
 
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 const SEEN = { once: true, amount: 0.2 } as const;
 
-const EXPLORER = 'https://testnet.nearblocks.io';
-const account = (id: string) => `${EXPLORER}/address/${id}`;
-const transaction = (hash: string) => `${EXPLORER}/txns/${hash}`;
 
 interface Row {
   what: string;

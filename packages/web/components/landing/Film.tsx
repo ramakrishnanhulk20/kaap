@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { useStill } from '../d/useStill';
+import { useStill } from '@/lib/useStill';
 
 const PHONE_QUERY = '(max-width: 859px)';
 

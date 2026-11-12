@@ -17,7 +17,8 @@ export default function SmoothScroll({ children }: { children: React.ReactNode }
         lenis.current?.destroy();
         lenis.current = null;
       } else if (!lenis.current) {
-        lenis.current = new Lenis({ autoRaf: true });
+        // `anchors` lets a link to a section of the page glide there like any other scroll.
+        lenis.current = new Lenis({ autoRaf: true, anchors: true });
       }
     };
     sync();

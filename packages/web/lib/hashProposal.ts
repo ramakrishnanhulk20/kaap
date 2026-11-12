@@ -1,4 +1,4 @@
-import fixture from '@/lab-fixtures/hash-proposal.json';
+import fixture from '@/data/hash-proposal.json';
 
 export interface Effect {
   type: string;

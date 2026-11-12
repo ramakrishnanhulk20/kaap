@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import CheckTool from '@/components/check/CheckTool';
-import { Nav } from '@/components/lab/f/Closing';
-import '@/components/lab/f/stage.css';
+import Footer from '@/components/site/Footer';
+import Nav from '@/components/site/Nav';
 
 export const metadata: Metadata = {
   title: 'Check a treasury | Kaap',
@@ -11,12 +11,13 @@ export const metadata: Metadata = {
 
 export default function CheckPage() {
   return (
-    <main data-direction="f" className="relative">
-      <Nav home="/lab?d=f" />
+    <main className="relative">
+      <Nav />
       {/* The tool reads the address bar, which only the browser has. */}
       <Suspense fallback={null}>
         <CheckTool />
       </Suspense>
+      <Footer />
     </main>
   );
 }

@@ -1,5 +1,4 @@
-// Fixed film grain over the whole page. The strength comes from --grain-opacity in globals.css:
-// 7 percent in dark mode, 5 percent in light mode.
+// A fine paper grain fixed over the whole page. Its strength is --grain-opacity in globals.css.
 export default function Grain() {
   return (
     <svg
