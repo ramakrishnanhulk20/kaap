@@ -9,8 +9,10 @@
 // - the real sealed signer or OutLayer: the test holds the signing key (common::SealedSigner);
 // - TokenWeight voting, a Guard role with more than one member, or a guard matched by a second
 //   role; C16's "disarmed" report belongs to the worker and the CLI;
-// - a DAO call that runs out of gas, two vetoes for one proposal in the same block, or the guard
-//   account running out of storage balance.
+// - a DAO call that runs out of gas inside a 300 Tgas veto: gas_report prints where that starts
+//   for policy kinds, and nothing asserts it;
+// - two vetoes for one proposal in the same block, or the guard account running out of storage
+//   balance.
 
 mod common;
 
@@ -142,6 +144,18 @@ impl World {
         signature_b64: &str,
         kind_json: &str,
     ) -> Result<ExecutionFinalResult> {
+        self.veto_raw_with_gas(verdict_b64, signature_b64, kind_json, NearGas::from_tgas(300))
+            .await
+    }
+
+    /// `veto_raw` with the gas the stranger chooses to attach.
+    async fn veto_raw_with_gas(
+        &self,
+        verdict_b64: &str,
+        signature_b64: &str,
+        kind_json: &str,
+        gas: NearGas,
+    ) -> Result<ExecutionFinalResult> {
         self.env
             .call(
                 &self.stranger,
@@ -149,7 +163,7 @@ impl World {
                 "veto",
                 json!({ "verdict": verdict_b64, "signature": signature_b64, "kind_json": kind_json }),
                 NearToken::from_yoctonear(0),
-                NearGas::from_tgas(300),
+                gas,
             )
             .await
     }
@@ -530,13 +544,14 @@ async fn a_kind_with_its_sets_in_another_order_is_accepted_and_the_vote_lands() 
 }
 
 /// The guard's own receipt succeeded, the DAO's failed with `dao_error`, the callback recorded
-/// the refusal and said so, and the proposal is still open.
+/// the refusal and said so, and the proposal kept the status `status`.
 async fn assert_refusal_recorded(
     w: &World,
     outcome: ExecutionFinalResult,
     dao_error: &str,
     id: u64,
     verdict: &Verdict,
+    status: &str,
 ) -> Result<()> {
     print_outcomes("refused vote", &outcome);
     let guard_steps = step_on(&outcome, &w.guard)?;
@@ -555,7 +570,7 @@ async fn assert_refusal_recorded(
     anyhow::ensure!(refused["data"][0]["result"] == json!("Failed"), "{refused}");
     outcome.into_result()?;
 
-    anyhow::ensure!(w.env.status(&w.dao, id).await? == "InProgress");
+    anyhow::ensure!(w.env.status(&w.dao, id).await? == status);
     anyhow::ensure!(w.was_used(verdict).await?, "the spent verdict must stay spent");
     anyhow::ensure!(w.veto_result(verdict).await? == json!("Failed"));
     println!("{dao_error} reached the DAO receipt; veto_result records \"Failed\"");
@@ -576,7 +591,7 @@ async fn a_vote_the_dao_refuses_for_a_different_kind_is_recorded() -> Result<()>
     let expires = w.env.chain_time_ms().await? + TEN_MINUTES_MS;
     let verdict = vetoable_verdict(&w.guard, &w.dao, id, &altered, expires)?;
     let outcome = w.veto(&verdict, &altered).await?;
-    assert_refusal_recorded(&w, outcome, "ERR_WRONG_KIND", id, &verdict).await
+    assert_refusal_recorded(&w, outcome, "ERR_WRONG_KIND", id, &verdict, "InProgress").await
 }
 
 #[tokio::test]
@@ -587,7 +602,38 @@ async fn a_remove_member_from_role_proposal_cannot_be_rejected_and_the_refusal_i
     let id = w.env.add_proposal(&w.dao, &w.alice, kind).await?;
     let (kind_json, verdict) = w.fresh(&w.dao, id).await?;
     let outcome = w.veto(&verdict, &kind_json).await?;
-    assert_refusal_recorded(&w, outcome, "ERR_PERMISSION_DENIED", id, &verdict).await
+    assert_refusal_recorded(&w, outcome, "ERR_PERMISSION_DENIED", id, &verdict, "InProgress").await
+}
+
+/// The guard does not read a proposal's status; Sputnik refuses a vote on one its members already
+/// decided, and the guard records that refusal like any other.
+#[tokio::test]
+async fn a_veto_on_a_proposal_its_members_already_decided_is_refused_and_recorded() -> Result<()> {
+    let w = world().await?;
+    for (vote, status) in [("VoteApprove", "Approved"), ("VoteReject", "Rejected")] {
+        let id = w.file_transfer(&w.dao, 5).await?;
+        let (kind_json, verdict) = w.fresh(&w.dao, id).await?;
+        let stored = w.env.proposal(&w.dao, id).await?["kind"].clone();
+        w.env
+            .call(
+                &w.alice,
+                &w.dao,
+                "act_proposal",
+                json!({ "id": id, "action": vote, "proposal": stored }),
+                NearToken::from_yoctonear(0),
+                NearGas::from_tgas(300),
+            )
+            .await?
+            .into_result()?;
+        anyhow::ensure!(w.env.status(&w.dao, id).await? == status, "the council's {vote} did not decide it");
+
+        let outcome = w.veto(&verdict, &kind_json).await?;
+        assert_refusal_recorded(&w, outcome, "ERR_PROPOSAL_NOT_READY_FOR_VOTE", id, &verdict, status)
+            .await?;
+        let votes = w.votes(&w.dao, id).await?;
+        anyhow::ensure!(votes.get(w.guard.as_str()).is_none(), "the guard's vote was counted: {votes}");
+    }
+    Ok(())
 }
 
 #[tokio::test]
@@ -687,6 +733,39 @@ fn big_policy(w: &World, roles: usize, members: usize) -> Value {
     })
 }
 
+/// A signed verdict is public before the worker uses it. A stranger who sends it first with
+/// enough gas for the guard but too little for the DAO's vote on a big kind must not be able to
+/// spend it: the short call fails whole, and the honest 300 Tgas call still lands.
+#[tokio::test]
+async fn a_veto_with_too_little_gas_for_the_vote_fails_whole_and_leaves_the_verdict_usable(
+) -> Result<()> {
+    let w = world().await?;
+    let kind = json!({ "ChangePolicy": { "policy": big_policy(&w, 80, 110) } });
+    let id = w.env.add_proposal(&w.dao, &w.alice, kind).await?;
+    let (kind_json, verdict) = w.fresh(&w.dao, id).await?;
+    let (verdict_b64, signature_b64) = w.sealed.sign(&verdict);
+
+    let short = w
+        .veto_raw_with_gas(&verdict_b64, &signature_b64, &kind_json, NearGas::from_tgas(240))
+        .await?;
+    print_outcomes(&format!("veto of a {}-byte ChangePolicy with 240 Tgas", kind_json.len()), &short);
+    println!(
+        "after the 240 Tgas call: was_used {}, veto_result {}, status {}",
+        w.was_used(&verdict).await?,
+        w.veto_result(&verdict).await?,
+        w.env.status(&w.dao, id).await?
+    );
+    w.assert_refused_untouched(short, "ERR_NOT_ENOUGH_GAS", &w.dao, id, &verdict).await?;
+    anyhow::ensure!(w.veto_result(&verdict).await?.is_null(), "a refused call left a veto result");
+
+    let outcome = w.veto_raw(&verdict_b64, &signature_b64, &kind_json).await?;
+    print_outcomes("the same verdict with 300 Tgas", &outcome);
+    outcome.into_result()?;
+    w.assert_rejected_by_guard(&w.dao, id).await?;
+    anyhow::ensure!(w.veto_result(&verdict).await? == json!("Ok"));
+    Ok(())
+}
+
 /// Not a check of behaviour: prints the gas each main guard action burns, receipt by receipt, for
 /// packages/contracts/GAS.md. Rerun with
 /// `cargo test -p kaap-guard --test guard_sandbox gas_report -- --nocapture`.
@@ -743,8 +822,25 @@ async fn gas_report() -> Result<()> {
             w.env.status(&w.dao, id).await?
         );
     }
-    // Policy-shaped kinds cost the most per byte; these find where a veto stops fitting.
-    for (roles, members) in [(60, 80), (80, 110)] {
+    // Policy-shaped kinds cost the most per byte. These find the largest one whose vote still
+    // lands with the 300 Tgas every veto attaches, in steps of about 1.4 KB from 200 KB, then two
+    // far above it, the last just under kaap-verdict's 256 KiB limit.
+    let mut largest_landed = 0;
+    let mut smallest_not_landed = usize::MAX;
+    for (roles, members) in [
+        (60, 80),
+        (80, 110),
+        (80, 112),
+        (80, 113),
+        (80, 114),
+        (80, 115),
+        (80, 116),
+        (80, 117),
+        (80, 118),
+        (80, 120),
+        (80, 130),
+        (80, 154),
+    ] {
         let kind = json!({ "ChangePolicy": { "policy": big_policy(&w, roles, members) } });
         let id = match w.env.add_proposal(&w.dao, &w.alice, kind).await {
             Ok(id) => id,
@@ -756,12 +852,25 @@ async fn gas_report() -> Result<()> {
         let (kind_json, verdict) = w.fresh(&w.dao, id).await?;
         let outcome = w.veto(&verdict, &kind_json).await?;
         report_gas(&format!("veto, large ChangePolicy kind of {} bytes", kind_json.len()), &outcome);
+        let status = w.env.status(&w.dao, id).await?;
         println!(
-            "GAS | large ChangePolicy kind of {} bytes | status after veto | {}",
+            "GAS | large ChangePolicy kind of {} bytes | status after veto | {status} | veto_result {}",
             kind_json.len(),
-            w.env.status(&w.dao, id).await?
+            w.veto_result(&verdict).await?
         );
+        if status == "Rejected" {
+            largest_landed = largest_landed.max(kind_json.len());
+        } else {
+            let reason = match step_on(&outcome, &w.dao)?[0].clone().into_result() {
+                Ok(_) => "the DAO's receipt succeeded".to_owned(),
+                Err(error) => receipt_error(&error),
+            };
+            println!("GAS | large ChangePolicy kind of {} bytes | DAO receipt | {reason}", kind_json.len());
+            smallest_not_landed = smallest_not_landed.min(kind_json.len());
+        }
     }
+    println!("GAS | largest ChangePolicy kind whose vote landed with 300 Tgas | {largest_landed} bytes");
+    println!("GAS | smallest ChangePolicy kind whose vote did not land | {smallest_not_landed} bytes");
 
     let id = w.file_transfer(&w.dao, 5).await?;
     let stored = w.env.kind_json(&w.dao, id).await?;

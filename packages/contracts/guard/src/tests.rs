@@ -221,6 +221,21 @@ fn hash_unverified_beside_a_high_code_is_vetoable() {
     assert!(g.was_used(hex::encode(verdict_hash(&v))));
 }
 
+// Bytes that are not a verdict, so the gas check is shown to come before every other check.
+#[test]
+#[should_panic(expected = "ERR_NOT_ENOUGH_GAS")]
+fn err_not_enough_gas_one_unit_below_300_tgas_comes_first() {
+    let mut g = guard();
+    testing_env!(VMContextBuilder::new()
+        .current_account_id(account(GUARD))
+        .predecessor_account_id(account(STRANGER))
+        .block_timestamp(NOW_MS * 1_000_000)
+        .prepaid_gas(Gas::from_gas(MIN_VETO_GAS.as_gas() - 1))
+        .build());
+    let (_, signature) = signed(&verdict(), &VERDICT_SEED);
+    let _ = g.veto(Base64VecU8(vec![1, 2, 3]), signature, KIND.to_owned());
+}
+
 #[test]
 #[should_panic(expected = "ERR_BAD_VERDICT")]
 fn err_bad_verdict_on_bytes_that_are_not_a_verdict() {

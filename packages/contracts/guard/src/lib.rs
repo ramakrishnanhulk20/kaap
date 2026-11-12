@@ -41,6 +41,7 @@ pub const ERR_NOT_OWNER: &str = "ERR_NOT_OWNER";
 pub const ERR_NEED_ONE_YOCTO: &str = "ERR_NEED_ONE_YOCTO";
 pub const ERR_NOT_PENDING_OWNER: &str = "ERR_NOT_PENDING_OWNER";
 pub const ERR_NOT_ENOUGH_DEPOSIT: &str = "ERR_NOT_ENOUGH_DEPOSIT";
+pub const ERR_NOT_ENOUGH_GAS: &str = "ERR_NOT_ENOUGH_GAS";
 
 /// The most entries `enrolled_daos` returns in one page. Measured as a transaction: 1.30 Tgas for
 /// one entry and 2.14 Tgas for twelve, about 0.08 Tgas each, so a full page of 100 is about
@@ -56,6 +57,13 @@ pub const RESULT_OK: &str = "Ok";
 /// twice the largest of those. The call also gets every unit the caller attached beyond the
 /// guard's own needs (weight 1), which is how a 198 KB ChangePolicy veto landed with 155 Tgas.
 pub const ACT_PROPOSAL_GAS: Gas = Gas::from_tgas(100);
+
+/// Gas every `veto` call must attach, 300 Tgas, the amount Kaap's worker sends. Every caller's
+/// veto must carry the gas the largest vetoable kind needs, because the verdict is spent once the
+/// call is made, whatever the DAO answers, and a signed verdict is public before it is used. With
+/// less, a stranger could send it first with enough gas for the guard but too little for the
+/// DAO's vote on a big kind, and so waste it. GAS.md measures the largest kind 300 Tgas carries.
+pub const MIN_VETO_GAS: Gas = Gas::from_tgas(300);
 
 /// Gas for `on_veto_result`, which reads one promise result, writes one entry and logs one
 /// event. Measured at 1.62 Tgas whatever the kind's size; 10 Tgas is six times that.
@@ -307,6 +315,7 @@ impl KaapGuard {
     /// unchanged (C5).
     ///
     /// Checks, in this order, each failure a panic with the error named:
+    /// the call attached at least `MIN_VETO_GAS`, 300 Tgas (ERR_NOT_ENOUGH_GAS);
     /// the verdict decodes and has version 1 (ERR_BAD_VERDICT); the signature is valid for the
     /// accepted key (ERR_BAD_SIGNATURE); the verdict names this contract and this network
     /// (ERR_WRONG_GUARD); its DAO is enrolled (ERR_NOT_ENROLLED); it meets the veto rule of C9
@@ -317,16 +326,18 @@ impl KaapGuard {
     ///
     /// Then it marks the verdict used, emits `veto_sent`, and calls `act_proposal` on the DAO
     /// with `{"id":<proposal_id>,"action":"VoteReject","proposal":<kind_json>}`, no deposit and
-    /// at least `ACT_PROPOSAL_GAS`, followed by `on_veto_result`. The caller must attach enough
-    /// gas for the guard's own work plus both of those, or the whole call fails and nothing is
-    /// spent; attach 300 Tgas, since what is not burnt is refunded and big kinds need it. Once
-    /// the guard's receipt succeeds the verdict is spent, whatever the DAO answers.
+    /// at least `ACT_PROPOSAL_GAS` plus every unit the guard does not use, followed by
+    /// `on_veto_result`. Once the guard's receipt succeeds the verdict is spent, whatever the DAO
+    /// answers; that is why a call with less than 300 Tgas is refused before anything else, and
+    /// leaves the verdict unused. What is not burnt is refunded.
     pub fn veto(
         &mut self,
         verdict: Base64VecU8,
         signature: Base64VecU8,
         kind_json: String,
     ) -> Promise {
+        require!(env::prepaid_gas() >= MIN_VETO_GAS, ERR_NOT_ENOUGH_GAS);
+
         let verdict = Verdict::try_from_slice(&verdict.0)
             .unwrap_or_else(|_| env::panic_str(ERR_BAD_VERDICT));
         require!(verdict.version == VERDICT_VERSION, ERR_BAD_VERDICT);

@@ -6,18 +6,19 @@ The NEAR contract that sits alone in a Sputnik DAO's Guard role and can cast exa
 
 `veto(verdict, signature, kind_json)` checks, in this order, and refuses with the error named:
 
-1. The verdict decodes and is version 1 (`ERR_BAD_VERDICT`).
-2. The accepted key signed it (`ERR_BAD_SIGNATURE`).
-3. It names this contract and this network (`ERR_WRONG_GUARD`).
-4. Its DAO enrolled itself (`ERR_NOT_ENROLLED`).
-5. It is critical, its plain-code floor is high or critical, it has a plain-code finding other than HASH_UNVERIFIED, and when the floor is only high, the AI answer that raised it is proven by its attestation (`ERR_NOT_VETOABLE`).
-6. It has not expired (`ERR_EXPIRED`).
-7. `kind_json` hashes, through kaap-verdict's canonical form (the one kaap-core re-exports), to the kind the verdict reviewed (`ERR_WRONG_KIND_HASH`), and is JSON (`ERR_BAD_KIND`).
-8. It was never used before (`ERR_REPLAY`).
+1. The call attached at least 300 Tgas (`ERR_NOT_ENOUGH_GAS`). This comes first because a verdict is spent once the guard's receipt succeeds, and a signed verdict is public before it is used: a call too short to carry the DAO's vote on a big kind fails whole and leaves the verdict unused.
+2. The verdict decodes and is version 1 (`ERR_BAD_VERDICT`).
+3. The accepted key signed it (`ERR_BAD_SIGNATURE`).
+4. It names this contract and this network (`ERR_WRONG_GUARD`).
+5. Its DAO enrolled itself (`ERR_NOT_ENROLLED`).
+6. It is critical, its plain-code floor is high or critical, it has a plain-code finding other than HASH_UNVERIFIED, and when the floor is only high, the AI answer that raised it is proven by its attestation (`ERR_NOT_VETOABLE`).
+7. It has not expired (`ERR_EXPIRED`).
+8. `kind_json` hashes, through kaap-verdict's canonical form (the one kaap-core re-exports), to the kind the verdict reviewed (`ERR_WRONG_KIND_HASH`), and is JSON (`ERR_BAD_KIND`).
+9. It was never used before (`ERR_REPLAY`).
 
 Then it records the verdict as used and calls the DAO's `act_proposal` with `VoteReject` and `kind_json` exactly as given. Sputnik compares that kind with the stored one by value, so the vote can only land on the proposal that was reviewed. A callback records the DAO's answer: `veto_result` reads `"Ok"` or `"Failed"`, and the events `veto_cast` and `veto_refused` say the same, so a refused vote is never silent.
 
-No other method creates a promise, and nothing in the code builds any action but `VoteReject`. Even with the signing key, nobody can make the guard approve, remove or finalise a proposal.
+`veto` is the only method that calls another contract. The only other promises are plain transfers back to the caller: `enroll` returns the part of its deposit the storage did not need, and `unenroll` returns the storage it frees. Nothing in the code builds any other action. Even with the signing key, nobody can make the guard approve, remove or finalise a proposal.
 
 ## Who holds the owner key
 
@@ -73,16 +74,16 @@ The DAO files a FunctionCall proposal to `enroll` on the guard, attaching 0.01 N
 | `is_enrolled(dao)`, `enrolled_daos(from_index, limit)` | view | pages of at most 100 |
 | `was_used(verdict_hash_hex)`, `veto_result(verdict_hash_hex)` | view | `veto_result` is `"Ok"`, `"Failed"` or null |
 
-Gas: a veto of a Transfer burns 8.3 Tgas in all, about 0.0008 NEAR. Attach 300 Tgas; what is not burnt comes back. Every figure is in `../GAS.md`.
+Gas: a veto of a Transfer burns 8.3 Tgas in all, about 0.0008 NEAR. Every veto must attach at least 300 Tgas, or it is refused with `ERR_NOT_ENOUGH_GAS` before the verdict is read; what is not burnt comes back. Every figure is in `../GAS.md`.
 
 ## Limits
 
 These proposals cannot be vetoed, whatever the verdict says:
 
 - A kind kaap-verdict cannot canonicalise: anything over 256 KiB, or text that is not strict JSON. The guard answers `ERR_BAD_KIND` at any gas. Size, not cost, is the barrier here: padding a FunctionCall's args is cheap, and a 196,735-byte padded FunctionCall was filed and vetoed for 89.0 Tgas in the sandbox.
-- A kind whose vote cannot fit in the 300 Tgas one transaction may carry. Big policies cost the most per byte: a 117,526-byte ChangePolicy veto burnt 171.6 Tgas, and a 197,966-byte one 291.3 Tgas (guard 122.7, DAO 155.1, callback 1.6), so policy kinds over about 200 KB do not fit.
+- A kind whose vote does not fit in 300 Tgas, the gas every veto must attach and the amount Kaap's worker sends. Big policies cost the most per byte. With 300 Tgas, the largest ChangePolicy whose vote landed in the sandbox was 205,116 bytes (guard 127.2 Tgas, DAO 161.0); from 206,546 bytes up, the DAO's call ran out of gas. The limit is for policies shaped like the measured ones, 80 roles of many short member names; a shape that costs more per byte stops sooner.
 - A RemoveMemberFromRole proposal, by design: the Guard role never holds VoteReject on it, so a DAO can always remove Kaap. The DAO refuses the vote and the guard records the refusal.
 
-For the first two, Kaap's sealed job holds the proposal instead of signing a veto for it, and the worker alerts the DAO's members that it cannot be judged or vetoed, so a person looks at it (the alerts are in `packages/worker`). Every measurement is in `../GAS.md`.
+Neither the sealed program nor the rules engine holds a proposal back for its size; their only size limit is kaap-verdict's 256 KiB. So a verdict can be signed for a policy kind above the 300 Tgas limit, and a veto tried on one fails and is reported: the guard sends the vote, the DAO's call runs out of gas, `veto_result` reads `"Failed"`, `veto_refused` says so, and the verdict is spent. The 300 Tgas limit is the guard's and the worker's, not the chain's: NEAR has let one transaction carry up to 1,000 Tgas since protocol 83, and a 226,566-byte ChangePolicy veto sent with 1,000 Tgas landed in the sandbox. Every measurement is in `../GAS.md`.
 
 The guard pays for one thing itself: each used verdict takes 74 bytes of its storage (84 when the DAO refused the vote), about 0.0008 NEAR. Only a verdict the accepted key signed can create one. Enrolments are paid by the DAO.

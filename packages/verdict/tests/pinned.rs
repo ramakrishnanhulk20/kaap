@@ -2,12 +2,14 @@
 //! commit 7148645, before this crate was split out of it. Any change to a field, a variant order
 //! or a fixed severity fails here.
 //!
-//! Not covered: the canonical form of kinds and policies (kaap-core's tests/canonical.rs), the
-//! context rule that raises DESC_CONTRADICTS to critical (kaap-core's `severity`), and signature
-//! checks (kaap-sealed and the contract tests).
+//! Not covered: the canonical form of kinds and policies beyond how one number is written
+//! (kaap-core's tests/canonical.rs), the context rule that raises DESC_CONTRADICTS to critical
+//! (kaap-core's `severity`), and signature checks (kaap-sealed and the contract tests).
 
 use kaap_verdict::severity::min_severity;
-use kaap_verdict::{verdict_bytes, verdict_hash, AiStatus, FindingCode, Network, Severity, Verdict};
+use kaap_verdict::{
+    canonical_kind, verdict_bytes, verdict_hash, AiStatus, FindingCode, Network, Severity, Verdict,
+};
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -39,6 +41,18 @@ fn a_fixed_verdict_hashes_to_the_value_from_before_the_split() {
         hex(&verdict_hash(&verdict)),
         "f5d4e7887d50d8ee39bfd39e5e7d3a9e2e7f41eef58d79c8785f8d2d21e67ad9"
     );
+}
+
+/// Pins serde_json's arbitrary_precision feature off, which any crate in the build can turn on.
+/// With it on, whole numbers within 64 bits still arrive as integers, but a fraction or a whole
+/// number beyond 64 bits reaches the canonical parser as a one-entry map instead of a float, so
+/// the parser would take as an object a number it must refuse, and give its kind a hash.
+#[test]
+fn a_json_number_keeps_its_digits_and_one_beyond_64_bits_is_refused() {
+    assert_eq!(canonical_kind(b"1").unwrap(), b"1");
+    assert_eq!(canonical_kind(b"18446744073709551615").unwrap(), b"18446744073709551615");
+    assert!(canonical_kind(b"18446744073709551616").is_err());
+    assert!(canonical_kind(b"1.5").is_err());
 }
 
 #[test]
