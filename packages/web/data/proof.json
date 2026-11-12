@@ -50,6 +50,21 @@
     "recordedTx": "2T8fbLoy9gkFkbLThTMPsbRCf4RckfZVMVBvwvfqePmy",
     "vetoTx": "AWWzynnmDdCYaKeSJA66Kr3h7DxW6ni9Sh6uHtH6v4M9"
   },
+  "tryIt": {
+    "account": "kaap-member-1029064001.testnet",
+    "publicKey": "ed25519:9q7PNx97fjXi1wBbXtvgNdPwy4WtcixW6rfSAFc96X51",
+    "addKeyTx": "24uPirozvafA72gHjXtmzp6PrgwaAKmVhEYywjgbrm9H",
+    "description": "Monthly salary payment to alice.tryit.kaap-member-1029064001.testnet.",
+    "kind": {
+      "Transfer": {
+        "token_id": "",
+        "receiver_id": "a1ice.tryit.kaap-member-1029064001.testnet",
+        "amount": "500000000000000000000000000",
+        "msg": null
+      }
+    }
+  },
+  "watcher": null,
   "evaluation": {
     "report": "packages/sealed/AI-EVAL.md",
     "records": 298,

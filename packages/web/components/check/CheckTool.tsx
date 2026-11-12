@@ -367,6 +367,10 @@ export default function CheckTool() {
           <button type="button" className="kc-link" onClick={tryDemo}>
             Read the demo treasury&apos;s hash-only request
           </button>
+          <span>or</span>
+          <a className="kc-link" href="#try">
+            file a fake theft and watch Kaap stop it
+          </a>
         </p>
 
         {state.phase === 'reading' ? (

@@ -1,0 +1,317 @@
+.kc-try {
+  /* The same cold risk colours as the check above, so an alarm never reads as decoration. */
+  --critical: #c4283c;
+  --high: #8f2f63;
+  --medium: #2b4da0;
+  --low: #1e8753;
+  --unknown: #586271;
+  --sheet: #fcf7ea;
+
+  position: relative;
+  padding: 0 0 clamp(88px, 14svh, 144px);
+  background: var(--bg);
+  color: var(--ink);
+  scroll-margin-top: 24px;
+}
+
+/* The check above no longer has to fill the screen by itself: this section follows it. */
+.kc:has(+ .kc-try) {
+  min-height: 0;
+  padding-bottom: clamp(56px, 9svh, 96px);
+}
+
+.kc-try-inner {
+  width: min(980px, calc(100% - 64px));
+  margin-inline: auto;
+}
+
+/* The kaappu thread, laid across the page where the reading ends and the doing begins. */
+.kc-try-thread {
+  display: block;
+  height: 6px;
+  margin-bottom: clamp(40px, 7svh, 72px);
+  border-radius: 3px;
+  background: repeating-linear-gradient(-56deg, rgb(30 26 20 / 0.3) 0 1.2px, rgb(30 26 20 / 0) 1.2px 6px), var(--accent);
+}
+
+.kc-try-title {
+  margin: 12px 0 0;
+  max-width: 16em;
+  font-family: var(--font-grotesk), sans-serif;
+  font-size: clamp(1.9rem, 4vw, 3.2rem);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+}
+
+.kc-try-lede {
+  margin: 18px 0 0;
+  max-width: 40em;
+  font-family: var(--font-body), sans-serif;
+  font-size: clamp(16px, 1.3vw, 18.5px);
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.kc-try-lede q {
+  color: var(--ink);
+}
+
+.kc-try-lede code,
+.kc-try-end code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgb(30 26 20 / 0.07);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.86em;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.kc-try-go {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 22px;
+  margin-top: 28px;
+}
+
+.kc-try-go .toy-btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.kc-try-small {
+  margin: 0;
+  max-width: 30em;
+  font-family: var(--font-body), sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.kc-try-note {
+  margin: 22px 0 0;
+  max-width: 40em;
+  padding: 14px 18px;
+  border-left: 4px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  background: rgb(30 26 20 / 0.045);
+  font-family: var(--font-body), sans-serif;
+  font-size: 15.5px;
+  line-height: 1.5;
+}
+
+.kc-try-note b {
+  font-weight: 700;
+}
+
+.kc-try-note a,
+.kc-try-end a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.kc-try-note a:hover,
+.kc-try-end a:hover {
+  text-decoration-color: var(--ink);
+}
+
+.kc-try-sheet {
+  margin-top: 32px;
+  padding: clamp(22px, 3.4vw, 40px);
+  border: 1.5px solid color-mix(in srgb, var(--ink) 16%, transparent);
+  border-radius: 12px;
+  background: var(--sheet);
+  box-shadow: 0 18px 40px -28px rgb(30 26 20 / 0.45);
+  animation: kc-try-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes kc-try-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+
+.kc-try-top {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 18px;
+  margin: 0 0 6px;
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.kc-try-clock {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.kc-try-steps {
+  display: grid;
+  gap: 0;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kc-try-steps li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 0 16px;
+  padding-bottom: 22px;
+}
+
+.kc-try-steps li:last-child {
+  padding-bottom: 0;
+}
+
+/* The thread between two knots. It turns turmeric once the step above it is done. */
+.kc-try-steps li:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 12.5px;
+  top: 30px;
+  bottom: 0;
+  width: 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+  transition: background-color 0.5s ease;
+}
+
+.kc-try-steps li[data-state='done']:not(:last-child)::before {
+  background: repeating-linear-gradient(-34deg, rgb(30 26 20 / 0.28) 0 1.2px, rgb(30 26 20 / 0) 1.2px 6px), var(--accent);
+}
+
+.kc-try-knot {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 2.5px solid color-mix(in srgb, var(--ink) 26%, transparent);
+  border-radius: 50%;
+  background: var(--sheet);
+  color: var(--bg);
+  transition:
+    background-color 0.35s ease,
+    border-color 0.35s ease,
+    transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.kc-try-knot svg {
+  width: 16px;
+  height: 16px;
+}
+
+.kc-try-knot[data-state='done'] {
+  border-color: var(--ink);
+  background: var(--ink);
+  transform: scale(1.06);
+}
+
+.kc-try-knot[data-state='now'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent);
+  animation: kc-try-wait 1.6s ease-out infinite;
+}
+
+@keyframes kc-try-wait {
+  to {
+    box-shadow: 0 0 0 12px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}
+
+.kc-try-step {
+  margin: 3px 0 0;
+  font-family: var(--font-grotesk), sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.kc-try-steps li[data-state='wait'] .kc-try-step {
+  color: var(--muted);
+}
+
+.kc-try-detail {
+  margin: 4px 0 0;
+  font-family: var(--font-body), sans-serif;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.kc-try-risk {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 2px 9px;
+  border-radius: 5px;
+  background: var(--unknown);
+  font-family: var(--font-mono), monospace;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.kc-try-risk[data-risk='critical'] {
+  background: var(--critical);
+}
+
+.kc-try-risk[data-risk='high'] {
+  background: var(--high);
+}
+
+.kc-try-risk[data-risk='medium'] {
+  background: var(--medium);
+}
+
+.kc-try-risk[data-risk='low'] {
+  background: var(--low);
+}
+
+.kc-try-end {
+  margin: 26px 0 0;
+  padding-top: 18px;
+  border-top: 1.5px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  max-width: 44em;
+  font-family: var(--font-body), sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.kc-try-end b {
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .kc-try-inner {
+    width: calc(100% - 40px);
+  }
+
+  .kc-try-step {
+    font-size: 16.5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kc-try-sheet,
+  .kc-try-knot[data-state='now'] {
+    animation: none;
+  }
+
+  .kc-try-knot {
+    transition: none;
+  }
+}

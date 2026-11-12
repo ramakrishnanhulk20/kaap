@@ -98,6 +98,19 @@ const proof = {
     recordedTx: runLine('recorded:', 'the registry record'),
     vetoTx: runLine(`veto:.*\\{"id":${STOPPED_ID},"action":"VoteReject"`, "the guard's vote"),
   },
+  // What the "try it yourself" button files, and the public half of the key it files with: a key
+  // that can call add_proposal on the demo treasury and nothing else (scripts/setup-demo-filer.mjs).
+  tryIt: deploy.demo_filer?.public_key
+    ? {
+        account: need(deploy.demo_filer.account_id, 'demo_filer.account_id'),
+        publicKey: deploy.demo_filer.public_key,
+        addKeyTx: need(deploy.demo_filer.add_key_tx, 'demo_filer.add_key_tx'),
+        description: need(deploy.demo_filer.description, 'demo_filer.description'),
+        kind: need(deploy.demo_filer.kind, 'demo_filer.kind'),
+      }
+    : null,
+  // The always-on watcher, once it is hosted and its record is in deployments/testnet.json.
+  watcher: deploy.watcher?.url ? { url: deploy.watcher.url, since: need(deploy.watcher.since, 'watcher.since'), host: need(deploy.watcher.host, 'watcher.host') } : null,
   evaluation: {
     report: 'packages/sealed/AI-EVAL.md',
     records: Number(split[1]),

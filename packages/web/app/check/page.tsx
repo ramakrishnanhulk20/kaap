@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import CheckTool from '@/components/check/CheckTool';
+import TryIt from '@/components/check/TryIt';
 import Footer from '@/components/site/Footer';
 import Nav from '@/components/site/Nav';
 
@@ -17,6 +18,7 @@ export default function CheckPage() {
       <Suspense fallback={null}>
         <CheckTool />
       </Suspense>
+      <TryIt />
       <Footer />
     </main>
   );
