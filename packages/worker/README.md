@@ -6,12 +6,13 @@ Kaap's always-on process. It watches every treasury enrolled in the guard, has t
 
 ## What it does, in order
 
-1. Reads each enrolled treasury's request counter about once a second, on two RPC providers. A new request is taken once both show it at a final block.
-2. Starts a run of the sealed reader on OutLayer and waits for the signed verdict.
-3. Checks the verdict before using it: the key is the guard's accepted key, the signature is valid, and the names and expiry are right.
-4. For a vetoable verdict, alerts members at once and sends `veto` to the guard. The veto goes first because it races the approvers.
-5. Sends `record` to the registry.
-6. Keeps watching open requests, and has one judged again when the treasury's rules or a called contract's code change under it.
+1. Takes up an enrolled account only when both RPC providers list it, its code is a Sputnik DAO release and its rules give the guard a deciding reject. Anyone can enrol an account, so one that is no treasury is never read or paid for.
+2. Reads each watched treasury's request counter about once a second, on two RPC providers. A new request is taken once both show it at a final block, at most 50 new ones a pass.
+3. Starts a run of the sealed reader on OutLayer and waits for the signed verdict.
+4. Checks the verdict before using it: the key is the guard's accepted key, the signature is valid, and the names and expiry are right.
+5. For a vetoable verdict, alerts members at once and sends `veto` to the guard. The veto goes first because it races the approvers.
+6. Sends `record` to the registry.
+7. Keeps watching open requests, and has one judged again when the treasury's rules or a called contract's code change under it. A treasury whose rule change takes the guard out is let go, and its members are told at once.
 
 It never decides anything itself. The veto rule, the hashes and the verdict's decoding run in `kaap-core`, compiled to wasm (`bridge/`), the same code the guard's checks come from.
 
