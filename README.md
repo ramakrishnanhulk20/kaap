@@ -389,8 +389,8 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 `npm test -w packages/cli` and `npm test -w packages/worker`, run in a fresh clone of this repository:
 
 ```
-ℹ tests 107
-ℹ pass 107
+ℹ tests 116
+ℹ pass 116
 ℹ fail 0
 
 ℹ tests 133
@@ -398,7 +398,7 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 ℹ fail 0
 ```
 
-In that same fresh clone the engine was rebuilt from source and came out byte for byte the same as the committed file: sha256 `00177fedf3431e6fbad0828f9d97a52a918cfd847ebd1753ea5f806be9f83241`.
+In that same fresh clone the engine was rebuilt from source and came out byte for byte the same as the committed file: sha256 `08d0f37ca4d713279bd2c3d97f91cd05e81e99001859dcb66f70208ea224460c`.
 
 Not covered: the site has four tests, of the try-it button's limits (`npm test` in `packages/web`), and none of its pages, and the watcher's tests run it against a scripted chain, not a live one. The live run is the one recorded in `PROOF.md`.
 
