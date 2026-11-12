@@ -3,7 +3,10 @@
 // DAO they concern, reach its members, and show on GET /status, which holds no secret; behind the
 // HTTPS proxy on the same machine, POST /subscribe counts each client by the address the proxy
 // saw, an IPv6 one by its /64 network, and a burst from one address gets no more tokens than the
-// limit. Not covered: a worker
+// limit; behind a platform's proxy (KAAP_HTTP_PROXY=platform) every request is counted by that
+// proxy's entry; and GET /proposal answers only for a watched DAO, in fixed words, hashes and
+// transaction ids. Not covered: what a real platform proxy writes into X-Forwarded-For, which
+// is checked against the live host after each deploy, and a worker
 // process that is down altogether, which only an outside check of /status sees, and the proxy's
 // own behaviour, which HOSTING.md checks on the VM.
 
@@ -19,7 +22,7 @@ import { Judge } from '../src/judge.ts';
 import { formatNear } from '../src/near.ts';
 import { Reads } from '../src/reads.ts';
 import { RejudgeWatch } from '../src/rejudge.ts';
-import { StatusServer, clientAddress, statusReport } from '../src/status.ts';
+import { StatusServer, clientAddress, proposalView, statusReport } from '../src/status.ts';
 import { Submitter } from '../src/submit.ts';
 import { Subscriptions } from '../src/subscriptions.ts';
 import { GUARD_FLOOR, WORKER_FLOOR, Worker } from '../src/worker.ts';
@@ -196,7 +199,7 @@ test('GET /status shows each level with no secret in it, and POST /subscribe han
   const botToken = '123456789:AAEhBOweik6ad9r_QXMENQjcrGbqCr4K-Ms';
   s.health.raise('veto_refused', DAO, { proposal_id: 3, code: 'ERR_SECRET_CODE', private_key: privateKey, chat: CHAT, token: botToken, detail: 'provider said <script>' });
   s.health.raise('worker_balance_low', ALL, { account: WORKER, spendable_near: '0.123456' });
-  const http = new StatusServer({ health: s.health, subs: s.subs, log: s.log, now: s.c.now, watching: () => s.worker.watching(), texts: s.worker }, { host: '127.0.0.1', port: 0, network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 3, textsPerAddressHour: 3, textKey: null });
+  const http = new StatusServer({ health: s.health, subs: s.subs, log: s.log, now: s.c.now, watching: () => s.worker.watching(), texts: s.worker, proposal: () => null }, { host: '127.0.0.1', port: 0, proxy: 'loopback', network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 3, textsPerAddressHour: 3, textKey: null });
   const base = `http://127.0.0.1:${await http.start()}`;
 
   const res = await fetch(`${base}/status`);
@@ -239,7 +242,7 @@ test('behind the HTTPS proxy on the same machine, POST /subscribe counts each cl
   assert.equal(clientAddress(undefined, '203.0.113.7'), 'unknown');
 
   const s = await started();
-  const http = new StatusServer({ health: s.health, subs: s.subs, log: s.log, now: s.c.now, watching: () => s.worker.watching(), texts: s.worker }, { host: '127.0.0.1', port: 0, network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 2, textsPerAddressHour: 3, textKey: null });
+  const http = new StatusServer({ health: s.health, subs: s.subs, log: s.log, now: s.c.now, watching: () => s.worker.watching(), texts: s.worker, proposal: () => null }, { host: '127.0.0.1', port: 0, proxy: 'loopback', network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 2, textsPerAddressHour: 3, textKey: null });
   const base = `http://127.0.0.1:${await http.start()}`;
   const ask = async (forwarded: string) => (await fetch(`${base}/subscribe`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': forwarded }, body: JSON.stringify({ dao: DAO }) })).status;
   assert.deepEqual([await ask('203.0.113.7'), await ask('203.0.113.7'), await ask('203.0.113.7')], [200, 200, 429]);
@@ -266,7 +269,7 @@ test('an IPv6 client is counted by its /64 network, and every written form of an
 
 test('requests from two addresses of one IPv6 /64 share one POST /subscribe limit', async () => {
   const s = await started();
-  const http = new StatusServer({ health: s.health, subs: s.subs, log: s.log, now: s.c.now, watching: () => s.worker.watching(), texts: s.worker }, { host: '127.0.0.1', port: 0, network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 2, textsPerAddressHour: 3, textKey: null });
+  const http = new StatusServer({ health: s.health, subs: s.subs, log: s.log, now: s.c.now, watching: () => s.worker.watching(), texts: s.worker, proposal: () => null }, { host: '127.0.0.1', port: 0, proxy: 'loopback', network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 2, textsPerAddressHour: 3, textKey: null });
   const base = `http://127.0.0.1:${await http.start()}`;
   const ask = async (forwarded: string) => (await fetch(`${base}/subscribe`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': forwarded }, body: JSON.stringify({ dao: DAO }) })).status;
   assert.deepEqual([await ask('2001:db8:1:2::1'), await ask('2001:db8:1:2:ffff::2'), await ask('2001:db8:1:2::3')], [200, 200, 429]);
@@ -278,7 +281,7 @@ test('requests from two addresses of one IPv6 /64 share one POST /subscribe limi
 
 test('six POST /subscribe requests read at once from one address get exactly the two tokens its limit allows', async () => {
   const s = await started();
-  const http = new StatusServer({ health: s.health, subs: s.subs, log: s.log, now: s.c.now, watching: () => s.worker.watching(), texts: s.worker }, { host: '127.0.0.1', port: 0, network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 2, textsPerAddressHour: 3, textKey: null });
+  const http = new StatusServer({ health: s.health, subs: s.subs, log: s.log, now: s.c.now, watching: () => s.worker.watching(), texts: s.worker, proposal: () => null }, { host: '127.0.0.1', port: 0, proxy: 'loopback', network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 2, textsPerAddressHour: 3, textKey: null });
   const port = await http.start();
   // Every header arrives before any body, so each request passes the first look at the count
   // before one of them is counted.
@@ -301,4 +304,94 @@ test('six POST /subscribe requests read at once from one address get exactly the
   assert.equal(events(s.lines(), 'rate_limited').filter((l) => l.route === '/subscribe').length, 4);
   await http.stop();
   await s.worker.stop();
+});
+
+test('behind a platform proxy every request is counted by the entry that proxy added, and only when the setting says so', () => {
+  assert.equal(clientAddress('100.64.0.3', '203.0.113.7', 'platform'), '203.0.113.7');
+  assert.equal(clientAddress('100.64.0.3', '10.9.9.9, 203.0.113.7', 'platform'), '203.0.113.7', 'only the last entry, the one the proxy added, counts');
+  assert.equal(clientAddress('100.64.0.3', ['198.51.100.1', '2001:db8:1:2::9'], 'platform'), '2001:db8:1:2::/64', 'an IPv6 client is still its /64');
+  assert.equal(clientAddress('100.64.0.3', undefined, 'platform'), '100.64.0.3', 'no header counts against the proxy itself');
+  assert.equal(clientAddress('100.64.0.3', '203.0.113.7, not-an-address', 'platform'), '100.64.0.3', 'an unreadable entry counts against the proxy itself');
+  assert.equal(clientAddress('100.64.0.3', '203.0.113.7', 'loopback'), '100.64.0.3', 'without the setting a peer cannot name another address');
+  assert.equal(clientAddress('100.64.0.3', '203.0.113.7'), '100.64.0.3', 'loopback is the default');
+  assert.equal(clientAddress(undefined, '203.0.113.7', 'platform'), 'unknown');
+});
+
+test('GET /proposal shows the verdict and transaction ids of a watched DAO, and passes on nothing that does not fit its shape', async () => {
+  const s = await started();
+  const hash = 'ab'.repeat(32);
+  const tx = (n: number) => `${n}`.repeat(44);
+  for (const [key, kind, proposal, txHash] of [
+    ['run:1', 'run', 3, tx(2)],
+    ['veto:1', 'veto', 3, tx(3)],
+    ['record:1', 'record', 3, tx(4)],
+    ['run:2', 'run', 4, tx(5)],
+  ] as const) {
+    s.store.addSpend({ idempotency_key: key, kind, network: NETWORK, dao: DAO, proposal_id: proposal, tx_hash: txHash, signed_b64: 'AA==', nonce: '1', reserved_yocto: '1' });
+  }
+  s.store.markSent('veto:1', 10);
+  s.store.markFinal('veto:1', 'ok', 1n, null);
+  assert.deepEqual(s.store.spendsFor(NETWORK, DAO, 3).map((r) => r.kind), ['run', 'veto', 'record'], "one proposal's transactions, oldest first");
+  assert.deepEqual(s.store.spendsFor(NETWORK, DAO, 9), []);
+
+  const row = { dao: DAO, proposal_id: 3, state: 'judged', verdict_hash: hash, risk: 'critical', floor: 'critical', findings: 'DESC_CONTRADICTS,UNKNOWN_VALUE', ai_status: 'unavailable', vetoable: 1, veto_state: 'cast', record_state: 'recorded' } as const;
+  const view = proposalView(NETWORK, row, s.store.spendsFor(NETWORK, DAO, 3));
+  assert.deepEqual(view, {
+    v: 1,
+    network: NETWORK,
+    dao: DAO,
+    proposal_id: 3,
+    state: 'judged',
+    verdict: { risk: 'critical', floor: 'critical', findings: ['DESC_CONTRADICTS', 'UNKNOWN_VALUE'], ai_status: 'unavailable', verdict_hash: hash, vetoable: true },
+    veto: 'cast',
+    record: 'recorded',
+    txs: [
+      { kind: 'run', tx: tx(2), state: 'signed', outcome: null },
+      { kind: 'veto', tx: tx(3), state: 'final', outcome: 'ok' },
+      { kind: 'record', tx: tx(4), state: 'signed', outcome: null },
+    ],
+  });
+
+  // A value that is not one of the worker's own words, hashes or ids is left out, never echoed.
+  const odd = proposalView(
+    NETWORK,
+    { ...row, state: '<script>' as never, findings: 'DESC_CONTRADICTS,<b>x</b>,lower_case', ai_status: 'proven!', veto_state: 'voted yes' as never },
+    [
+      { kind: 'veto', tx_hash: 'not base58: 0OIl', state: 'final', outcome: 'ok' },
+      { kind: 'bribe' as never, tx_hash: tx(6), state: 'final', outcome: 'ok' },
+      { kind: 'run', tx_hash: tx(7), state: 'final', outcome: 'maybe' as never },
+    ],
+  );
+  assert.deepEqual([odd.state, odd.veto, odd.record, odd.verdict?.findings, odd.verdict?.ai_status], [null, null, 'recorded', ['DESC_CONTRADICTS'], null]);
+  assert.deepEqual(odd.txs, [{ kind: 'run', tx: tx(7), state: 'final', outcome: null }]);
+  assert.equal(proposalView(NETWORK, { ...row, verdict_hash: 'zz' }, []).verdict, null, 'no verdict without a readable verdict hash');
+  assert.equal(proposalView(NETWORK, { ...row, risk: 'catastrophic' }, []).verdict, null);
+
+  const http = new StatusServer(
+    { health: s.health, subs: s.subs, log: s.log, now: s.c.now, watching: () => s.worker.watching(), texts: s.worker, proposal: (dao, id) => (dao === DAO && id === 3 ? view : null) },
+    { host: '127.0.0.1', port: 0, proxy: 'loopback', network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 3, textsPerAddressHour: 3, textKey: null },
+  );
+  const base = `http://127.0.0.1:${await http.start()}`;
+  try {
+    const get = async (query: string, method = 'GET') => {
+      const res = await fetch(`${base}/proposal${query}`, { method });
+      return { status: res.status, origin: res.headers.get('access-control-allow-origin'), body: (await res.json()) as Record<string, unknown> };
+    };
+    const found = await get(`?dao=${DAO}&id=3`);
+    assert.deepEqual([found.status, found.origin], [200, '*']);
+    assert.deepEqual(found.body, JSON.parse(JSON.stringify(view)));
+    const unseen = await get(`?dao=${DAO}&id=4`);
+    assert.deepEqual([unseen.status, unseen.body.error], [404, 'not_seen']);
+    const stranger = await get('?dao=someone-else.sputnik.testnet&id=3');
+    assert.deepEqual([stranger.status, stranger.body.error], [404, 'dao_not_watched'], 'a DAO the worker does not watch is never looked up');
+    const bad = ['', `?dao=${DAO}`, `?dao=${DAO}&id=`, `?dao=${DAO}&id=-1`, `?dao=${DAO}&id=3.5`, `?dao=${DAO}&id=0x3`, `?dao=${DAO}&id=${'9'.repeat(16)}`, `?dao=${DAO}&id=${'9'.repeat(17)}`, '?dao=UPPER.testnet&id=3', `?dao=${encodeURIComponent('a b')}&id=3`];
+    for (const query of bad) {
+      const r = await get(query);
+      assert.deepEqual([r.status, r.body.error], [400, 'bad_request'], query);
+    }
+    assert.equal((await get(`?dao=${DAO}&id=3`, 'POST')).status, 405);
+  } finally {
+    await http.stop();
+    await s.worker.stop();
+  }
 });

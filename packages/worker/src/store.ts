@@ -449,6 +449,11 @@ export class Store {
     return (this.db.prepare('SELECT COUNT(*) AS n FROM runs WHERE network = ? AND dao = ? AND day = ? AND substr(idempotency_key, 1, ?) = ?').get(network, dao, day, TEXT_RUN_PREFIX.length, TEXT_RUN_PREFIX) as { n: number }).n;
   }
 
+  /** Every transaction the worker signed for one proposal, oldest first. */
+  spendsFor(network: string, dao: string, id: number): SpendRow[] {
+    return this.db.prepare('SELECT * FROM spend WHERE network = ? AND dao = ? AND proposal_id = ? ORDER BY created_ms, rowid').all(network, dao, id) as SpendRow[];
+  }
+
   spend(key: string): SpendRow | undefined {
     return this.db.prepare('SELECT * FROM spend WHERE idempotency_key = ?').get(key) as SpendRow | undefined;
   }

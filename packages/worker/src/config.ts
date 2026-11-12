@@ -54,6 +54,12 @@ const schema = z
     KAAP_SITE_URL: https.optional(),
     KAAP_HTTP_HOST: z.union([z.ipv4(), z.ipv6()]).default('127.0.0.1'),
     KAAP_HTTP_PORT: count(1, 65_535).default(8_787),
+    // Who may say which address a request came from. `loopback`: only a proxy on this machine
+    // (HOSTING.md). `platform`: every connection arrives through the host platform's own proxy,
+    // as on Railway, so the address that proxy adds to X-Forwarded-For is the client. Set
+    // `platform` only where the port can be reached no other way, or any caller could name an
+    // address of its choosing and step around the per-address limits.
+    KAAP_HTTP_PROXY: z.enum(['loopback', 'platform']).default('loopback'),
     KAAP_ALERT_BATCH_MS: count(5_000, 3_600_000).default(60_000),
     KAAP_ALERT_CAP_PER_HOUR: count(1, 1_000).default(30),
     KAAP_LAG_ALERT_MS: count(3_000, 600_000).default(15_000),

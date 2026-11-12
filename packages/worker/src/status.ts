@@ -3,12 +3,16 @@
 //   POST /subscribe  {"dao": "<account id>"} gives a one-time Telegram token for a watched DAO.
 //   GET /text-key    the sealed program's text key for runs the worker signs, as stored.
 //   POST /texts      a member's text, sealed to that key, judged in one sealed run (C26).
+//   GET /proposal    ?dao=<account>&id=<n>: what the worker did with one proposal of a watched
+//                    DAO, as fixed words, hashes and transaction ids. All of it is on chain
+//                    already; this saves a reader the search for the transactions.
 //
 // /status is built only from signal names, levels, times and Kaap's fixed sentences, never from
 // a signal's fields, so no key, token, chat id or provider text can reach it. Token and text
 // requests are counted per client address, which a caller cannot choose (6e): the connecting
 // address, or for a request from the HTTPS proxy on the same machine, the one address that proxy
-// adds to X-Forwarded-For (HOSTING.md).
+// adds to X-Forwarded-For (HOSTING.md). On a host whose own proxy fronts every connection,
+// KAAP_HTTP_PROXY=platform says so, and that proxy's entry is used for every request.
 //
 // A text arrives as ciphertext only the sealed program can open, and the worker never holds it in
 // any other form. Neither the ciphertext nor the reply key is logged, stored or echoed: every
@@ -26,6 +30,7 @@ import { ACCOUNT_ID } from './config.ts';
 import { ALL, SAYS, levelOf, type Health, type Raised } from './health.ts';
 import type { SealedText } from './judge.ts';
 import type { Logger } from './log.ts';
+import type { JudgedRow, SpendRow } from './store.ts';
 import type { Subscriptions } from './subscriptions.ts';
 import type { TextOutcome } from './worker.ts';
 
@@ -110,6 +115,8 @@ export function textKeySigned(textKey: TextKey, acceptedKey: string): boolean {
 export interface StatusSettings {
   host: string;
   port: number;
+  /** `platform` when every connection comes through the host platform's proxy (KAAP_HTTP_PROXY). */
+  proxy: 'loopback' | 'platform';
   network: string;
   guard: string;
   botUsername: string;
@@ -126,6 +133,8 @@ export interface StatusDeps {
   now: () => number;
   watching: () => string[];
   texts: TextDesk;
+  /** What the store holds on one proposal of a watched DAO, or null when it never saw it. */
+  proposal: (dao: string, id: number) => ProposalView | null;
 }
 
 /** Where the HTTPS proxy on the same machine connects from. */
@@ -178,17 +187,71 @@ function countKey(address: string): string {
 /** What a request is counted against: `countKey` of one address. A request from loopback came
  *  through the HTTPS proxy on the same machine, which adds the address its client connected from
  *  as the last entry of X-Forwarded-For: that one entry is trusted, and anything a client wrote
- *  before it is not. Any other peer is counted as it connects, its header ignored. A missing or
+ *  before it is not. Any other peer is counted as it connects, its header ignored, unless `proxy`
+ *  is `platform`: then every peer is the platform's proxy and its entry is used. A missing or
  *  unreadable entry counts against the proxy itself, which only ever makes the limit stricter. An
  *  IPv6 /64 network is one client. Not covered: a client that holds many /64 networks or many
  *  IPv4 addresses gets a count for each; the per-DAO daily caps still bound what its texts can
  *  spend, and a token spends nothing on chain. */
-export function clientAddress(peer: string | undefined, forwardedFor: string | string[] | undefined): string {
+export function clientAddress(peer: string | undefined, forwardedFor: string | string[] | undefined, proxy: 'loopback' | 'platform' = 'loopback'): string {
   const direct = oneForm(peer ?? '');
   if (direct === null) return 'unknown';
-  if (!LOOPBACK.check(direct, isIP(direct) === 4 ? 'ipv4' : 'ipv6')) return countKey(direct);
+  if (proxy !== 'platform' && !LOOPBACK.check(direct, isIP(direct) === 4 ? 'ipv4' : 'ipv6')) return countKey(direct);
   const header = Array.isArray(forwardedFor) ? forwardedFor.join(',') : (forwardedFor ?? '');
   return countKey(oneForm(header.split(',').at(-1) ?? '') ?? direct);
+}
+
+const SEVERITIES: ReadonlySet<string> = new Set(['low', 'medium', 'high', 'critical', 'unknown']);
+const AI_STATUSES: ReadonlySet<string> = new Set(['verified', 'unverified', 'unavailable']);
+const JUDGED_STATES: ReadonlySet<string> = new Set(['queued', 'judging', 'judged', 'failed', 'capped', 'skipped']);
+const VETO_STATES: ReadonlySet<string> = new Set(['none', 'not_needed', 'sent', 'no_outcome', 'cast', 'refused', 'held', 'not_open', 'capped']);
+const RECORD_STATES: ReadonlySet<string> = new Set(['none', 'sent', 'no_outcome', 'recorded', 'refused', 'capped']);
+const SPEND_KINDS: ReadonlySet<string> = new Set(['run', 'veto', 'record']);
+const SPEND_STATES: ReadonlySet<string> = new Set(['signed', 'sent', 'final', 'rejected']);
+const FINDING_CODE = /^[A-Z_]{3,40}$/;
+const HASH_HEX = /^[0-9a-f]{64}$/;
+const TX_HASH = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+/** What GET /proposal answers. Every field is one of the worker's own fixed words, a hash, a
+ *  transaction id or a finding code. Nothing a proposal's author wrote is in it. */
+export interface ProposalView {
+  v: 1;
+  network: string;
+  dao: string;
+  proposal_id: number;
+  state: string | null;
+  verdict: { risk: string; floor: string; findings: string[]; ai_status: string | null; verdict_hash: string; vetoable: boolean } | null;
+  veto: string | null;
+  record: string | null;
+  txs: Array<{ kind: string; tx: string; state: string; outcome: 'ok' | 'failed' | null }>;
+}
+
+/** The stored row and its transactions as GET /proposal shows them. The rows are the worker's own
+ *  writes, and each value is still checked against its shape here before it leaves: one that
+ *  does not fit is left out, never passed on as it is. */
+export function proposalView(
+  network: string,
+  row: Pick<JudgedRow, 'dao' | 'proposal_id' | 'state' | 'verdict_hash' | 'risk' | 'floor' | 'findings' | 'ai_status' | 'vetoable' | 'veto_state' | 'record_state'>,
+  spends: ReadonlyArray<Pick<SpendRow, 'kind' | 'tx_hash' | 'state' | 'outcome'>>,
+): ProposalView {
+  const word = (allowed: ReadonlySet<string>, value: unknown): string | null => (typeof value === 'string' && allowed.has(value) ? value : null);
+  const risk = word(SEVERITIES, row.risk);
+  const floor = word(SEVERITIES, row.floor);
+  const verdict =
+    risk !== null && floor !== null && typeof row.verdict_hash === 'string' && HASH_HEX.test(row.verdict_hash)
+      ? {
+          risk,
+          floor,
+          findings: (row.findings ?? '').split(',').filter((code) => FINDING_CODE.test(code)),
+          ai_status: word(AI_STATUSES, row.ai_status),
+          verdict_hash: row.verdict_hash,
+          vetoable: row.vetoable === 1,
+        }
+      : null;
+  const txs = spends
+    .filter((s) => SPEND_KINDS.has(s.kind) && SPEND_STATES.has(s.state) && TX_HASH.test(s.tx_hash))
+    .map((s) => ({ kind: s.kind as string, tx: s.tx_hash, state: s.state as string, outcome: s.outcome === 'ok' || s.outcome === 'failed' ? s.outcome : null }));
+  return { v: 1, network, dao: row.dao, proposal_id: row.proposal_id, state: word(JUDGED_STATES, row.state), verdict, veto: word(VETO_STATES, row.veto_state), record: word(RECORD_STATES, row.record_state), txs };
 }
 
 const shown = (r: Raised) => ({ signal: r.signal, level: levelOf(r.signal), since: new Date(r.since).toISOString(), says: SAYS[r.signal] });
@@ -232,7 +295,7 @@ export class StatusServer {
       server.listen(this.#s.port, this.#s.host, () => {
         const address = server.address();
         const port = typeof address === 'object' && address ? address.port : this.#s.port;
-        this.#d.log.info('http_listening', { host: this.#s.host, port, routes: ['GET /status', 'POST /subscribe', 'GET /text-key', 'POST /texts'] });
+        this.#d.log.info('http_listening', { host: this.#s.host, port, routes: ['GET /status', 'POST /subscribe', 'GET /text-key', 'POST /texts', 'GET /proposal'] });
         resolve(port);
       });
     });
@@ -266,6 +329,10 @@ export class StatusServer {
       if (req.method !== 'POST') return this.#json(res, 405, { error: 'method_not_allowed' }, { allow: 'POST' });
       return this.#texts(req, res);
     }
+    if (path === '/proposal') {
+      if (req.method !== 'GET' && req.method !== 'HEAD') return this.#json(res, 405, { error: 'method_not_allowed' }, { allow: 'GET' });
+      return this.#proposal(req, res);
+    }
     return this.#json(res, 404, { error: 'not_found' });
   }
 
@@ -273,6 +340,23 @@ export class StatusServer {
   #textsLeft(address: string, now: number): number[] | null {
     const recent = (this.#textsAsked.get(address) ?? []).filter((t) => now - t < HOUR);
     return recent.length < this.#s.textsPerAddressHour ? recent : null;
+  }
+
+  /** GET /proposal: a read of two rows the worker wrote itself. It names only a watched DAO, so
+   *  it cannot be used to ask about anything else, and it sends nothing and spends nothing. */
+  #proposal(req: IncomingMessage, res: ServerResponse): void {
+    const url = req.url ?? '';
+    const at = url.indexOf('?');
+    const query = new URLSearchParams(at === -1 ? '' : url.slice(at + 1));
+    const dao = query.get('dao') ?? '';
+    const id = query.get('id') ?? '';
+    if (!ACCOUNT_ID.test(dao) || !/^\d{1,16}$/.test(id) || !Number.isSafeInteger(Number(id))) {
+      return this.#json(res, 400, { error: 'bad_request', expected: '?dao=<NEAR account id>&id=<proposal id>' });
+    }
+    if (!this.#d.watching().includes(dao)) return this.#json(res, 404, { error: 'dao_not_watched' });
+    const view = this.#d.proposal(dao, Number(id));
+    if (view === null) return this.#json(res, 404, { error: 'not_seen' });
+    return this.#json(res, 200, view, { 'access-control-allow-origin': '*' });
   }
 
   #tooManyTexts(res: ServerResponse, address: string, now: number): void {
@@ -285,7 +369,7 @@ export class StatusServer {
    *  is echoed. A text is counted against its address once its shape checks out, and the count is
    *  taken again then, since several requests from one address can be read at the same time. */
   async #texts(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const address = clientAddress(req.socket.remoteAddress, req.headers['x-forwarded-for']);
+    const address = clientAddress(req.socket.remoteAddress, req.headers['x-forwarded-for'], this.#s.proxy);
     if (!this.#textsLeft(address, this.#d.now())) return this.#tooManyTexts(res, address, this.#d.now());
     const raw = await readBody(req, MAX_TEXT_BODY);
     const body = raw === null ? null : parseTextBody(raw);
@@ -348,7 +432,7 @@ export class StatusServer {
   /** POST /subscribe. A request is counted against its address once its body checks out, and the
    *  count is taken again then, since several requests from one address can be read at once. */
   async #subscribe(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const address = clientAddress(req.socket.remoteAddress, req.headers['x-forwarded-for']);
+    const address = clientAddress(req.socket.remoteAddress, req.headers['x-forwarded-for'], this.#s.proxy);
     if (!this.#tokensLeft(address, this.#d.now())) return this.#tooManyTokens(res, address, this.#d.now());
     const raw = await readBody(req, MAX_BODY);
     if (raw === null) return this.#json(res, 413, { error: 'body_too_large' });

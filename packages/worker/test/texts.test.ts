@@ -113,8 +113,8 @@ async function started(opts: { runsPerDaoDay?: number; textRunsPerDaoDay?: numbe
   const textKey = textKeyFor(key);
   const subs = new Subscriptions(store, NETWORK, log);
   const http = new StatusServer(
-    { health, subs, log, now: () => T0, watching: () => worker.watching(), texts: worker },
-    { host: '127.0.0.1', port: 0, network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 10, textsPerAddressHour: opts.perHour ?? 100, textKey },
+    { health, subs, log, now: () => T0, watching: () => worker.watching(), texts: worker, proposal: () => null },
+    { host: '127.0.0.1', port: 0, proxy: 'loopback', network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 10, textsPerAddressHour: opts.perHour ?? 100, textKey },
   );
   const base = `http://127.0.0.1:${await http.start()}`;
 

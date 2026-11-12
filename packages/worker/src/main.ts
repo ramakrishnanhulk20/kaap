@@ -20,7 +20,7 @@ import { formatNear } from './near.ts';
 import { Reads } from './reads.ts';
 import { RejudgeWatch } from './rejudge.ts';
 import { RpcClient } from './rpc.ts';
-import { StatusServer, textKeySchema, textKeySigned, type TextKey } from './status.ts';
+import { proposalView, StatusServer, textKeySchema, textKeySigned, type TextKey } from './status.ts';
 import { Store } from './store.ts';
 import { Submitter } from './submit.ts';
 import { Bot, Subscriptions } from './subscriptions.ts';
@@ -111,10 +111,22 @@ async function main(): Promise<void> {
   );
   const textKey = storedTextKey(config.KAAP_NETWORK, log);
   const http = new StatusServer(
-    { health, subs, log, now, watching: () => worker!.watching(), texts: worker },
+    {
+      health,
+      subs,
+      log,
+      now,
+      watching: () => worker!.watching(),
+      texts: worker,
+      proposal: (dao, id) => {
+        const row = store.judged(config.KAAP_NETWORK, dao, id);
+        return row ? proposalView(config.KAAP_NETWORK, row, store.spendsFor(config.KAAP_NETWORK, dao, id)) : null;
+      },
+    },
     {
       host: config.KAAP_HTTP_HOST,
       port: config.KAAP_HTTP_PORT,
+      proxy: config.KAAP_HTTP_PROXY,
       network: config.KAAP_NETWORK,
       guard: config.KAAP_GUARD,
       botUsername: bot.username,
