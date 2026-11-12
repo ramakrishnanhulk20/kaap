@@ -2,7 +2,9 @@
 // kaap-core's own answer on every answer-key record once prices that come with no payment history
 // are left out, which is the one rule the door adds, `read_proposal` keeps the kind's exact text
 // and refuses a duplicate key, the scoreboards give today's numbers, the enrolment template is
-// generated from Sputnik's label list and arms the guard on the NEAR Business role setup,
+// generated from Sputnik's label list and arms the guard on the NEAR Business role setup, its
+// default drafts are the ones printed before strict mode and its strict drafts differ only in the
+// `enroll` arguments, `analyze` hands `guard_strict` to kaap-core and reads it absent as false,
 // `who_acts` names who files and approves on that setup, `eval_input` hands the sealed job's eval
 // mode the scoreboards' own input, and its trimmed form changes only the prices. It does not run
 // the wasm build (the CLI tests do), and it does not cover the hash, verdict or arming exports
@@ -10,7 +12,7 @@
 
 use std::path::{Path, PathBuf};
 
-use kaap_core::{analyze, Prices, ProposalInput};
+use kaap_core::{analyze, analyze_with_mode, Prices, ProposalInput};
 use kaap_core_wasm::{api, eval};
 use serde_json::{json, Value};
 
@@ -205,11 +207,110 @@ fn near_business(member: &str) -> Value {
     policy
 }
 
+/// JSON text with every object's keys in byte order, so two texts compare as the same JSON whether
+/// or not the build keeps serde_json's insertion order (a build that includes kaap-sealed does).
+fn sorted_keys(v: &Value) -> String {
+    match v {
+        Value::Object(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            format!("{{{}}}", keys.iter().map(|k| format!("{}:{}", Value::from(k.as_str()), sorted_keys(&map[*k]))).collect::<Vec<_>>().join(","))
+        }
+        Value::Array(items) => format!("[{}]", items.iter().map(sorted_keys).collect::<Vec<_>>().join(",")),
+        other => other.to_string(),
+    }
+}
+
+#[test]
+fn the_default_drafts_are_the_ones_printed_before_strict_mode() {
+    // fixtures/enrolment-drafts-default.json is what `enrolment_drafts` printed for this guard on
+    // 12 Nov 2026, before strict mode existed, in a build that writes keys in order, as the wasm
+    // package does. Where this build does too, the bytes must be equal as well.
+    let guard = "kaap-guard-1029061211.testnet";
+    let before = std::fs::read_to_string(repo().join("packages/core-wasm/tests/fixtures/enrolment-drafts-default.json")).unwrap();
+    let now = api::enrolment_drafts(guard, false).unwrap();
+    let parse = |text: &str| -> Value { serde_json::from_str(text).unwrap() };
+    assert_eq!(sorted_keys(&parse(&now)), sorted_keys(&parse(&before)));
+    if serde_json::to_string(&json!({ "b": 1, "a": 2 })).unwrap() == r#"{"a":2,"b":1}"# {
+        assert_eq!(now, before, "byte for byte");
+    }
+}
+
+#[test]
+fn the_strict_drafts_differ_from_the_default_only_in_the_enroll_arguments() {
+    use base64::Engine as _;
+    let guard = "kaap-guard-1029061211.testnet";
+    let default: Value = serde_json::from_str(&api::enrolment_drafts(guard, false).unwrap()).unwrap();
+    let mut strict: Value = serde_json::from_str(&api::enrolment_drafts(guard, true).unwrap()).unwrap();
+    let args = &mut strict["drafts"][1]["kind"]["FunctionCall"]["actions"][0]["args"];
+    let bytes = base64::engine::general_purpose::STANDARD.decode(args.as_str().unwrap()).unwrap();
+    assert_eq!(bytes, br#"{"veto_unreadable":true}"#);
+    *args = json!("e30=");
+    assert_eq!(sorted_keys(&strict), sorted_keys(&default), "nothing else differs");
+    assert!(api::enrolment_drafts("Not An Account", true).is_err());
+}
+
+/// The first answer-key record whose analysis is HASH_UNVERIFIED alone, as the door's input.
+fn hash_only_input() -> (Value, ProposalInput) {
+    let record = records()
+        .into_iter()
+        .find(|r| {
+            r.get("supplied_text").is_none_or(Value::is_null)
+                && r["label"]["findings"].as_array().is_some_and(|f| f.len() == 1 && f[0]["code"] == "HASH_UNVERIFIED")
+        })
+        .unwrap();
+    let kind = serde_json::to_string(&record["kind"]).unwrap();
+    let proposal_id = record["proposal_id"].as_u64().unwrap_or_else(|| record["id"].as_str().unwrap().rsplit(':').next().unwrap().parse().unwrap());
+    let door = json!({
+        "network": record["network"], "dao": record["dao"], "proposal_id": proposal_id,
+        "description": record["description"], "kind_json": kind,
+    });
+    let direct = ProposalInput {
+        network: serde_json::from_value(record["network"].clone()).unwrap(),
+        dao: record["dao"].as_str().unwrap().into(),
+        proposal_id,
+        description: record["description"].as_str().unwrap().into(),
+        kind_json: kind.into_bytes(),
+        policy_before: None,
+        history: None,
+        prices: Prices::default(),
+        dao_version: None,
+        supplied_text: None,
+        guard_account: None,
+        config_before: None,
+        block_timestamp_ns: None,
+    };
+    (door, direct)
+}
+
+#[test]
+fn analyze_passes_guard_strict_through_and_reads_absent_as_false() {
+    let (door, direct) = hash_only_input();
+    let through = |strict: Option<Value>| -> Value {
+        let mut input = door.clone();
+        if let Some(s) = strict {
+            input["guard_strict"] = s;
+        }
+        serde_json::from_str::<Value>(&api::analyze(&input.to_string()).unwrap()).unwrap()["analysis"].clone()
+    };
+    let default = serde_json::to_value(analyze_with_mode(&direct, false)).unwrap();
+    let strict = serde_json::to_value(analyze_with_mode(&direct, true)).unwrap();
+    assert_eq!(default["findings"], json!([{ "code": "HASH_UNVERIFIED", "severity": "unknown" }]));
+    assert_eq!((&default["veto_allowed"], &strict["veto_allowed"]), (&json!(false), &json!(true)));
+    assert_eq!(through(None), default, "absent means false");
+    assert_eq!(through(Some(Value::Null)), default, "null means false");
+    assert_eq!(through(Some(json!(false))), default);
+    assert_eq!(through(Some(json!(true))), strict);
+    let mut wrong = door.clone();
+    wrong["guard_strict"] = json!("yes");
+    assert!(api::analyze(&wrong.to_string()).is_err(), "a mode that is not true or false is refused");
+}
+
 #[test]
 fn the_enrolment_template_covers_every_sputnik_label_and_arms_the_guard() {
     use kaap_core::policy::sputnik::LABELS;
     let guard = "kaap-guard-1029061211.testnet";
-    let t: Value = serde_json::from_str(&api::enrolment_drafts(guard).unwrap()).unwrap();
+    let t: Value = serde_json::from_str(&api::enrolment_drafts(guard, false).unwrap()).unwrap();
     let labels: Vec<&str> = t["labels"].as_array().unwrap().iter().map(|l| l.as_str().unwrap()).collect();
     assert_eq!(t["left_out"], json!([api::OWN_REMOVAL]));
     assert_eq!(labels.len() + 1, LABELS.len(), "every label but the guard's own removal");
@@ -217,7 +318,7 @@ fn the_enrolment_template_covers_every_sputnik_label_and_arms_the_guard() {
     let role = &t["drafts"][0]["kind"]["ChangePolicyAddOrUpdateRole"]["role"];
     assert_eq!(role["kind"], json!({ "Group": [guard] }), "the role is added with the guard already in it");
     assert_eq!(t["drafts"][1]["kind"]["FunctionCall"]["actions"][0]["method_name"], "enroll");
-    assert!(api::enrolment_drafts("Not An Account").is_err());
+    assert!(api::enrolment_drafts("Not An Account", false).is_err());
 
     let mut policy = near_business("owner.testnet");
     policy["roles"].as_array_mut().unwrap().push(role.clone());

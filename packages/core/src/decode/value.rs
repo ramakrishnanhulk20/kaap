@@ -1,6 +1,7 @@
 //! Effects and findings for the Transfer kind and for FunctionCall kinds: payments, token and
-//! intents calls, wrapping, staking, storage deposits, DeFi, bulk payments and Kaap's own
-//! enrolment call (guide sections 3 and 4; rulings 2, 3, 4, 10, 14, 15, 16, 17, 21 and 27).
+//! intents calls, wrapping, staking, storage deposits, DeFi, bulk payments, Kaap's own
+//! enrolment call, and a call that turns the guard's strict mode off (guide sections 3 and 4;
+//! rulings 2, 3, 4, 10, 14, 15, 16, 17, 21 and 27; C17).
 //! FunctionCall actions to `v1.signer` method `sign` belong to `hash::check`, and this module
 //! emits nothing for them, their attached NEAR included. Every other kind is `policy::decode`'s.
 //!
@@ -175,6 +176,9 @@ struct Sheet {
     unreadable: bool,
     attached_deposit: bool,
     args_not_json: bool,
+    /// An action asks the treasury's own guard to turn strict mode off, or with arguments that
+    /// do not say on (`weakens_strict_mode`).
+    guard_weakened: bool,
 }
 
 impl Sheet {
@@ -190,6 +194,9 @@ impl Sheet {
         }
         if self.attached_deposit {
             codes.push(FindingCode::AttachedDeposit);
+        }
+        if self.guard_weakened {
+            codes.push(FindingCode::GuardWeakened);
         }
         // Every key change this module decodes is on the DAO's own intents account: a direct
         // call by the DAO, or an unsigned intent the DAO executes as itself.
@@ -343,6 +350,9 @@ fn decode_action(receiver: &str, action: &Action, input: &ProposalInput, sheet: 
         [] => Parsed::Json(Value::Object(Map::new())),
         bytes => json::parse(bytes),
     };
+    if weakens_strict_mode(receiver, method, &args, input) {
+        sheet.guard_weakened = true;
+    }
     let read = match &args {
         Parsed::Json(value) => known_effects(receiver, method, value, &action.deposit, input),
         Parsed::NotJson | Parsed::DuplicateKey => Err(Refusal::Unreadable),
@@ -375,6 +385,20 @@ fn decode_action(receiver: &str, action: &Action, input: &ProposalInput, sheet: 
         decoded.push(effect, Some(Move::new(NATIVE, &action.deposit, Some(receiver))));
     }
     sheet.decoded.extend(decoded);
+}
+
+/// True for a call to the treasury's own guard (`ProposalInput::guard_account`) on its strict-mode
+/// method, `enrolment::MODE_METHOD`, unless the arguments are exactly `{"on":true}`. Turning
+/// strict mode off lets an unreadable hash through the guard again, so it weakens the guard like
+/// a change to its role (C17), and so does any other argument text, since one the guard reads
+/// as off, or one with a second reading, must not pass as harmless (fail closed). The call itself
+/// stays an unknown call. Not covered: a guard the caller does not name, as for `guard_enrol`.
+fn weakens_strict_mode(receiver: &str, method: &str, args: &Parsed, input: &ProposalInput) -> bool {
+    if method != enrolment::MODE_METHOD || input.guard_account.as_deref() != Some(receiver) {
+        return false;
+    }
+    let turns_on = matches!(args, Parsed::Json(Value::Object(fields)) if fields.len() == 1 && fields.get("on") == Some(&Value::Bool(true)));
+    !turns_on
 }
 
 /// The known effect of `method` on `receiver`, or why there is none. NEP-145 `storage_deposit`

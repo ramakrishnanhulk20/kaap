@@ -20,7 +20,7 @@ use kaap_core::policy::GUARD_ROLE;
 use kaap_core::receipt::{receivers_hash as hash_receivers, DECODER_VERSION};
 use kaap_core::{
     enrolment,
-    analyze as analyze_input, canonical_kind as canon_kind, canonical_policy as canon_policy, describe,
+    analyze_with_mode, canonical_kind as canon_kind, canonical_policy as canon_policy, describe,
     hash::{nep413_hash as nep413, nep461_hash as nep461},
     kind_hash as hash_kind, policy_hash as hash_policy, verdict_hash as hash_verdict, AiStatus, FindingCode, History,
     Network, Prices, ProposalInput, Severity, SuppliedText, TextStandard, Verdict,
@@ -65,6 +65,10 @@ struct AnalyzeInput {
     /// Nanoseconds since 1970 as a decimal string.
     #[serde(default)]
     block_timestamp_ns: Option<String>,
+    /// The treasury's `veto_unreadable` setting on Kaap's guard (C8). Absent or null means false,
+    /// the default mode.
+    #[serde(default)]
+    guard_strict: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -79,12 +83,14 @@ struct TextInput {
     quotes: Vec<String>,
 }
 
-/// Runs `kaap_core::analyze` and returns `{analysis, kind_label, description}`, where
+/// Runs `kaap_core::analyze_with_mode` and returns `{analysis, kind_label, description}`, where
 /// `description` holds the reasons the description check gave (`describe::outcome`) so a reader
 /// can see why it agreed or contradicted. Prices given with no history are left out, so every
 /// move of value keeps UNKNOWN_VALUE (high): a price alone would clear that finding while
 /// NEW_RECIPIENT and LARGE_AMOUNT, which need the history, are skipped, and a payment of any size
-/// to a stranger would read low. Errors on an input that does not read as the shape above, a
+/// to a stranger would read low. `guard_strict` only changes the veto fields: with it, a request
+/// whose signed hash could not be read is one the guard rejects. Errors on an input that does not
+/// read as the shape above, a
 /// policy kaap-core cannot canonicalise, a nonce that is not 32 bytes of base64, or a time that is
 /// not a whole number.
 pub fn analyze(input_json: &str) -> Result<String, Error> {
@@ -112,6 +118,7 @@ pub fn analyze(input_json: &str) -> Result<String, Error> {
         Some(text) => Some(text.parse::<u64>().map_err(|_| Error("block_timestamp_ns is not a whole number"))?),
     };
     let prices = if input.history.is_some() { input.prices } else { Prices::default() };
+    let guard_strict = input.guard_strict.unwrap_or(false);
     let input = ProposalInput {
         network: input.network,
         dao: input.dao,
@@ -127,7 +134,7 @@ pub fn analyze(input_json: &str) -> Result<String, Error> {
         config_before: input.config_before,
         block_timestamp_ns,
     };
-    let analysis = analyze_input(&input);
+    let analysis = analyze_with_mode(&input, guard_strict);
     let outcome = describe::outcome(&input, &analysis.effects);
     to_json(&json!({
         "analysis": analysis,
@@ -316,10 +323,12 @@ pub use kaap_core::enrolment::OWN_REMOVAL;
 /// Kaap's enrolment template (`kaap_core::enrolment`, C30) for the guard contract `guard`: the two
 /// proposal kinds a DAO files, with their titles and descriptions. The first adds
 /// `enrolment::role`, the guard's reject-only role on every label but `OWN_REMOVAL`; the second
-/// calls `enroll` on the guard with no arguments and the template's deposit and gas. Both come
-/// from the same items `analyze` reads Kaap's own enrolment back from, so the drafts always read
-/// as what they are. Errors when `guard` is not a valid account id.
-pub fn enrolment_drafts(guard: &str) -> Result<String, Error> {
+/// calls `enroll` on the guard with `enrolment::args(strict)` and the template's deposit and gas:
+/// no arguments by default, and the strict-mode choice when `strict` is true, which is the only
+/// thing that differs between the two sets of drafts. Both come from the same items `analyze`
+/// reads Kaap's own enrolment back from, so the drafts always read as what they are. Errors when
+/// `guard` is not a valid account id.
+pub fn enrolment_drafts(guard: &str, strict: bool) -> Result<String, Error> {
     if !is_account_id(guard) {
         return Err(Error("the guard is not a valid account id"));
     }
@@ -333,6 +342,7 @@ pub fn enrolment_drafts(guard: &str) -> Result<String, Error> {
         ),
         "kind": { "ChangePolicyAddOrUpdateRole": { "role": enrolment::role(guard) } },
     });
+    let args = base64::engine::general_purpose::STANDARD.encode(enrolment::args(strict).to_string());
     let enrol = json!({
         "title": "enrol the DAO in Kaap's guard",
         "kind_label": "call",
@@ -341,7 +351,7 @@ pub fn enrolment_drafts(guard: &str) -> Result<String, Error> {
              what its entry costs and refunds the rest."
         ),
         "kind": { "FunctionCall": { "receiver_id": guard, "actions": [{
-            "method_name": enrolment::METHOD, "args": "e30=",
+            "method_name": enrolment::METHOD, "args": args,
             "deposit": enrolment::DEPOSIT_YOCTO.to_string(), "gas": enrolment::GAS.to_string(),
         }] } },
     });
@@ -476,7 +486,7 @@ mod tests {
     fn the_printed_drafts_read_back_as_what_they_are() {
         let state = deployment("testnet.json");
         let (dao, guard) = (state["dao"]["account_id"].as_str().unwrap(), state["guard"]["account_id"].as_str().unwrap());
-        let template: Value = serde_json::from_str(&enrolment_drafts(guard).unwrap()).unwrap();
+        let template: Value = serde_json::from_str(&enrolment_drafts(guard, false).unwrap()).unwrap();
         let read = |draft: &Value| -> Value {
             let input = json!({
                 "network": "testnet",

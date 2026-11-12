@@ -23,7 +23,7 @@ pub use types::*;
 pub use verdict::{verdict_bytes, verdict_hash};
 
 /// Kaap's enrolment template (C30): the two proposals a DAO files to arm Kaap's guard. The first
-/// adds the role `role` returns; the second calls the guard's `METHOD` with no arguments,
+/// adds the role `role` returns; the second calls the guard's `METHOD` with `args`,
 /// `DEPOSIT_YOCTO` and `GAS`. core-wasm builds its drafts from these items and `analyze` reads
 /// Kaap's own enrolment back from them, so what Kaap asks a DAO to file and how Kaap reads it can
 /// never drift apart.
@@ -48,6 +48,23 @@ pub mod enrolment {
 
     /// 10 Tgas, of which `enroll` burns 1.88 (packages/contracts/GAS.md).
     pub const GAS: u64 = 10_000_000_000_000;
+
+    /// The `enroll` argument that chooses strict mode (C8): the guard then also rejects a request
+    /// whose signed hash Kaap could not read.
+    pub const STRICT_FIELD: &str = "veto_unreadable";
+
+    /// The guard's method that turns an enrolled DAO's strict mode on or off, with `{"on": bool}`.
+    pub const MODE_METHOD: &str = "set_veto_unreadable";
+
+    /// The `enroll` call's arguments: `{"veto_unreadable":true}` for strict mode, else `{}`, so the
+    /// default enrolment is the call the guard took before strict mode existed.
+    pub fn args(strict: bool) -> Value {
+        if strict {
+            json!({ STRICT_FIELD: true })
+        } else {
+            json!({})
+        }
+    }
 
     /// Every Sputnik label but `OWN_REMOVAL`, in `LABELS` order.
     pub fn labels() -> Vec<&'static str> {
@@ -75,8 +92,18 @@ pub mod enrolment {
 /// all of those effects, then `floor::finish`. When none of the three returns anything for the
 /// kind, `fallback_code` adds one high finding first, so no kind ever comes out empty and low
 /// (C2). Pure: same input, same `Analysis`, on every host; malformed `kind_json` gives a high
-/// finding, never a panic (standard 4).
+/// finding, never a panic (standard 4). The veto fields are those of a treasury in the default
+/// mode; `analyze_with_mode` gives them for one in strict mode.
 pub fn analyze(input: &ProposalInput) -> Analysis {
+    analyze_with_mode(input, false)
+}
+
+/// `analyze` for a treasury whose guard setting is known. `guard_strict` is the DAO's
+/// `veto_unreadable` setting on Kaap's guard (C8): when true, a proposal whose findings include
+/// HASH_UNVERIFIED is also `must_veto` and `veto_allowed` (`floor::finish_with_mode`). Effects,
+/// findings, floor and description check never depend on it, so the verdict the sealed job signs
+/// is the same either way and the guard applies the setting itself.
+pub fn analyze_with_mode(input: &ProposalInput, guard_strict: bool) -> Analysis {
     let (mut effects, mut codes) = decode::value::decode(input);
     for (more_effects, more_codes) in [policy::decode(input), hash::check(input)] {
         effects.extend(more_effects);
@@ -88,7 +115,7 @@ pub fn analyze(input: &ProposalInput) -> Analysis {
     }
     let (desc, desc_codes) = describe::check(input, &effects);
     codes.extend(desc_codes);
-    floor::finish(effects, codes, desc, label)
+    floor::finish_with_mode(effects, codes, desc, label, guard_strict)
 }
 
 /// The labels of Sputnik's seven policy kinds, whose effect depends on the policy before.

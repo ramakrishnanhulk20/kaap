@@ -78,9 +78,10 @@ mod bindings {
         api::who_acts(policy_json, label).map_err(thrown)
     }
 
+    /// `strict` left out reads as false, the default mode.
     #[wasm_bindgen(js_name = enrolmentDrafts)]
-    pub fn enrolment_drafts(guard: &str) -> Result<String, JsError> {
-        api::enrolment_drafts(guard).map_err(thrown)
+    pub fn enrolment_drafts(guard: &str, strict: Option<bool>) -> Result<String, JsError> {
+        api::enrolment_drafts(guard, strict.unwrap_or(false)).map_err(thrown)
     }
 
     #[wasm_bindgen(js_name = decoderVersion)]
