@@ -1,12 +1,12 @@
 //! One run of the job, in order: check the input, settle the payment, open a sealed text if there
 //! is one, read both providers at one block, on mainnet read prices and payment history, decode,
-//! refuse a sealed text that matches no payload, ask the model, assemble, sign, print. Every way out
-//! that is not a signed verdict prints a fixed reason and no signature. An eval run takes the
-//! proposal from its input instead, reads only the final block for its clock, and prints its
-//! scores unsigned.
+//! refuse a sealed text that verified none of the proposal's payloads, ask the model, assemble,
+//! sign, print. Every way out that is not a signed verdict prints a fixed reason and no signature.
+//! An eval run takes the proposal from its input instead, reads only the final block for its
+//! clock, and prints its scores unsigned.
 
 use kaap_core::history::history_before;
-use kaap_core::{analyze, verdict_hash, AiStatus, Analysis, FindingCode, Network, Verdict};
+use kaap_core::{analyze, verdict_hash, AiStatus, Analysis, Effect, FindingCode, Network, TextSource, Verdict};
 
 use crate::ai::{consult, consult_with_budget, AiOutcome, Audience, Check, THINKING_TOKEN_BUDGET};
 use crate::attest::evidence::key_for;
@@ -68,8 +68,8 @@ pub struct RunEnv<'a> {
 ///
 /// `env` is what OutLayer set for the run and `ai_key` the `NEAR_AI_API_KEY` secret. A judge run
 /// and an eval run pass `gate` right after their input is parsed, so Kaap's worker runs either free
-/// and anyone else pays; asking for the text key is free. `connect` is called only for an input
-/// that passed every check and a payment that was accepted, with the network and the read
+/// on chain and every other run pays; asking for the text key is free. `connect` is called only for
+/// an input that passed every check and a payment that was accepted, with the network and the read
 /// deadline, so a refused input or payment makes no outside call at all.
 pub fn run(raw: &[u8], env: RunEnv<'_>, ai_key: Option<&str>, connect: impl FnOnce(Network, Deadline) -> Connections) -> String {
     let RunEnv { network, pay } = env;
@@ -173,8 +173,9 @@ impl EvidenceSink for NoEvidence {
 }
 
 /// Judges an input for a payer `gate` has already settled. A `Payer::Paid` run is the same check
-/// and writes no public evidence. A sealed text that hashes to no payload ends either run with
-/// `TEXT_DOES_NOT_MATCH` after the reads, before the model is asked.
+/// and writes no public evidence. A sealed text that verified none of the proposal's own `sign`
+/// payloads, a proposal with none included, ends either run with `TEXT_DOES_NOT_MATCH` after the
+/// reads, before the model is asked.
 pub fn judge_run(input: JobInput, ai_key: Option<&str>, payer: Payer, connect: impl FnOnce(Network, Deadline) -> Connections) -> String {
     let read_deadline = Deadline::after_ms(READ_BUDGET_MS);
     let job_deadline = Deadline::after_ms(JOB_BUDGET_MS);
@@ -198,7 +199,7 @@ pub fn judge_run(input: JobInput, ai_key: Option<&str>, payer: Payer, connect: i
     let audience = if text.is_some() { Audience::Members } else { Audience::Public };
     let past = read_past(http.as_mut(), host.as_mut(), https.as_mut(), &input, &read, read_deadline);
     let (proposal, analysis) = judge(&input, text, &read, past);
-    if sealed_text_matches_no_payload(&input, &analysis) {
+    if input.text.is_some() && !supplied_text_verified_a_payload(&analysis) {
         return refused(TEXT_DOES_NOT_MATCH);
     }
     let facts = user_message(&proposal, &analysis);
@@ -216,12 +217,20 @@ pub fn judge_run(input: JobInput, ai_key: Option<&str>, payer: Payer, connect: i
     sign_sealed(&verdict, &explanation, &public_key, signer.as_mut()).unwrap_or_else(failed)
 }
 
-/// True when the run carried a sealed text and kaap-core found that it hashes to no `sign` payload
-/// (HASH_MISMATCH). Through this channel the sender is anyone with the job's public key, so a
-/// mismatch proves nothing about the proposal, and a critical finding the guard could veto on must
-/// never rest on it (C8). kaap-core keeps the finding for a text the treasury app itself shows.
-fn sealed_text_matches_no_payload(input: &JobInput, analysis: &Analysis) -> bool {
-    input.text.is_some() && analysis.findings.iter().any(|f| f.code == FindingCode::HashMismatch)
+/// True when kaap-core found that the run's sealed text hashes to one of this proposal's own `sign`
+/// payloads: a `sign_request` effect whose text came from the supplied text (`TextSource::Planted`),
+/// and no HASH_MISMATCH, which kaap-core gives every such effect when the text matched none.
+///
+/// Through this channel the sender is anyone with the job's public key, so a text that verified no
+/// payload proves nothing about the proposal, and nothing kaap-core reads from it may reach a
+/// verdict (C6, C8). That covers a proposal with no `sign` payload at all and one whose text is
+/// already in its description, where kaap-core reports no mismatch but still reads the supplied
+/// text: words in it addressed to a model are PROMPT_INJECTION, a critical finding the guard would
+/// veto on. A text that matched but whose deadline has passed still counts here, because it is the
+/// proposal's own text; kaap-core reads it as one that can never execute.
+fn supplied_text_verified_a_payload(analysis: &Analysis) -> bool {
+    let from_the_text = analysis.effects.iter().any(|e| matches!(e, Effect::SignRequest { text_source: Some(TextSource::Planted), .. }));
+    from_the_text && !analysis.findings.iter().any(|f| f.code == FindingCode::HashMismatch)
 }
 
 /// The prices and payment history this run judges with, both or neither. Testnet reads neither: its
@@ -269,14 +278,17 @@ pub struct Unsigned<'a> {
 /// evidence could not be published is sealed again as Unverified (`EvidenceNotPublished`), so
 /// every Verified verdict has evidence a stranger can read; for any other verdict a failed
 /// publication changes nothing. On a run with a sealed text the explanation is encrypted to the
-/// member's reply key each time it is sealed, with fresh randomness from `texts`.
+/// member's reply key each time it is sealed, with fresh randomness from `texts`, and the record
+/// is `Evidence::confidential`: it shows the checks on the model's hardware and nothing the prompt
+/// or the answer decides (C12, C26).
 pub fn seal_and_publish(
     parts: &Unsigned<'_>,
     outcome: AiOutcome,
-    mut record: Evidence,
+    record: Evidence,
     sink: &mut dyn EvidenceSink,
     texts: &mut dyn TextKeys,
 ) -> Result<(Verdict, String), &'static str> {
+    let mut record = if parts.input.text.is_some() { record.confidential() } else { record };
     let (verdict, explanation) = seal_with(parts, &outcome, &mut record, texts)?;
     let published = sink.publish(&key_for(&verdict_hash(&verdict)), &record.to_bytes());
     if published || verdict.ai_status != AiStatus::Verified {

@@ -16,8 +16,9 @@ use crate::texts::is_usable_key;
 /// of it for the text, where Trezu's longest, a 25-recipient bulk header, is a few kilobytes.
 pub const MAX_INPUT_BYTES: usize = 32 * 1024;
 
-/// One hour. A verdict lives only as long as the guard needs to cast its vote after the read.
-pub const MAX_EXPIRES_IN_MS: u64 = 3_600_000;
+/// 15 minutes; Kaap's worker asks for 10. A verdict is public from the moment it is printed, before
+/// the guard uses it, so its expiry is the only bound on how stale a verdict anyone may present is.
+pub const MAX_EXPIRES_IN_MS: u64 = 900_000;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -140,7 +141,7 @@ impl InputError {
             InputError::RunNetworkUnset => "the run's network is not set",
             InputError::BadGuard => "guard is not a valid NEAR account id",
             InputError::BadDao => "dao is not a valid NEAR account id",
-            InputError::ExpiryOutOfRange => "expires_in_ms must be 1 to 3600000",
+            InputError::ExpiryOutOfRange => "expires_in_ms must be 1 to 900000",
             InputError::TestFlagOffTestnet => "test_corrupt_https is allowed on testnet only",
             InputError::UnknownOp => "op must be pubkey or eval",
             InputError::TextFieldsNotPaired => "text_ciphertext and reply_key come together or not at all",

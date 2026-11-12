@@ -8,7 +8,9 @@
 //! ids, hashes, quotes, claims and check results only, each one this crate produced or checked
 //! first: hex it decoded, numbers, fixed words and Intel's advisory ids in their known shape
 //! (standard 3). It never holds text from the request or the answer, only their hashes, because
-//! the evidence is public and a later prompt may carry a text only a DAO's members may read.
+//! the evidence is public. A run that carried a sealed text keeps not even those
+//! (`Evidence::confidential`): a hash of a prompt built from a member's text would let anyone
+//! confirm a guess at the text.
 
 use base64::Engine as _;
 use serde::Serialize;
@@ -64,11 +66,45 @@ pub struct Evidence {
     /// above are the ones that decided the status.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verify_link: Option<String>,
+    /// Set by `confidential`, and absent from every other record, so a public run's record keeps
+    /// its bytes.
+    #[serde(skip_serializing_if = "is_false")]
+    pub confidential: bool,
+}
+
+fn is_false(set: &bool) -> bool {
+    !*set
 }
 
 impl Evidence {
     pub fn new() -> Evidence {
         Evidence { v: 1, ..Evidence::default() }
+    }
+
+    /// This record as a run that carried a sealed text publishes it, with `confidential` set.
+    ///
+    /// Such a prompt is fixed text plus the facts kaap-core decoded from the text, so whatever is
+    /// computed from the prompt or the answer would let anyone rebuild the prompt for a guessed
+    /// payee and amount and compare: the request and response hashes, the signed text and its
+    /// signature, the verify link, the answer's size, its finish reason and the token counts. All
+    /// of them go. Kept: the version, the verdict hash, the AI status and its reason, the model
+    /// id, the nonce, the clock, and the model and gateway checks, which the preflight finished
+    /// before the prompt was sent. Every other field takes its default, so a field added later is
+    /// left out of a confidential record until it is named here.
+    pub fn confidential(self) -> Evidence {
+        Evidence {
+            v: self.v,
+            verdict_hash: self.verdict_hash,
+            ai_status: self.ai_status,
+            reason: self.reason,
+            model_id: self.model_id,
+            nonce: self.nonce,
+            clock_unix: self.clock_unix,
+            model_quotes: self.model_quotes,
+            gateway: self.gateway,
+            confidential: true,
+            ..Evidence::default()
+        }
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {

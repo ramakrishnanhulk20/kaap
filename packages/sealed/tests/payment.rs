@@ -14,6 +14,7 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
 use common::world::{nonce, quote_binding_the_model, World, KEY, NOW};
 use common::*;
+use kaap_core::hash::nep413_hash;
 use kaap_core::{AiStatus, Network};
 use kaap_sealed::fixture::FixtureHttp;
 use kaap_sealed::input::{parse_request, Request};
@@ -155,6 +156,20 @@ fn a_chain_run_from_anyone_else_pays_with_its_attached_amount() {
 }
 
 #[test]
+fn the_worker_pays_on_an_execution_type_the_code_does_not_know() {
+    for kind in [None, Some(""), Some("near"), Some("NEAR "), Some("WASI")] {
+        let worker = |amount: &str| PayEnv { execution_type: kind.map(Into::into), ..chain(Some(TESTNET_WORKER), Some(amount)) };
+        let (out, reach) = checked(worker("0"));
+        assert_eq!(out, refusal(0), "{kind:?}");
+        reach.assert_untouched();
+
+        let (out, reach) = checked(worker("10000"));
+        open(&out);
+        assert!(reach.store.records.borrow().is_empty(), "a paid run writes no evidence: {kind:?}");
+    }
+}
+
+#[test]
 fn no_input_field_can_name_the_worker_or_the_amount() {
     for extra in [r#","sender":"kaap""#, r#","worker":"stranger.testnet""#, r#","attached_usd":"10000""#, r#","usd_payment":"10000""#] {
         let reach = Reach::default();
@@ -183,13 +198,15 @@ fn a_paid_run_may_carry_a_sealed_text() {
     let reply = PublicKey::from(&StaticSecret::from([42; 32])).to_bytes();
     let text = json!({ "message": "a text", "nonce": STANDARD.encode([9; 32]), "recipient": "intents.near", "standard": "nep413" }).to_string();
     let job_key = text_public_key(&mut TestTexts::new()).unwrap();
-    let aad = text_context(Network::Testnet, DAO, ID, &reply);
+    let aad = text_context(Network::Testnet, SIGN_DAO, SIGN_ID, &reply);
     let ciphertext = ecies_encrypt(&mut TestTexts::keyed(7), &job_key, text.as_bytes(), &aad).unwrap();
     let extra = format!(r#","text_ciphertext":"{}","reply_key":"{}""#, STANDARD.encode(ciphertext), hex::encode(reply));
+    // A text counts only on a proposal whose own payload it hashes to (`tests/texts.rs`).
+    let fx = sign_fixture(&nep413_hash("a text", &[9; 32], "intents.near", None));
 
     let reach = Reach::default();
-    let raw = input_for(DAO, ID, &extra);
-    let out = run(raw.as_bytes(), on_testnet(https(Some("10000"))), None, reach.connect(&fixture("transfer-ft.json"), no_ai()));
+    let raw = input_for(SIGN_DAO, SIGN_ID, &extra);
+    let out = run(raw.as_bytes(), on_testnet(https(Some("10000"))), None, reach.connect(&fx, no_ai()));
     let (_, json) = open(&out);
     assert!(json["explanation"].as_str().unwrap().starts_with(SEALED_PREFIX), "{out}");
     assert!(reach.store.records.borrow().is_empty());

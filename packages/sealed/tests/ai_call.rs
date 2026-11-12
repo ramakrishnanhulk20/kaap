@@ -92,7 +92,6 @@ fn failures_and_refused_answers_are_unavailable() {
         w
     };
     let cases: Vec<(World, Refusal)> = vec![
-        (failed(Err(HttpFail::Timeout)), Refusal::Deadline),
         (failed(Err(HttpFail::TooLarge)), Refusal::CallFailed),
         (failed(Ok(Response::new(401, br#"{"error":{"message":"bad key"}}"#.to_vec()))), Refusal::CallFailed),
         (failed(Ok(Response::new(200, b"<html>gateway error</html>".to_vec()))), Refusal::ResponseUnreadable),
@@ -103,6 +102,32 @@ fn failures_and_refused_answers_are_unavailable() {
     ];
     for (mut world, want) in cases {
         assert_eq!(ask(&mut world, Some(KEY), Some("FACTS"), soon()), AiOutcome::Unavailable(want));
+    }
+}
+
+#[test]
+fn a_chat_call_that_timed_out_has_its_own_word_and_a_refused_one_stays_call_failed() {
+    let word = |answer: Result<Response, HttpFail>| {
+        let mut world = World::new();
+        world.overrides.push(("/v1/chat/completions", answer));
+        match ask(&mut world, Some(KEY), Some("FACTS"), soon()) {
+            AiOutcome::Unavailable(why) => why.code(),
+            other => panic!("{other:?}"),
+        }
+    };
+    let timed_out = word(Err(HttpFail::Timeout));
+    assert_eq!(timed_out, "call_timed_out");
+    assert!(timed_out.len() <= 22 && timed_out.bytes().all(|b| b.is_ascii_lowercase() || b == b'_'));
+    let refused = [
+        Err(HttpFail::Send),
+        Err(HttpFail::Read),
+        Err(HttpFail::TooLarge),
+        Ok(Response::new(401, br#"{"error":{"message":"bad key"}}"#.to_vec())),
+        Ok(Response::new(503, Vec::new())),
+    ];
+    for answer in refused {
+        let shown = format!("{answer:?}");
+        assert_eq!(word(answer), "call_failed", "{shown}");
     }
 }
 

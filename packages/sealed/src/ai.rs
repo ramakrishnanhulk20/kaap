@@ -76,6 +76,9 @@ pub enum Refusal {
     ModelNotListed,
     ModelNotSealed,
     CallFailed,
+    /// The chat call's own wait ran out before the answer was whole, which tells a slow model from
+    /// a call that failed.
+    CallTimedOut,
     ResponseUnreadable,
     NotOneFinishedChoice,
     AnswerTooLong,
@@ -94,7 +97,7 @@ pub enum Refusal {
 }
 
 impl Refusal {
-    pub const ALL: [Refusal; 18] = [
+    pub const ALL: [Refusal; 19] = [
         Refusal::AiKeyMissing,
         Refusal::KeyNotAHeaderValue,
         Refusal::FactsTooLarge,
@@ -102,6 +105,7 @@ impl Refusal {
         Refusal::ModelNotListed,
         Refusal::ModelNotSealed,
         Refusal::CallFailed,
+        Refusal::CallTimedOut,
         Refusal::ResponseUnreadable,
         Refusal::NotOneFinishedChoice,
         Refusal::AnswerTooLong,
@@ -126,6 +130,7 @@ impl Refusal {
             ModelNotListed => "AI unavailable: the pinned model is not in the NEAR AI model list.",
             ModelNotSealed => "AI unavailable: the model list no longer marks the pinned model as sealed with attestation.",
             CallFailed => "AI unavailable: the request to NEAR AI failed.",
+            CallTimedOut => "AI unavailable: the request to NEAR AI timed out.",
             ResponseUnreadable => "AI unavailable: the NEAR AI response could not be read.",
             NotOneFinishedChoice => "AI unavailable: the answer was cut off or not a single choice.",
             AnswerTooLong => "AI unavailable: the answer was too long.",
@@ -151,6 +156,7 @@ impl Refusal {
             ModelNotListed => "model_not_listed",
             ModelNotSealed => "model_not_sealed",
             CallFailed => "call_failed",
+            CallTimedOut => "call_timed_out",
             ResponseUnreadable => "response_unreadable",
             NotOneFinishedChoice => "not_one_finished_choice",
             AnswerTooLong => "answer_too_long",
@@ -667,7 +673,7 @@ fn ask(
             keep_headers: &["content-type"],
             limits: CHAT_LIMITS.within(deadline),
         })
-        .map_err(late)?;
+        .map_err(|fail| if fail == HttpFail::Timeout { Refusal::CallTimedOut } else { Refusal::CallFailed })?;
     if chat.status != 200 {
         return Err(Refusal::CallFailed);
     }

@@ -36,11 +36,17 @@ and no input can fill. There are two ways to pay:
   message `{"action":"deposit_balance"}`): `request_execution` with `attached_usd` set to `"10000"`
   in its `params`. The program reads it as `ATTACHED_USD`.
 
-A run is free only on chain, and only when `NEAR_USER_ACCOUNT_ID` is exactly the account named in
-`packages/sealed/testnet.json`, compiled in at build time. That variable is the transaction's
-signer and the account the run's keys are bound to. `NEAR_SENDER_ID` is not used, because an Agent
-Connect binding can rewrite it. An HTTPS call always pays, even with the worker's own payment key.
-Kaap has no mainnet worker yet, so every mainnet run pays until one is named.
+Anyone can pay either way. The HTTPS door needs an OutLayer payment key of the payer's own and any
+HTTPS client, such as curl. The chain door needs a funded testnet account of the payer's own and
+signs as it, with near-cli-rs or any NEAR wallet. Both spend the payer's money, never Kaap's.
+
+A run is free only on chain, with `OUTLAYER_EXECUTION_TYPE` exactly `NEAR`, and only when
+`NEAR_USER_ACCOUNT_ID` is exactly the account named in `packages/sealed/testnet.json`, compiled in
+at build time. That variable is the transaction's signer and the account the run's keys are bound
+to. `NEAR_SENDER_ID` is not used, because an Agent Connect binding can rewrite it. An HTTPS call
+always pays, even with the worker's own payment key, and so does a run of any execution type this
+program does not know, which pays with `ATTACHED_USD`: a way in that OutLayer adds later never runs
+free. Kaap has no mainnet worker yet, so every mainnet run pays until one is named.
 
 An amount that is missing, empty, not a plain decimal integer, or below the price gets a normal
 answer before anything is read or signed:
@@ -75,11 +81,13 @@ until it is removed.
 ## What the job reads
 
 Input on stdin, nothing else accepted: `{"v":1,"network":"testnet"|"mainnet","guard":<account>,
-"dao":<account>,"proposal_id":<u64>,"expires_in_ms":1 to 3600000}`. The network must be the one
-OutLayer says the run is on. On testnet only, `"test_corrupt_https":true` corrupts one read on
-purpose, to show the job holds. A member adds `text_ciphertext` and `reply_key` together to hand in
-the text behind a hash (see "The sealed text channel"). The other input is `{"v":1,"op":"pubkey"}`,
-which prints the job's text key.
+"dao":<account>,"proposal_id":<u64>,"expires_in_ms":1 to 900000}`. The longest expiry is 15
+minutes, and the worker asks for 10: a verdict is public from the moment it is printed, before the
+guard uses it, so its expiry is the only bound on how stale a verdict anyone can present is. The
+network must be the one OutLayer says the run is on. On testnet only, `"test_corrupt_https":true`
+corrupts one read on purpose, to show the job holds. A member adds `text_ciphertext` and
+`reply_key` together to hand in the text behind a hash (see "The sealed text channel"). The other
+input is `{"v":1,"op":"pubkey"}`, which prints the job's text key.
 
 At one final block, from two providers that must agree (OutLayer's own RPC through the host
 `view`, and dRPC over HTTPS):
@@ -152,7 +160,11 @@ in substance, and each refusal has its own code:
   pass the same plain-text check as before (`explanation_not_plain_text`, which the cleaning now
   leaves unreachable).
 
-Anything else, or no key, makes the AI unavailable and the plain-code verdict stands.
+Anything else, or no key, makes the AI unavailable and the plain-code verdict stands. A chat call
+that the job's own timer for the whole call cuts off is `call_timed_out`, so a slow model reads
+apart from a broken call. Any other failed chat call is `call_failed`: a refused connection, an
+answer over its size cap, a status other than 200, and today also the first-byte and between-bytes
+timeouts the worker applies to the connection, which reach the job as a failed send or read.
 
 The key reaches a run only when the caller names its secret row in `request_execution`
 (`secrets_ref: {"profile": "near-ai", "account_id": <the row's owner>}`; the worker sends it when
@@ -243,6 +255,8 @@ project's code can write there; anyone can read it:
 GET https://testnet-api.outlayer.ai/public/storage/get?project=<project id>&key=ai-evidence:<hash>
 ```
 
+Any HTTPS client reads it, such as curl or a browser, with no key and no account.
+
 It holds ids, hashes, quotes, claims and check results only: the nonce, the clock, each model's
 Intel TDX quote in hex with its TCB level, advisories, signing key and NRAS result, its registers
 (MRTD, MRCONFIGID, RTMR0 to RTMR3) and software record (the launcher hash, the system image hash
@@ -256,9 +270,19 @@ covers, and a link to the same answer on NEAR AI's own verifier,
 `https://cloud.near.ai/verify?model=z-ai%2Fglm-5.3-flash#receipt=<base64url JSON>`. NEAR AI's page
 re-checks the signature and its signer against fresh evidence, but it does not compare a
 deployment with an allowlist, so this job's checks are the ones that decide "verified". No text
-from the prompt or the answer is ever stored, only their hashes: the evidence is public, and a
-prompt may one day carry a text only a DAO's members may read. A verified verdict whose evidence
-could not be stored is signed as unverified instead.
+from the prompt or the answer is ever stored, only their hashes, because the evidence is public. A
+verified verdict whose evidence could not be stored is signed as unverified instead.
+
+A run that carried a member's sealed text stores less, and says so with `"confidential":true`. Its
+prompt is the fixed system prompt plus the facts kaap-core decoded from the text, so anything
+computed from the prompt or the answer would let an outsider rebuild the prompt for a guessed payee
+and amount and compare hashes. That record keeps the version, the verdict hash, the AI status and
+its reason, the model id, the nonce, the clock, and every model and gateway check above, all
+settled before the prompt was sent. It leaves out the request and response hashes, the signed text
+and its signature, the verify link, and the completion's id, finish reason, length and token
+counts. The verdict hash covers the encrypted explanation, made with fresh randomness, so it cannot
+be rebuilt from a guess either. A stranger can still check the model's hardware from such a
+record, but not the signature on its answer. A run with no text stores exactly what it did before.
 
 ## The sealed text channel
 
@@ -284,8 +308,13 @@ worker and its database only ever hold ciphertext.
    open, for any reason, gives `{"reason":"text_ciphertext could not be opened","status":"refused",
    "v":1}` before any outside call. Because the reply key is bound in, nobody who holds a member's
    ciphertext, the worker included, can resubmit it with their own key to read the answer. A text
-   that does not match the proposal's hash is refused, never judged, because anyone can send one:
-   `{"reason":"text_does_not_match","status":"refused","v":1}`, with no signature.
+   counts only when it hashes to one of this proposal's own `sign` payloads. Any other text is
+   refused, never judged, because anyone can send one: a text that matches no payload, a text sent
+   to a proposal with no `sign` payload at all (a transfer, a policy change), and a text sent to a
+   `sign` whose text the description already carries. Each gets
+   `{"reason":"text_does_not_match","status":"refused","v":1}` after the reads, with no signature,
+   no AI request and no evidence. Without this, words in a stranger's text written as an
+   instruction to the model would be PROMPT_INJECTION, a critical finding the guard vetoes on.
 5. The verdict's `explanation` field is `sealed:<base64>`: the explanation encrypted to `reply_key`
    in the same layout, under `kaap-explanation-v1\n<network>\n<dao>\n<proposal id>\n<reply key
    hex>`. `explanation_hash` is the hash of that printed field, as for any verdict, so no hash of
@@ -304,10 +333,22 @@ On a failed check nothing about the text is sent, the AI status is Unavailable w
 clock, so it never asks the model about a text.
 
 The finding codes, the risk and the verdict's other fields stay public, as on any verdict, because
-the guard reads them. So does the evidence record, which holds hashes and sizes, never text.
+the guard reads them. The evidence record is public too, cut down so that nothing in it is a hash,
+size or count of the prompt or the answer (see "Where the evidence is").
 
 `node scripts/text-roundtrip.mjs` runs the whole trip and three attacks on testnet, and
 `--local <wasm>` runs it against the local build.
+
+- On testnet it signs as the demo member, which files one proposal, and as the worker, which sends
+  six runs, about 0.01 testnet NEAR in all. So only the holder of the keys of
+  `kaap-member-1029064001.testnet` and `kaap-worker-1029053612.testnet` can run it; in another
+  clone it stops with "no key". It needs Node 24 and near-api-js 7.4.0 at the repo root.
+- `--local` is for anyone and signs nothing: test keys, no account, no network. It needs Node 24,
+  the local build (`bash packages/sealed/build.sh local <file>`, with the tools under "Build it
+  yourself") and wasmtime 28.0.1 at `~/kaap-tools/wasmtime28` or at the path in `KAAP_WASMTIME`.
+- Anyone can check the last testnet trip from the chain: `RUNS.md` lists its six transactions,
+  and `run-report.mjs` with `check-output.mjs` reads each one back (see "How a stranger checks the
+  key belongs to this project and caller").
 
 ## Eval mode
 
@@ -321,7 +362,8 @@ whole, so the AI can be measured on the answer key without a DAO on chain:
 `network` is the run's own network. The proposal is read by serde into `ProposalInput`, the one
 reader, and must be exactly what serde writes for what it read, so an unknown or missing field at
 any depth is refused (`input is not a kaap-core ProposalInput as serde writes it`). The whole input
-is at most 32 KiB. The payment gate is the judge run's: the worker is free and anyone else pays.
+is at most 32 KiB. The payment gate is the judge run's: the worker is free on chain and every other
+run pays.
 
 The wrapper may also carry `"thinking_budget"`, a whole number from 64 to 1024, which replaces the
 model's usual reasoning budget of 512 tokens for that one run (`max_tokens` stays the budget plus
@@ -360,6 +402,16 @@ analysis names (`evalInputTrimmed`), and only when kaap-core's whole analysis is
 tables; its row says `prices_trimmed: true`. Without `--dry-run` the script runs them on testnet once
 each, with spending caps, and `--report` scores the results. `--thinking-budget <n>` sends that
 budget with every record, and every row records `thinking_budget` and `answer_cleaned`.
+
+- `--dry-run` and `--report` are for anyone, need Node 24 and read only; neither sends anything.
+  `--dry-run` also needs `packages/core-wasm/pkg`, built by `bash packages/core-wasm/build.sh`
+  (the Rust toolchain in `rust-toolchain.toml` and wasm-bindgen-cli 0.2.129). `--report` needs
+  the rows a live run wrote (`--out`).
+- The live run signs as the worker `packages/sealed/testnet.json` names, so only the holder of
+  `kaap-worker-1029053612.testnet`'s key can run it. It also needs near-api-js 7.4.0 at the repo
+  root, that same wasm, and `KAAP_AI_SECRETS_ACCOUNT` in `.env`, the owner of the NEAR AI secret.
+  Every row records its transaction, which anyone can read back with `run-report.mjs` (see "How a
+  stranger checks the key belongs to this project and caller").
 
 ## Outside calls
 
@@ -434,6 +486,19 @@ printed it:
 4. Check a signature: `node packages/sealed/tools/check-output.mjs <output.json>` verifies it with
    Node's crypto and decodes the verdict.
 
+Anyone can do all four, with curl, Node 24 and, for step 3, the tools under "Build it yourself".
+None of them signs or needs an account. For step 4, read a run's return value back from the chain:
+
+```
+node packages/sealed/tools/run-report.mjs <tx> kaap-worker-1029053612.testnet summary.json output.json https://archival-rpc.testnet.fastnear.com
+node packages/sealed/tools/check-output.mjs output.json --key ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN
+```
+
+`run-report.mjs` writes what the job returned to `output.json`, and the blocks, time and cost to
+`summary.json`. The last argument names an archival RPC, for runs a regular node no longer holds.
+A refused run, such as one of the round trip's attacks, checks as `no verdict` with its reason and
+no signature.
+
 The attestation names the project by owner and name, while the key belongs to its uuid: a project
 deleted and created again under the same name would have other keys. The uuid above is the one
 these keys belong to.
@@ -455,6 +520,18 @@ The build needs nothing else. If `wasm-tools` is at `~/kaap-tools/wasm-tools`, o
 `KAAP_WASM_TOOLS`, the script also prints the program's manifest section count and its imports;
 without it those two lines are skipped and the hash is the same.
 
+Anyone can run it, and it signs nothing. Apart from wasm-tools, the script calls `sha256sum` and
+`strings` (binutils), and cargo fetches the locked crates on the first build. To compare the hash
+with what is served and what OutLayer runs, with curl and near-cli-rs 0.30.1, both read only:
+
+```
+curl -sL <the raw URL in the table at the top> | sha256sum
+near contract call-function as-read-only outlayer.testnet get_project json-args '{"project_id":"kaap-worker-1029053612.testnet/kaap-sealed"}' network-config testnet now
+```
+
+The first prints the served file's sha256, and the second's `active_version` is the hash OutLayer
+runs.
+
 ## Run it
 
 - Tests, natively, on recorded answers: `cargo test -p kaap-sealed`.
@@ -466,6 +543,17 @@ without it those two lines are skipped and the hash is the same.
   `bash scripts/publish-sealed-testnet.sh https://<host>/<file>.wasm`. It checks the served sha256
   before registering anything.
 - Run on testnet: `bash scripts/run-sealed-testnet.sh <dao> <proposal id> [--runs N] [--corrupt]`.
+
+| Command | Who can run it | Needs | Reads or signs |
+| --- | --- | --- | --- |
+| `cargo test -p kaap-sealed` | anyone | the toolchain under "Build it yourself" | signs nothing: recorded answers |
+| `run-local.sh` | anyone | the build's tools, wasmtime 28.0.1, jq, Node 24 | signs nothing on chain: the public test key, no network |
+| `publish-sealed-testnet.sh` | only the holder of `kaap-worker-1029053612.testnet`'s key, the worker `packages/sealed/testnet.json` names; in another clone it stops with "no key" | the build's tools, near-cli-rs 0.30.1, jq, curl, sha256sum, and python3 for `fastfs` | signs: the FastFS upload, then `create_project` or `add_version` |
+| `run-sealed-testnet.sh` | only the holder of the same key; without it near-cli-rs signs nothing and no run is sent | near-cli-rs 0.30.1, jq, Node 24 | signs one `request_execution` per run, 0.02 NEAR attached and the rest refunded |
+
+What the last two prove can be checked without the key: the served file and `get_project` under
+"Build it yourself", and each recorded run with `run-report.mjs` and `check-output.mjs` under "How
+a stranger checks the key belongs to this project and caller".
 
 ## What this does not defend against
 
@@ -482,8 +570,8 @@ bugs: a flaw inside a correctly measured machine, NEAR AI's or OutLayer's or thi
 passes every check here.
 
 The AI opinion is only as available as NEAR AI's chat service. When that call fails or is slow,
-the verdict is still signed on the plain rules, with `ai_status` `unavailable` and the reason in
-the evidence record. The guard then vetoes what the plain rules alone call critical; a proposal
+the verdict is still signed on the plain rules, with `ai_status` `unavailable` and the reason,
+`call_failed` or `call_timed_out`, in the evidence record. The guard then vetoes what the plain rules alone call critical; a proposal
 that needed the model's opinion to reach critical is not vetoed while the service is down. On
 11 November 2026 NEAR AI's status page reported a major outage of its chat API, and three runs in
 a row on testnet ended that way.

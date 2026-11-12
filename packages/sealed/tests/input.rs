@@ -56,11 +56,11 @@ fn numbers_out_of_range_are_refused() {
         assert_eq!(parse(&GOOD.replace(from, to)), Err(InputError::NotTheInputShape), "{to}");
     }
     assert_eq!(parse(&GOOD.replace("\"v\":1", "\"v\":2")), Err(InputError::UnknownVersion));
-    for bad in ["0", "3600001"] {
+    for bad in ["0", "900001", "3600000"] {
         let text = GOOD.replace("600000", bad);
         assert_eq!(parse(&text), Err(InputError::ExpiryOutOfRange), "{bad}");
     }
-    assert_eq!(parse(&GOOD.replace("600000", "3600000")).unwrap().expires_in_ms, 3_600_000);
+    assert_eq!(parse(&GOOD.replace("600000", "900000")).unwrap().expires_in_ms, 900_000, "15 minutes is the longest");
     assert_eq!(parse(&GOOD.replace("\"proposal_id\":7", "\"proposal_id\":18446744073709551615")).unwrap().proposal_id, u64::MAX);
 }
 

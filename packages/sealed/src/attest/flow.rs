@@ -135,7 +135,8 @@ pub fn check_software(
 /// received (`signature::check`); and its signer is exactly one of `verified`
 /// (`SignerNotAttested`). Runs even when the preflight failed (`verified` is `None`), so the
 /// evidence still carries the signature and NEAR AI's own verify link; the preflight's reason then
-/// wins. `aliases` are the canonical model's other names in NEAR AI's catalog.
+/// wins. A run with a sealed text publishes neither, as both are functions of its prompt
+/// (`Evidence::confidential`). `aliases` are the canonical model's other names in NEAR AI's catalog.
 #[allow(clippy::too_many_arguments)]
 pub fn bind_answer(
     http: &mut dyn Http,

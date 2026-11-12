@@ -1,5 +1,5 @@
-//! The price of a check. Kaap's own worker runs free; every other run pays, on whichever of
-//! OutLayer's two doors it came through. Every fact here comes from a variable OutLayer sets, which
+//! The price of a check. Kaap's own worker runs free on chain; every other run pays, on whichever
+//! of OutLayer's two doors it came through. Every fact here comes from a variable OutLayer sets, which
 //! neither the input nor a caller's secret can fill (worker `SYSTEM_ENV_VARS`).
 //!
 //! OutLayer prices only the projects it curates, so this is the one place an underpayment can be
@@ -129,15 +129,18 @@ fn micro_usd(text: &str) -> Option<u128> {
 
 /// Settles who pays for this run.
 ///
-/// An `HTTPS` run pays with `usd_payment`, whoever owns the key. Any other run whose sender is
-/// exactly `worker` is `Payer::Kaap`. Any other run pays with `attached_usd`. `worker` is empty on
-/// a network with no worker yet, and an empty sender does not match it.
+/// A run is `Payer::Kaap` only when it came on chain, `execution_type` exactly `NEAR`, and its
+/// sender is exactly `worker`. Every other run pays: an `HTTPS` run with `usd_payment`, whoever
+/// owns the key, and any other with `attached_usd`, an execution type this code does not know
+/// included, so a door OutLayer adds later can never run free. `worker` is empty on a network
+/// with no worker yet, and an empty sender does not match it.
 ///
 /// Refuses an amount that is missing, empty, not a plain decimal integer, or below
 /// `PRICE_MICRO_USD`. More than the price is accepted, because no change can be given over HTTPS.
 pub fn gate(env: &PayEnv, worker: &str) -> Result<Payer, Refusal> {
     let https = env.execution_type.as_deref() == Some("HTTPS");
-    if !https && !worker.is_empty() && env.sender.as_deref() == Some(worker) {
+    let on_chain = env.execution_type.as_deref() == Some("NEAR");
+    if on_chain && !worker.is_empty() && env.sender.as_deref() == Some(worker) {
         return Ok(Payer::Kaap);
     }
     let amount = if https { &env.usd_payment } else { &env.attached_usd };
@@ -233,12 +236,14 @@ mod tests {
     }
 
     #[test]
-    fn only_the_exact_type_is_the_https_door() {
-        for kind in [None, Some("NEAR"), Some("https"), Some("HTTPS "), Some("")] {
-            let run = |sender: &str, attached: &str| PayEnv { execution_type: kind.map(Into::into), usd_payment: Some("10000".into()), attached_usd: Some(attached.into()), sender: Some(sender.into()) };
-            assert_eq!(gate(&run(WORKER, "0"), WORKER), Ok(Payer::Kaap), "{kind:?}");
-            assert_eq!(gate(&run("payer.testnet", "0"), WORKER), below(0), "{kind:?}");
-            assert_eq!(gate(&run("payer.testnet", "10000"), WORKER), Ok(Payer::Paid), "{kind:?}");
+    fn only_the_exact_chain_type_is_free_and_only_the_exact_https_type_reads_its_amount() {
+        let run = |kind: Option<&str>, sender: &str, attached: &str| PayEnv { execution_type: kind.map(Into::into), usd_payment: Some("10000".into()), attached_usd: Some(attached.into()), sender: Some(sender.into()) };
+        assert_eq!(gate(&run(Some("NEAR"), WORKER, "0"), WORKER), Ok(Payer::Kaap));
+        for kind in [None, Some("https"), Some("HTTPS "), Some(""), Some("near"), Some("NEAR "), Some("WASI")] {
+            assert_eq!(gate(&run(kind, WORKER, "0"), WORKER), below(0), "the worker pays on a door this code does not know: {kind:?}");
+            assert_eq!(gate(&run(kind, WORKER, "10000"), WORKER), Ok(Payer::Paid), "{kind:?}");
+            assert_eq!(gate(&run(kind, "payer.testnet", "0"), WORKER), below(0), "{kind:?}");
+            assert_eq!(gate(&run(kind, "payer.testnet", "10000"), WORKER), Ok(Payer::Paid), "{kind:?}");
         }
     }
 

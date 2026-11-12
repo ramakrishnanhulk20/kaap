@@ -67,6 +67,31 @@ pub fn edit_view_text(fx: &mut Value, authority: &str, method: &str, edit: impl 
     });
 }
 
+/// The DAO and proposal of `function-call.json`, which `sign_fixture` keeps.
+pub const SIGN_DAO: &str = "r7thmvr8maey.sputnikv2.testnet";
+pub const SIGN_ID: u64 = 10;
+
+/// `function-call.json` with its proposal made a `sign` of `payload` on the MPC contract.
+pub fn sign_fixture(payload: &[u8; 32]) -> Value {
+    use base64::Engine as _;
+    const RECEIVER: &str = "townhall.r7thmvr8maey-council2.testnet";
+    const SIGNER: &str = "v1.signer-prod.testnet";
+    let args = serde_json::json!({ "request": { "path": SIGN_DAO, "payload_v2": { "Eddsa": hex::encode(payload) }, "domain_id": 1 } }).to_string();
+    let kind = serde_json::json!({ "FunctionCall": { "receiver_id": SIGNER, "actions": [
+        { "method_name": "sign", "args": base64::engine::general_purpose::STANDARD.encode(args), "deposit": "1", "gas": "250000000000000" }
+    ] } });
+    let mut fx = fixture("function-call.json");
+    for authority in [HTTPS, HOST] {
+        edit_view_text(&mut fx, authority, "get_proposal", |text| {
+            let mut proposal: Value = serde_json::from_str(&text).unwrap();
+            proposal["kind"] = kind.clone();
+            proposal.to_string()
+        });
+        exchange(&mut fx, authority, RECEIVER)["params"]["account_id"] = serde_json::json!(SIGNER);
+    }
+    fx
+}
+
 pub fn view_text(fx: &Value, authority: &str, method: &str) -> String {
     let mut fx = fx.clone();
     let e = exchange(&mut fx, authority, method);
