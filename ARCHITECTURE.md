@@ -1,12 +1,13 @@
 # Kaap architecture
 
-As built on 11 Nov 2026. Every statement here was checked against the code in `packages/` or read from NEAR testnet that day. Security rules cited as C1 to C31 are in `docs/security/threat-model.md`, section C.
+As built on 11 Nov 2026, with the status lines, the web app and the notes on the next guard version brought up to date on 12 Nov 2026. Every statement here was checked against the code in `packages/` or read from NEAR testnet. Security rules cited as C1 to C31 are in `docs/security/threat-model.md`, section C.
 
-- Contracts: live on NEAR testnet. `kaap-guard-1111072803.testnet` and `kaap-registry-1111072803.testnet`, deployed 11 Nov 2026, with no access keys.
-- Sealed program: live on NEAR testnet, as OutLayer project `kaap-worker-1029053612.testnet/kaap-sealed`, active build `d8453d6e...9083`.
+- Contracts: live on NEAR testnet. `kaap-guard-1111072803.testnet` and `kaap-registry-1111072803.testnet`, deployed 11 Nov 2026 from commit `413a74a`, with no access keys. Section 5 describes these two as they run on chain.
+- Next guard version: written and tested, not deployed. The code in `packages/contracts/guard` is one version ahead of the guard on chain. It adds a 24-hour wait on a change of the accepted key, a strict mode each DAO can choose, a 900 Tgas minimum and a size limit on `veto`. `packages/contracts/guard/README.md` and `packages/contracts/GAS.md` describe that version.
+- Sealed program: live on NEAR testnet, as OutLayer project `kaap-worker-1029053612.testnet/kaap-sealed`, active build `d8453d6e...9083` of 11 Nov 2026. The code in `packages/sealed` and `packages/core` has changed since that build, and a new build is not published yet.
 - Demo treasury: live on NEAR testnet. `kaap-dao-1111072928.testnet`, Sputnik DAO 3.2, enrolled in the guard, with no access keys.
 - Worker: built and tested, not hosted yet. It has no public address.
-- Web app: not built yet.
+- Web app: built, not hosted yet. `packages/web` holds the landing page, the check screen at `/check`, the docs at `/docs` and the route `/api/check`. It runs with `npm run dev` in that folder.
 
 ## In one paragraph
 Kaap's worker reads the proposal counter of every DAO enrolled in Kaap's guard contract, on two RPC providers, about once a second. For each new proposal it starts a run of Kaap's sealed program on OutLayer, inside Intel TDX hardware. The program reads the proposal, the policy and the code of every contract the proposal calls at one final block, from two providers that must agree, and works out the real effect with plain code (kaap-core). Then it asks a model on NEAR AI Cloud for a second opinion and checks that model's hardware attestation and signature itself. The AI can raise the risk and never lower it, and only an AI answer that passed every check can raise a verdict to critical. When the AI is unavailable, the verdict is still signed, on the plain-code rules alone. The program signs a compact verdict with a key bound to this program and its caller, and publishes what it checked in OutLayer public storage. The worker hands the verdict to the guard, which votes VoteReject only on a fresh critical verdict that carries a plain-code finding high or critical in its own right; the guard can cast no other vote. The worker then records the verdict in the registry and alerts members on Telegram. A member who holds the text behind a hash-only payment request can send it through an encrypted channel that only the sealed program can open. Anyone else can pay one cent for a check of their own; that verdict is signed with a key derived for the payer, so it cannot veto.
@@ -31,7 +32,7 @@ flowchart LR
     W["Worker<br/>(built, not hosted yet)"]
     DB[("SQLite store")]
     CLI["kaap CLI<br/>(no keys)"]
-    WEB["Web app and /docs<br/>(planned, not built)"]
+    WEB["Web app: /check, /docs, /api/check<br/>(built, not hosted yet)"]
   end
   TG["Telegram bot"]
   MEM["DAO members<br/>and their wallets"]
@@ -60,7 +61,7 @@ flowchart LR
   CLI -- "latest, accepted_key" --> REG
   CLI -- "accepted_key, is_enrolled, veto_result" --> GUARD
   CLI -- "attestations by transaction" --> OLAPI
-  WEB -. "planned reads: registry, DAO, guard, evidence" .-> REG
+  WEB -- "check: the views the CLI reads, 2 providers" --> DAO
 ```
 
 The only alert channel built is Telegram (`packages/worker/src/alerts.ts`). Members subscribe with a one-time token from `POST /subscribe` and the bot's `/start` command.
@@ -120,7 +121,7 @@ flowchart TB
   WORKER["packages/worker<br/>TypeScript, Node 24, near-api-js 7.4.0,<br/>better-sqlite3 13.0.3, zod 4.6.7"]
   CLI["packages/cli<br/>kaap (TypeScript, Node 24, zod 4.6.7)"]
   ATTACK["packages/attack<br/>attack suite (in progress)"]
-  WEB["packages/web<br/>planned, not built: web app and /docs"]
+  WEB["packages/web<br/>Next.js 16: landing page, /check, /docs,<br/>and /api/check, which runs the CLI's check"]
 
   VERDICT --> CORE
   VERDICT --> CONTRACTS
@@ -131,7 +132,8 @@ flowchart TB
   BRIDGE --> WORKER
   WASM --> CLI
   WASM --> ATTACK
-  WASM -. "planned" .-> WEB
+  WASM --> WEB
+  CLI -- "check, bundled into packages/web/engine" --> WEB
 ```
 
 An arrow points from a package to the one built on it. The contracts compile in only kaap-verdict, so work on the analysis in kaap-core never changes their wasm. kaap-core re-exports kaap-verdict, so the sealed program, the worker's bridge, the CLI and the attack suite compute verdict bytes and hashes with the same code the guard checks them with (C14, standard 2). The worker never ports a rule to TypeScript: it hashes, decodes verdicts and applies the veto rule through the bridge.
@@ -148,9 +150,9 @@ An arrow points from a package to the one built on it. The contracts compile in 
 | Worker | Watches each enrolled DAO's counter, starts sealed runs, checks each verdict, vetoes, records, alerts on Telegram, serves four HTTP routes, raises health signals (C18, C21, C22, C27) | one Node 24 process; built and tested, not hosted yet | the worker account's key in a file, the Telegram bot token, a SQLite store (DAOs, judgements, runs, spend, subscriptions, tokens, alerts) |
 | kaap-worker-bridge | kaap-core's hashes, verdict decoding and veto rule for the worker | plain wasm inside the worker | nothing |
 | kaap CLI | `check`, `verify`, `enroll`, `arming`, `seal-text`, `subscribe`, `eval`, `census`; reads only and sends no transaction (C31) | the reader's own machine, Node 24 | nothing; `seal-text` keeps one reply key in memory for its one request |
-| kaap-core-wasm | kaap-core for JavaScript, every rule exactly as the sealed program runs it (C14) | the CLI and the attack suite today; a browser can load the same build | nothing |
+| kaap-core-wasm | kaap-core for JavaScript, every rule exactly as the sealed program runs it (C14) | the CLI, the web app's `/api/check` and the attack suite; a browser can load the same build | nothing |
 | kaap-core-diff | Checks kaap-core's policy rules against the real Sputnik 3.2 binary | tests in a local sandbox | nothing |
-| Web app | Not built | | |
+| Web app | The landing page, the check screen, the docs and `/api/check`. The route runs the CLI's own `check` on the server, from a bundle in `packages/web/engine` that carries kaap-core-wasm, so the site reads a proposal exactly as the CLI does. It reads the chain and sends no transaction | one Next.js 16 app (`packages/web`); built, not hosted yet | no key and no database; `/api/check` keeps call counts and 20 seconds of answers in memory |
 
 ## 5. Contracts
 
@@ -235,7 +237,7 @@ The one thing the sealed program signs and the guard checks. Defined in `package
 
 How the signed bytes are made (`packages/verdict/src/verdict.rs`, `verdict_bytes`): the 16 ASCII bytes `kaap-verdict-v1\n`, then the borsh encoding of the struct. Borsh writes the fields in the order above: a u8 as one byte, a u64 as 8 bytes little-endian, a String as a 4-byte little-endian length and its UTF-8 bytes, a [u8; 32] as 32 raw bytes, an enum as one byte holding its variant index (the order listed), and the findings list as a 4-byte length and one byte per code. The domain prefix stops a signature over a verdict from passing as a signature over some other borsh value. `verdict_hash` is sha256 of those same bytes, and is the id the guard records so a verdict is used once. A pinned test (`packages/verdict/tests/pinned.rs`) fixes one example verdict at 262 bytes with hash `f5d4e788...e67ad9`; any change to the layout fails it.
 
-Each finding code has a fixed lowest severity (`packages/verdict/src/severity.rs`, `min_severity`): four are critical on their own (`HASH_MISMATCH`, `HASH_TEXT_DANGEROUS`, `POLICY_DUPLICATE_ROLE_NAMES`, `PROMPT_INJECTION`), fourteen are high, `HASH_UNVERIFIED` is unknown, four are medium and `EMPTY_DESCRIPTION` is low. `DESC_CONTRADICTS` is high in this table and rises to critical only in the analysis, beside an effect that moves value or changes control.
+Each finding code has a fixed lowest severity (`packages/verdict/src/severity.rs`, `min_severity`): in the build on chain four are critical on their own (`HASH_MISMATCH`, `HASH_TEXT_DANGEROUS`, `POLICY_DUPLICATE_ROLE_NAMES`, `PROMPT_INJECTION`), fourteen are high, `HASH_UNVERIFIED` is unknown, four are medium and `EMPTY_DESCRIPTION` is low. The code in this repo, one version ahead, rates `PROMPT_INJECTION` high, so words addressed to a model can never cause a veto on their own. `DESC_CONTRADICTS` is high in this table and rises to critical only in the analysis, beside an effect that moves value or changes control.
 
 ## 6. Interface for the frontend
 
@@ -309,7 +311,7 @@ A verdict's evidence record is at `GET https://testnet-api.outlayer.ai/public/st
 
 | Export | Rust function | Arguments | Returns |
 |---|---|---|---|
-| `analyze` | `analyze` | JSON `{network, dao, proposal_id, description, kind_json, policy_before_json?, history?, prices?, dao_version?, supplied_text?, guard_account?, config_before?, block_timestamp_ns?}` | JSON `{analysis: {effects, findings: [{code, severity}], risk_floor, description_check, must_veto, veto_allowed}, kind_label, description: {agreements, contradictions, injection}}` |
+| `analyze` | `analyze` | JSON `{network, dao, proposal_id, description, kind_json, policy_before_json?, history?, prices?, dao_version?, supplied_text?, guard_account?, guard_strict?, config_before?, block_timestamp_ns?}` | JSON `{analysis: {effects, findings: [{code, severity}], risk_floor, description_check, must_veto, veto_allowed}, kind_label, description: {agreements, contradictions, injection}}` |
 | `readProposal` | `read_proposal` | a `get_proposal` answer as text | JSON `{id, proposer, description, kind_json, status, submission_time}`, with `kind_json` the exact bytes |
 | `isAccountId` | `is_account_id` | text | bool, syntax only |
 | `canonicalKind` | `canonical_kind` | kind JSON text | canonical text |
@@ -321,12 +323,12 @@ A verdict's evidence record is at `GET https://testnet-api.outlayer.ai/public/st
 | `verdictHash` | `verdict_hash` | JSON verdict with the four 32-byte fields as lower-case hex | 64 hex, the guard's used-verdict id |
 | `guardArming` | `guard_arming` | policy JSON text, guard account | JSON `{rejects_alone, cannot_reject, extra_rights, others_who_reject_alone, approval_votes_needed, race_note}` (C16) |
 | `whoActs` | `who_acts` | policy JSON text, one of Sputnik's 17 labels | JSON `{add_proposal, vote_approve}`, each `{accounts: [{account, roles}], anyone, token_roles}` |
-| `enrolmentDrafts` | `enrolment_drafts` | guard account | JSON `{role_name, labels, left_out, drafts: [{title, kind_label, description, kind}]}` |
+| `enrolmentDrafts` | `enrolment_drafts` | guard account, and optionally whether to enrol in strict mode | JSON `{role_name, labels, left_out, drafts: [{title, kind_label, description, kind}]}` |
 | `decoderVersion` | `decoder_version` | none | `"0.1.0"` |
 | `receiversHash` | `receivers_hash` | JSON `[["<account>", "<code hash>"], ...]` | 64 hex, the verdict's `receivers_hash` |
 | `pricesFromTokens` | `prices_json`, over `prices_from_tokens` | 1Click's token list as text | JSON price table |
 
-Three more exports score the public answer key and are not for pages: `evalScoreboards`, `evalInput` and `evalInputTrimmed` (`packages/core-wasm/src/eval.rs`). The CLI loads this same build today; no page loads it yet.
+Three more exports score the public answer key and are not for pages: `evalScoreboards`, `evalInput` and `evalInputTrimmed` (`packages/core-wasm/src/eval.rs`). The CLI loads this build, and so does the web app's `/api/check`, on the server. No page loads it in the browser yet.
 
 ### (e) Writes
 
@@ -336,7 +338,7 @@ Kaap holds no key a page uses. Everything below is signed in the member's own wa
 - A sealed text, through Kaap's worker, needs no wallet signature. `kaap seal-text` checks the text key against the guard's `accepted_key`, checks that the text hashes to the proposal's payload, encrypts it and sends `POST /texts`; the worker signs and pays the run. Until the worker is hosted, this route has no address.
 - A check of one's own, paid one cent (10,000 micro-USD), takes one of two calls. On chain, the payer signs `request_execution` on `outlayer.testnet` with `{"source": {"Project": {"project_id": "kaap-worker-1029053612.testnet/kaap-sealed", "version_key": null}}, "input_data": "<the judge input as text>", "response_format": "Json", "resource_limits": {"max_instructions": 10000000000, "max_memory_mb": 128, "max_execution_seconds": 60}, "params": {"attached_usd": "10000"}}`, 300 Tgas and 0.02 NEAR, after depositing a stablecoin with `ft_transfer_call` to `outlayer.testnet` and the message `{"action":"deposit_balance"}`. Over HTTPS, `POST https://testnet-api.outlayer.ai/call/kaap-worker-1029053612.testnet/kaap-sealed` with an OutLayer payment key in `x-payment-key`, `x-attached-deposit: 10000` and the body `{"input": <the judge input>}`. A paid verdict is signed with a key derived for the payer, so the guard refuses it; a paid run gets no Kaap NEAR AI key and writes no evidence. To seal a text in a paid run, the payer first asks for its own text key with `{"v":1,"op":"pubkey"}`.
 
-Every alert links to `<KAAP_SITE_URL>/<network>/<dao>/<proposal id>` (`proposalLink` in `packages/worker/src/alerts.ts`), built only from a checked account id and a whole-number id. With `KAAP_SITE_URL` unset, as it is while no site exists, alerts carry no link.
+Every alert links to `<KAAP_SITE_URL>/<network>/<dao>/<proposal id>` (`proposalLink` in `packages/worker/src/alerts.ts`), built only from a checked account id and a whole-number id. With `KAAP_SITE_URL` unset, as it is while the site has no public address, alerts carry no link.
 
 ## 7. Decisions behind this design
 - The guard trusts only the sealed program's key, never the model's. A model signature covers only the model id and the hashes of one request and its answer, so it says nothing about where the request came from; the sealed program builds the request from its own chain reads and checks that signature itself (`packages/sealed/src/attest/signature.rs`). Both contracts hold one `accepted_key` and check every signature against it alone.
