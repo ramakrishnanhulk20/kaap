@@ -3,13 +3,15 @@ title: The command line
 description: The same check on your own machine, plus the commands that verify a verdict and rerun Kaap's numbers.
 ---
 
-`kaap` is a command line tool in the repository. It holds no NEAR key and sends no transaction. Every command only reads.
+`kaap` is a command line tool in [the repository](https://github.com/ramakrishnanhulk20/kaap). It holds no NEAR key and sends no transaction. Every command only reads.
 
 ## Build it once
 
 You need Node 24 or newer and nothing else. Kaap's rules engine is in the repository already, compiled to WebAssembly.
 
 ```bash
+git clone https://github.com/ramakrishnanhulk20/kaap.git
+cd kaap
 npm ci -w packages/cli
 npm run build:ts -w packages/cli
 ```

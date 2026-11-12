@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { REPO } from '@/lib/links';
 
 export default function Footer() {
   return (
@@ -10,6 +11,7 @@ export default function Footer() {
         <span className="toy-footer-links">
           <Link href="/check">Check a treasury</Link>
           <Link href="/docs">Docs</Link>
+          <a href={REPO}>Code on GitHub</a>
           <span>Built for NEAR treasuries. Open source, MIT licence.</span>
         </span>
       </div>

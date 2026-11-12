@@ -69,7 +69,7 @@ No wallet, no key and no test tokens are needed for any step here.
 4. Go back to the home page and press **Watch a theft get stopped**. You see request #1: it says "Monthly salary payment to alice...", it pays `a1ice...`, and under it are the four transactions of the run that rejected it, each a link to the explorer.
 5. Now a real one. On the check screen type a mainnet treasury, for example `marketing.sputnik-dao.near`, set **Network** to **Mainnet**, and press **Read it**. Kaap reads its latest request from two providers at one final block.
 
-To run the site yourself, with Node 24:
+To run the site yourself, with Node 24, from a clone of this repository:
 
 ```bash
 cd packages/web
@@ -84,6 +84,8 @@ Then open http://localhost:3000.
 Node 24 or newer is all you need, on Linux, macOS or Windows. The engine is committed as WebAssembly, so nothing here compiles Rust, and the first line installs only the command line's own packages.
 
 ```bash
+git clone https://github.com/ramakrishnanhulk20/kaap.git
+cd kaap
 npm ci -w packages/cli
 npm run build:ts -w packages/cli
 node packages/cli/dist/src/bin.js check kaap-dao-1111072928.testnet 1

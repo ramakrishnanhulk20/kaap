@@ -4,6 +4,7 @@ import { RootProvider } from 'fumadocs-ui/provider/next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Mark } from '@/components/site/Nav';
+import { REPO } from '@/lib/links';
 import { source } from '@/lib/source';
 
 function Brand() {
@@ -46,6 +47,7 @@ export default function DocsRootLayout({ children }: { children: ReactNode }) {
           // over and the copy at the top of the sidebar is hidden in docs.css.
           nav={{ title: <Brand />, url: '/' }}
           themeSwitch={{ enabled: false }}
+          githubUrl={REPO}
           tabs={false}
           sidebar={{
             collapsible: false,

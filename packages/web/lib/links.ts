@@ -6,6 +6,9 @@ export const STOPPED_THEFT = `/check?dao=${proof.treasury.account}&network=${pro
 /** The check page, opened on the demo treasury's request that shows only a hash. */
 export const HASH_ONLY = `/check?dao=${proof.demoText.dao}&network=${proof.network}&id=${proof.demoText.proposalId}`;
 
+/** The public repository this site is built from. */
+export const REPO = 'https://github.com/ramakrishnanhulk20/kaap';
+
 const EXPLORER = 'https://testnet.nearblocks.io';
 
 export const accountLink = (id: string) => `${EXPLORER}/address/${id}`;
