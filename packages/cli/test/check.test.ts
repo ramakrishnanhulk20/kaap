@@ -196,7 +196,7 @@ test('when the second provider cannot be read, nothing is compared and the check
 });
 
 test('the CLI only reads: view calls to the fixed providers, the 1Click list, and no key in its code (C31)', async () => {
-  const views = new Set(['get_proposal', 'get_policy', 'get_proposals', 'get_last_proposal_id', 'get_contracts_metadata', 'is_enrolled']);
+  const views = new Set(['get_proposal', 'get_policy', 'get_proposals', 'get_last_proposal_id', 'get_contracts_metadata', 'is_enrolled', 'veto_unreadable']);
   const hosts = new Set([...Object.values(NETWORKS).flatMap((n) => [n.primary, n.secondary]), 'https://1click.chaindefuser.com/v0/tokens']);
   for (const fixture of ['check-survival-132', 'check-kmxv7-13', 'check-testnet-7', 'check-wrap-near', 'check-nb-enrol']) {
     const { log } = await run(fixture);

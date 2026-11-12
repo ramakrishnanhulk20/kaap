@@ -20,16 +20,18 @@ The engine in `wasm/` is committed, so this needs no Rust. `npm run build -w pac
 
 | Command | What it does |
 |---|---|
-| `check <dao> [id]` | Reads one request at one final block from two RPC providers and prints its effects, findings, risk floor and whether the guard must veto it. `--json` prints the full report |
-| `verify <dao> <id>` | Checks the verdict in Kaap's registry for a request: the contracts' code and keys, the sealed signature, every hash recomputed, the sealed run on chain and OutLayer's attestation of it |
-| `enroll <dao>` | Prints the two requests a member files to put a treasury under the guard, and Kaap's own reading of each. Signs nothing |
-| `arming <dao>` | Says whether the guard is armed on the treasury's live rules, and any right it holds beyond rejecting |
+| `check <dao> [id]` | Reads one request at one final block from two RPC providers and prints its effects, findings, risk floor and whether the guard must veto it. For an enrolled treasury it reads the mode the treasury chose in the guard, so a hash nobody explained shows as one the guard rejects only in strict mode. `--json` prints the full report |
+| `verify <dao> <id>` | Checks the verdict in Kaap's registry for a request: the contracts' code and keys, the sealed signature, every hash recomputed, the sealed run on chain and OutLayer's attestation of it. Warns when the guard's owner has announced a change of the key it trusts |
+| `enroll <dao> [--strict]` | Prints the two requests a member files to put a treasury under the guard, and Kaap's own reading of each. Signs nothing. With `--strict` the enrolment also asks the guard to reject any request whose signed hash Kaap has not read; it stops at a guard built before strict mode |
+| `arming <dao>` | Says whether the guard is armed on the treasury's live rules, any right it holds beyond rejecting, the mode the treasury chose, and whether a change of the guard's trusted key has been announced |
 | `seal-text` | Encrypts the words behind a hash-only request so only the sealed reader can open them, and sends them to Kaap's watcher |
 | `subscribe <dao>` | Asks the watcher for a one-time Telegram token for a treasury's alerts |
 | `eval` | Runs the engine over the public labelled set in `eval/` and prints the agreement tables. No network |
 | `census [--sample N]` | Reruns the DAO census from mainnet, at most five requests a second |
 
 An account ending in `.testnet` is read on testnet and any other on mainnet, unless `--network` says otherwise.
+
+Strict mode and the announced key change belong to the next version of the guard, which is written and tested but not deployed. The guard on testnet today has neither, and the commands say so: `arming` prints "this guard has no strict mode", and `enroll --strict` stops.
 
 ## Tests
 

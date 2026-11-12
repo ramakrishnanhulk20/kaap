@@ -6,6 +6,10 @@
 // NEAR Business treasury, where Admin files policy changes and Requestor files function calls,
 // is read as it is. The CLI only prints: it holds no key and files nothing (C31).
 //
+// With --strict the enrolment call also asks the guard to reject any request of this DAO whose
+// signed hash Kaap has not read (C8). A guard built before strict mode would take that call and
+// enrol the DAO in default mode all the same, so against such a guard --strict stops here.
+//
 // What it does not do: count an enrolment. That happens only once the on-chain policy matches the
 // template, which `kaap arming` checks on the live policy after the proposals pass (C16).
 
@@ -14,6 +18,7 @@ import { Held } from './chain.js';
 import { type Deps, plainEffect } from './check.js';
 import type { CheckAnalysis, WhoActs } from './core.js';
 import { describeDeployment } from './deployment.js';
+import { guardMode } from './guard.js';
 import { readPrices } from './prices.js';
 import type { Network } from './rpc.js';
 import { oneLine, units, utc } from './text.js';
@@ -38,6 +43,8 @@ export interface DraftReport {
 export interface EnrollReport {
   title: string;
   facts: string[];
+  /** What --strict means for this DAO as it stands; empty without the flag. */
+  notes: string[];
   bondYocto: string;
   drafts: DraftReport[];
   after: string[];
@@ -70,8 +77,9 @@ function withRole(policy: string, role: unknown): string {
   return JSON.stringify(p);
 }
 
-export async function enroll(deps: Deps & { repoRoot: string }, request: { dao: string; network: Network }): Promise<EnrollReport> {
+export async function enroll(deps: Deps & { repoRoot: string }, request: { dao: string; network: Network; strict?: boolean }): Promise<EnrollReport> {
   const g = await readGuard(deps, request);
+  const strict = request.strict === true;
   const major = Number(g.dao.version.split('.')[0]);
   if (!(major >= 3)) {
     throw new CannotEnrol(`${request.dao} runs Sputnik ${g.dao.version}; Kaap's enrolment drafts use the ChangePolicyAddOrUpdateRole kind and are tested only on Sputnik 3`);
@@ -81,8 +89,22 @@ export async function enroll(deps: Deps & { repoRoot: string }, request: { dao: 
   const last = await g.reader.sameJson('the proposal counter', request.dao, 'get_last_proposal_id', {}, g.head);
   if (!Number.isSafeInteger(last) || (last as number) < 0) throw new Held('the proposal counter is not a whole number');
 
-  const policyMatches = armingState(g.arming, g.template, true).armed;
-  const [roleDraft, enrolDraft] = g.template.drafts;
+  // For a DAO that is not enrolled the guard answers false, so this read says only whether this
+  // build of the guard has strict mode at all.
+  const mode = strict ? (g.mode ?? (await guardMode(g.reader, g.d.guard, request.dao, g.head))) : g.mode;
+  if (strict && mode === 'none') {
+    throw new CannotEnrol(`Kaap's guard ${g.d.guard} was built before strict mode: it would enrol ${request.dao} in default mode whatever the call says. Run kaap enroll without --strict; strict mode needs a later guard`);
+  }
+  const template = strict ? deps.core.enrolmentDrafts(g.d.guard, true) : g.template;
+  const notes: string[] = [];
+  if (strict && !g.enrolled) notes.push('mode asked for: strict: the guard will also reject any request of this DAO whose signed hash Kaap has not read');
+  if (strict && g.enrolled && mode === 'strict') notes.push('strict mode is already on for this DAO');
+  if (strict && g.enrolled && mode === 'default') {
+    notes.push(`strict mode: this DAO is enrolled in default mode, and it enrols only once. To switch strict mode on, it files a FunctionCall proposal to ${g.d.guard}: method set_veto_unreadable, arguments {"on":true}, no deposit`);
+  }
+
+  const policyMatches = armingState(g.arming, template, true).armed;
+  const [roleDraft, enrolDraft] = template.drafts;
   const wanted = [...(policyMatches || !roleDraft ? [] : [roleDraft]), ...(g.enrolled || !enrolDraft ? [] : [enrolDraft])];
   const prices = await readPrices(request.network, deps.core, deps.transport, deps.limiter);
 
@@ -122,9 +144,10 @@ export async function enroll(deps: Deps & { repoRoot: string }, request: { dao: 
       `Kaap on ${request.network}: ${describeDeployment(g.d)}`,
       `guard: ${g.d.guard}; enrolled: ${g.enrolled ? 'yes' : 'no'}; armed by the policy now: ${g.state.armed ? 'yes' : policyMatches ? 'the policy matches Kaap\'s template, the enrolment call is missing' : 'no'}`,
     ],
+    notes,
     bondYocto: bond,
     drafts,
-    after: armingLines(afterArming, g.template, armingState(afterArming, g.template, true)),
+    after: armingLines(afterArming, template, armingState(afterArming, template, true)),
     network: request.network,
     dao: request.dao,
   };
@@ -153,7 +176,7 @@ function decodingLines(a: CheckAnalysis): string[] {
 
 export function render(r: EnrollReport): string {
   const near = (yocto: string) => `${units(yocto, 24)} NEAR`;
-  const lines = [r.title, ...r.facts, ''];
+  const lines = [r.title, ...r.facts, ...r.notes, ''];
   const arming = `kaap arming ${r.dao} --network ${r.network}`;
   if (!r.drafts.length) {
     lines.push("nothing to file: the DAO is enrolled and its policy already matches Kaap's template", '', 'now:', ...r.after.map((l) => `  ${l}`), '', `check it again at any time: ${arming}`);

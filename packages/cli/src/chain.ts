@@ -99,6 +99,30 @@ export class Reader {
     }
   }
 
+  /** `sameJson` for a view an earlier build of the contract may not have. `absent` only when both
+   *  providers say the contract has no such method at `block`; one saying so alone is a
+   *  disagreement, and any other refusal is thrown as it comes. */
+  async optionalJson(what: string, account: string, method: string, args: object, block: Block): Promise<{ value: unknown } | { absent: true }> {
+    try {
+      return { value: await this.sameJson(what, account, method, args, block) };
+    } catch (e) {
+      if (!(e instanceof RpcError) || !e.noMethod) throw e;
+    }
+    // Only the first provider's own refusal reaches here: one from the second, after the first
+    // answered, is already a disagreement inside `sameJson`.
+    try {
+      await this.secondary.view(account, method, args, block.height);
+    } catch (e) {
+      if (!(e instanceof RpcError)) throw e;
+      if (e.noMethod) return { absent: true };
+      if (e.failure === 'unavailable' || e.failure === 'shape' || e.failure === 'too_large') {
+        const why = `the second provider (${this.secondary.name}) could not be read for ${what}, so nothing can be compared`;
+        throw e.failure === 'unavailable' ? new Unanswered(why) : new Held(why);
+      }
+    }
+    throw new Held(`the two providers disagree on ${what}`);
+  }
+
   /** The proposal from both providers, read by kaap-core's strict reader, with the kind compared
    *  in canonical form (Sputnik's sets can come back in another order) and every other field
    *  exactly. */

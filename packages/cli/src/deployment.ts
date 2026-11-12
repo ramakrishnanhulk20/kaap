@@ -32,7 +32,7 @@ const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/);
 const txHash = z.string().refine(isTxHash);
 /** An ed25519 public key as NEAR writes it: `ed25519:` and base58 of exactly 32 bytes, at whatever
  *  length base58 writes them. Counting characters is not enough: 44 of them can spell 33 bytes. */
-const isEdKey = (text: string) => text.startsWith('ed25519:') && text.length <= 52 && base58(text.slice(8))?.length === 32;
+export const isEdKey = (text: string) => text.startsWith('ed25519:') && text.length <= 52 && base58(text.slice(8))?.length === 32;
 const edKey = z.string().refine(isEdKey);
 
 const deploymentsSchema = z.looseObject({

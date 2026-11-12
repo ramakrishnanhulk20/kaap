@@ -29,7 +29,7 @@ interface Bindings {
   verdictHash(verdict: string): string;
   guardArming(policy: string, guard: string): string;
   whoActs(policy: string, label: string): string;
-  enrolmentDrafts(guard: string): string;
+  enrolmentDrafts(guard: string, strict?: boolean): string;
   decoderVersion(): string;
   receiversHash(pairs: string): string;
   pricesFromTokens(tokens: string): string;
@@ -135,6 +135,9 @@ export interface AnalyzeInput {
   block_timestamp_ns: string | null;
   /** Kaap's guard account, so a change to the roles that hold it is named (C17). */
   guard_account?: string;
+  /** Whether the DAO chose strict mode in Kaap's guard: `veto_allowed` and `must_veto` are then
+   *  also true for a request whose signed hash is unread (C8). Left out means no. */
+  guard_strict?: boolean;
   /** The text said to be behind a signed hash. kaap-core reads it only as far as it hashes to a
    *  payload the proposal asks to sign (C6). */
   supplied_text?: SuppliedText;
@@ -233,9 +236,11 @@ export class Core {
     return whoActsSchema.parse(JSON.parse(this.#run('whoActs', () => this.#b.whoActs(policy, label))));
   }
 
-  /** Kaap's one enrolment template for `guard` (C30). */
-  enrolmentDrafts(guard: string): EnrolmentDrafts {
-    return draftsSchema.parse(JSON.parse(this.#run('enrolmentDrafts', () => this.#b.enrolmentDrafts(guard))));
+  /** Kaap's one enrolment template for `guard` (C30). With `strict`, the enrolment call asks the
+   *  guard to also reject this DAO's requests whose signed hash Kaap has not read (C8); nothing
+   *  else in the drafts differs. */
+  enrolmentDrafts(guard: string, strict = false): EnrolmentDrafts {
+    return draftsSchema.parse(JSON.parse(this.#run('enrolmentDrafts', () => this.#b.enrolmentDrafts(guard, strict))));
   }
 
   /** kaap-core's `receipt::DECODER_VERSION`, the decoder a verdict made by this kaap-core names. */

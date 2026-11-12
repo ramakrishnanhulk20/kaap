@@ -35,13 +35,26 @@ export function load(name: string): Fixture {
 }
 
 /** A view a recording lacks because the CLI did not ask it when the recording was made, with the
- *  JSON the chain answers for it. Without `args`, any arguments match. */
+ *  JSON the chain answers for it. Without `args`, any arguments match. With `absent`, the chain's
+ *  answer for a method the contract does not have, and `value` is not used. */
 export interface MissingView {
   account: string;
   method: string;
   args?: object;
-  value: unknown;
+  value?: unknown;
+  absent?: true;
 }
+
+/** Every guard in these recordings was deployed before strict mode and the key delay. Asked for
+ *  the two views those added, each answers that it has no such method, as both testnet providers
+ *  did live on 12 Nov. A test that needs a later guard lists the view itself, which comes first. */
+export const BEFORE_STRICT_MODE: MissingView[] = ['kaap-guard-1029061211.testnet', 'kaap-guard-1111072803.testnet'].flatMap((account) => [
+  { account, method: 'veto_unreadable', absent: true as const },
+  { account, method: 'pending_key', absent: true as const },
+]);
+
+/** What NEAR answers for a view of a method the contract does not have. */
+export const NO_SUCH_METHOD = 'wasm execution failed with error: MethodResolveError(MethodNotFound)';
 
 /** What the 11 Nov guard and registry answer for the DAOs recorded before them, as both answered
  *  live on 11 Nov: none of those DAOs is enrolled with that guard, and its registry holds no verdict
@@ -71,9 +84,11 @@ export function answering(t: Transport, fixture: Fixture, views: readonly Missin
       if (!(e instanceof NetError)) throw e;
       const p = (JSON.parse(r.body ?? '{}') as { params?: { request_type?: string; account_id?: string; method_name?: string; args_base64?: string; block_id?: unknown } }).params;
       const args = Buffer.from(p?.args_base64 ?? '', 'base64').toString('utf8');
-      const view = p?.request_type === 'call_function' ? views.find((v) => v.account === p.account_id && v.method === p.method_name && (v.args === undefined || JSON.stringify(v.args) === args)) : undefined;
+      const matches = (v: MissingView) => v.account === p?.account_id && v.method === p?.method_name && (v.args === undefined || JSON.stringify(v.args) === args);
+      const view = p?.request_type === 'call_function' ? (views.find(matches) ?? BEFORE_STRICT_MODE.find(matches)) : undefined;
       const hash = typeof p?.block_id === 'number' ? hashes.get(p.block_id) : undefined;
       if (view === undefined || hash === undefined) throw e;
+      if (view.absent) return { status: 200, text: JSON.stringify({ jsonrpc: '2.0', id: 'kaap', result: { block_hash: hash, block_height: p?.block_id, error: NO_SUCH_METHOD, logs: [] } }) };
       return { status: 200, text: JSON.stringify({ jsonrpc: '2.0', id: 'kaap', result: { result: [...Buffer.from(JSON.stringify(view.value), 'utf8')], logs: [], block_height: p?.block_id, block_hash: hash } }) };
     }
   };

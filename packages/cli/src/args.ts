@@ -11,7 +11,7 @@ export type Command =
   | { command: 'eval' }
   | { command: 'census'; sample: number | null }
   | { command: 'verify'; dao: string; id: number; network: Network; archival?: string }
-  | { command: 'enroll'; dao: string; network: Network }
+  | { command: 'enroll'; dao: string; network: Network; strict: boolean }
   | { command: 'arming'; dao: string; network: Network }
   | { command: 'seal-text'; dao: string; id: number; file: string; network: Network; worker: string }
   | { command: 'subscribe'; dao: string; worker: string }
@@ -38,12 +38,14 @@ export const USAGE = `kaap: check NEAR DAO proposals with no keys, and rerun Kaa
       or fail, or unread when no node would answer it. Old blocks and runs come from the live
       providers while they hold them, else from archival nodes; KAAP_ARCHIVAL_RPC names an
       archival node (https) to ask before the public ones.
-  kaap enroll <dao> [--network mainnet|testnet]
+  kaap enroll <dao> [--strict] [--network mainnet|testnet]
       Prints the proposals a member files to put the DAO under Kaap's guard, who files and who
-      approves each, Kaap's own decoding of each draft, and the cost.
+      approves each, Kaap's own decoding of each draft, and the cost. With --strict the DAO
+      also has the guard reject any request whose signed hash Kaap has not read.
   kaap arming <dao> [--network mainnet|testnet]
       Whether Kaap's guard is armed on the DAO's live policy: the kinds it cannot reject, any
-      rights beyond rejecting, and the votes the approvers need per kind.
+      rights beyond rejecting, the votes the approvers need per kind, and the mode the DAO
+      chose in the guard.
   kaap seal-text --dao <dao> --id <id> --file <text.json> [--worker <https url>] [--network mainnet|testnet]
       Hands Kaap's worker the text behind a hash-only proposal, encrypted here so only Kaap's
       sealed program can read it, once the key it is sealed to checks out against the guard's
@@ -168,7 +170,11 @@ export function parse(argv: string[], vars: Readonly<Record<string, string | und
         ...(archival !== undefined && archival !== '' ? { archival: archivalUrl(archival) } : {}),
       };
     }
-    case 'enroll':
+    case 'enroll': {
+      const { values, positionals } = parsed(rest, { network: { type: 'string' }, strict: { type: 'boolean', default: false } });
+      const dao = oneDao(positionals, command, 'example.sputnik-dao.near');
+      return { command, dao, network: networkFor(values['network'], dao), strict: values['strict'] === true };
+    }
     case 'arming': {
       const { values, positionals } = parsed(rest, { network: { type: 'string' } });
       const dao = oneDao(positionals, command, 'example.sputnik-dao.near');

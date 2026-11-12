@@ -32,6 +32,7 @@ import { type ContractLine, contractsAsRecorded } from './contracts.js';
 import { type Core, CoreError } from './core.js';
 import { recognise } from './dao.js';
 import { type Deployment, deploymentChain, describeDeployment } from './deployment.js';
+import { pendingKeyLines } from './guard.js';
 import { type Attestation, type AttestationRead, findRun, readAttestation, readRun, type Run, type Search } from './outlayer.js';
 import { Archive, archiveHosts, type Block, NETWORKS, type Network, RpcError } from './rpc.js';
 import { oneLine, terminalText, utc } from './text.js';
@@ -368,6 +369,7 @@ export async function verify(deps: Deps & { repoRoot: string }, request: VerifyR
 
   checks.push(...(await keyChecks(archive, deps, request.network, d, guardRaw)));
 
+  notes.push(...(await pendingKeyLines(reader, d.guard, head)));
   notes.push(aiEvidence(v));
   const used = await reader.sameJson('the guard\'s veto result', d.guard, 'veto_result', { verdict_hash_hex: signedHash }, head);
   notes.push(

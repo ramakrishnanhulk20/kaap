@@ -664,7 +664,7 @@ test('verify only reads: fixed hosts, view, block, chunk and tx calls, and GETs 
   const { log } = await run();
   const t = NETWORKS.testnet;
   const rpc = new Set([t.primary, t.secondary, ...t.archives]);
-  const views = new Set(['get_contracts_metadata', 'latest', 'accepted_key', 'get_proposal', 'get_policy', 'veto_result']);
+  const views = new Set(['get_contracts_metadata', 'latest', 'accepted_key', 'get_proposal', 'get_policy', 'veto_result', 'pending_key']);
   for (const r of log) {
     if (r.method === 'GET') {
       assert.ok(r.url.startsWith(`${t.outlayer}/attestations/by-tx/`), r.url);

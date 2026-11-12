@@ -2,12 +2,15 @@
 // kaap-core makes of it. Everything that decides the answer is read at one final block and must
 // agree across two providers (C22); the DAO must be real Sputnik code (C23); the rules are
 // kaap-core's own, run as wasm (C14). The CLI only reads: it holds no key and sends no transaction
-// (C31). It is advisory: the AI and the guard run only in Kaap's sealed program.
+// (C31). It is advisory: the AI and the guard run only in Kaap's sealed program. For a DAO enrolled
+// in Kaap's guard it also reads the mode the DAO chose there, so a request whose signed hash is
+// unread shows as one the guard rejects only where the DAO chose strict mode (C8).
 
 import { Held, Reader } from './chain.js';
 import type { CheckAnalysis, Core, History, SuppliedText } from './core.js';
 import { recognise } from './dao.js';
 import { type Deployment, enrolledDeployment, NoDeployment } from './deployment.js';
+import { type GuardMode, guardMode, modeWords } from './guard.js';
 import { historyBefore, policyBefore, readAll } from './history.js';
 import type { Clock, RateLimiter } from './limiter.js';
 import type { Transport } from './net.js';
@@ -62,6 +65,8 @@ export interface CheckReport {
   /** Kaap's guard on this network, handed to kaap-core so a call enrolling in it reads as Kaap's
    *  own; null where no deployment is recorded. */
   guard_account: string | null;
+  /** The mode the DAO chose in that guard; null where it is enrolled in none. */
+  guard_mode: GuardMode | null;
   kind_label: string;
   analysis: CheckAnalysis['analysis'];
   description_reasons: CheckAnalysis['description'];
@@ -83,9 +88,9 @@ async function counter(reader: Reader, dao: string, block: Block): Promise<numbe
 /** Kaap's guard for this DAO: from the deployment record whose guard it is enrolled with, current
  *  first, else the current one. Where no deployment is recorded (mainnet today), or a record cannot
  *  be read, a call to `enroll` stays an unknown call, the cautious reading. */
-async function kaapGuard(reader: Reader, repoRoot: string, network: Network, dao: string, head: Block): Promise<Deployment | null> {
+async function kaapGuard(reader: Reader, repoRoot: string, network: Network, dao: string, head: Block): Promise<{ d: Deployment; enrolled: boolean } | null> {
   try {
-    return (await enrolledDeployment(reader, repoRoot, network, dao, head)).d;
+    return await enrolledDeployment(reader, repoRoot, network, dao, head);
   } catch (e) {
     if (e instanceof NoDeployment) return null;
     throw e;
@@ -116,8 +121,10 @@ export async function check(deps: Deps & { repoRoot: string }, request: CheckReq
   const prices = await readPrices(request.network, core, deps.transport, deps.limiter);
   const before = policyBefore(core, read, policyNow, past);
   const history = past.complete ? historyBefore(past.proposals, read.submission_time, prices.prices) : null;
-  const kaap = await kaapGuard(reader, deps.repoRoot, request.network, request.dao, head);
+  const found = await kaapGuard(reader, deps.repoRoot, request.network, request.dao, head);
+  const kaap = found?.d ?? null;
   const guard = kaap?.guard ?? null;
+  const mode = found?.enrolled ? await guardMode(reader, found.d.guard, request.dao, head) : null;
 
   const result = core.analyze({
     network: request.network,
@@ -131,6 +138,7 @@ export async function check(deps: Deps & { repoRoot: string }, request: CheckReq
     dao_version: dao.version,
     block_timestamp_ns: head.timestampNs,
     ...(guard === null ? {} : { guard_account: guard }),
+    ...(mode === 'strict' ? { guard_strict: true } : {}),
     ...(request.text === undefined ? {} : { supplied_text: request.text }),
   });
 
@@ -155,6 +163,7 @@ export async function check(deps: Deps & { repoRoot: string }, request: CheckReq
     prices_source: prices.source,
     guard_record: kaap === null ? null : { record: kaap.record, deployed_at: kaap.deployedAt, current: kaap.current },
     guard_account: guard,
+    guard_mode: mode,
     kind_label: result.kind_label,
     analysis: result.analysis,
     description_reasons: result.description,
@@ -176,9 +185,10 @@ function decimalsOf(token: unknown, decimals: Map<string, number>): number | nul
  *  that prints Kaap's decoding. Null for the rest, and for an effect not in its expected shape,
  *  which then prints field by field. */
 export function plainEffect(effect: Record<string, unknown>): string | null {
-  const { type, guard, deposit } = effect;
-  if (type === 'guard_enrol' && typeof guard === 'string' && typeof deposit === 'string' && /^\d+$/.test(deposit)) {
-    return `enrols this DAO in Kaap's guard ${oneLine(guard, 80)}, attaching ${units(deposit, 24)} NEAR`;
+  const { type, guard, deposit, strict } = effect;
+  if (type === 'guard_enrol' && typeof guard === 'string' && typeof deposit === 'string' && /^\d+$/.test(deposit) && (strict === undefined || strict === true)) {
+    const mode = strict === true ? ', in strict mode: the guard will also reject any request whose signed hash Kaap has not read' : '';
+    return `enrols this DAO in Kaap's guard ${oneLine(guard, 80)}, attaching ${units(deposit, 24)} NEAR${mode}`;
   }
   return null;
 }
@@ -225,6 +235,7 @@ export function render(report: CheckReport, decimals: Map<string, number> = new 
     `history: ${report.history ? `${report.history.approved_payments_before} approved payments before this one, median ${report.history.median_payment_usd_before ?? 'n/a'} USD, ${report.history.recipients_paid_before.length} recipients; ${report.history_source}` : report.history_source}`,
     `prices: ${report.prices_source}`,
     `Kaap's guard: ${guardLine(report)}`,
+    ...(report.guard_mode === null ? [] : [`mode in the guard: ${modeWords(report.guard_mode)}`]),
     '',
     'effects',
     ...(a.effects.length ? a.effects.map((e) => `  ${effectLine(e, decimals)}`) : ['  none']),
@@ -236,6 +247,9 @@ export function render(report: CheckReport, decimals: Map<string, number> = new 
     ...report.description_reasons.agreements.map((why) => `  agrees: ${shown(why, 300)}`),
     `must_veto: ${a.must_veto}`,
     `veto_allowed: ${a.veto_allowed}`,
+    ...(report.guard_mode === 'strict' && a.veto_allowed && a.findings.some((f) => f.code === 'HASH_UNVERIFIED')
+      ? ["strict mode: this DAO chose to have Kaap's guard reject any request whose signed hash is unread, so the guard will reject this one once the sealed program has judged it"]
+      : []),
     '',
     report.advisory,
   ];

@@ -113,13 +113,20 @@ export type Method = 'block' | 'query' | 'chunk' | 'tx';
 export class RpcError extends Error {
   readonly failure: RpcFailure;
   readonly provider: string;
-  constructor(provider: string, failure: RpcFailure, detail: string) {
+  /** A `refused` view whose reason is that the contract has no method by that name, which is how
+   *  an earlier build of a contract answers for a view a later build added. */
+  readonly noMethod: boolean;
+  constructor(provider: string, failure: RpcFailure, detail: string, noMethod = false) {
     super(`${provider}: ${detail}`);
     this.name = 'RpcError';
     this.failure = failure;
     this.provider = provider;
+    this.noMethod = noMethod;
   }
 }
+
+/** NEAR's own words for a call to a method the contract does not have. */
+const NO_METHOD = 'MethodNotFound';
 
 const clean = (text: unknown) => String(text ?? '').replace(/[^\x20-\x7e]/g, '?').slice(0, 160);
 
@@ -210,7 +217,8 @@ export class Provider {
       // Both providers report a contract panic inside `result` today; newer nodes may send it as
       // this error instead, and it is the contract's answer, not a fault to ask again about.
       if (cause === 'CONTRACT_EXECUTION_ERROR') {
-        throw new RpcError(this.name, JSON.stringify(error).includes('ERR_NO_PROPOSAL') ? 'no_proposal' : 'refused', 'the contract refused the view');
+        const said = JSON.stringify(error);
+        throw new RpcError(this.name, said.includes('ERR_NO_PROPOSAL') ? 'no_proposal' : 'refused', 'the contract refused the view', said.includes(NO_METHOD));
       }
       throw new RpcError(this.name, 'unavailable', clean(cause ?? (isRecord(error) ? error['name'] : error)));
     }
@@ -289,7 +297,7 @@ export class Provider {
     );
     if (r['error'] !== undefined) {
       const text = String(r['error']);
-      throw new RpcError(this.name, text.includes('ERR_NO_PROPOSAL') ? 'no_proposal' : 'refused', `${method} failed: ${clean(text)}`);
+      throw new RpcError(this.name, text.includes('ERR_NO_PROPOSAL') ? 'no_proposal' : 'refused', `${method} failed: ${clean(text)}`, text.includes(NO_METHOD));
     }
     const bytes = r['result'];
     if (!Array.isArray(bytes) || !bytes.every((b) => Number.isInteger(b) && b >= 0 && b < 256)) throw new RpcError(this.name, 'shape', `${method} result is not bytes`);

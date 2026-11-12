@@ -70,7 +70,9 @@ test('verify, enroll and arming take the network from --network, else from a .te
   assert.deepEqual(parse(['verify', 'kaap-dao-1029064008.testnet', '2']), { command: 'verify', dao: 'kaap-dao-1029064008.testnet', id: 2, network: 'testnet' });
   assert.deepEqual(parse(['verify', 'a.sputnik-dao.near', '2']), { command: 'verify', dao: 'a.sputnik-dao.near', id: 2, network: 'mainnet' });
   assert.deepEqual(parse(['verify', 'a.testnet', '2', '--network', 'mainnet']), { command: 'verify', dao: 'a.testnet', id: 2, network: 'mainnet' });
-  assert.deepEqual(parse(['enroll', 'a.sputnikv2.testnet']), { command: 'enroll', dao: 'a.sputnikv2.testnet', network: 'testnet' });
+  assert.deepEqual(parse(['enroll', 'a.sputnikv2.testnet']), { command: 'enroll', dao: 'a.sputnikv2.testnet', network: 'testnet', strict: false });
+  assert.deepEqual(parse(['enroll', 'a.sputnikv2.testnet', '--strict']), { command: 'enroll', dao: 'a.sputnikv2.testnet', network: 'testnet', strict: true });
+  assert.throws(() => parse(['arming', 'a.sputnikv2.testnet', '--strict']), /Unknown option/, 'only enroll takes --strict');
   assert.deepEqual(parse(['arming', 'a.sputnik-dao.near', '--network', 'testnet']), { command: 'arming', dao: 'a.sputnik-dao.near', network: 'testnet' });
   for (const argv of [['verify', 'a.near'], ['verify', 'a.near', 'x'], ['verify', 'a.near', '1', '2'], ['enroll'], ['arming', 'a.near', 'b.near'], ['arming', 'a.near', '--network', 'devnet']]) {
     assert.throws(() => parse(argv), UsageError, argv.join(' '));

@@ -12,6 +12,10 @@
 // counts: another account that can also veto alone, and rights beyond rejecting, are shown as
 // warnings, never as disarming. The guard contract has no code path that could use extra rights
 // (C15).
+//
+// It also prints the mode the DAO chose in the guard (C8) and, when the guard's owner has announced
+// a change of the accepted key, one warning line with the time it can take effect (C19); guard.ts
+// reads both.
 
 import type { Reader } from './chain.js';
 import { type Deps, readers } from './check.js';
@@ -19,6 +23,7 @@ import { contractBlock, contractsAsRecorded, stopUnlessAsRecorded } from './cont
 import type { Arming, EnrolmentDrafts } from './core.js';
 import { recognise, type Recognised } from './dao.js';
 import { type Deployment, describeDeployment, enrolledDeployment } from './deployment.js';
+import { type GuardMode, guardMode, modeWords, pendingKeyLines } from './guard.js';
 import { type Block, NETWORKS, type Network } from './rpc.js';
 import { oneLine, terminalText, utc } from './text.js';
 
@@ -50,6 +55,8 @@ export interface GuardRead {
   /** The policy in kaap-core's canonical form. */
   policy: string;
   enrolled: boolean;
+  /** The mode the DAO chose in the guard; null when it is not enrolled, so it chose none. */
+  mode: GuardMode | null;
   arming: Arming;
   template: EnrolmentDrafts;
   state: ArmingState;
@@ -63,9 +70,10 @@ export async function readGuard(deps: Deps & { repoRoot: string }, request: { da
   const dao = await recognise(deps.core, reader, NETWORKS[request.network].factory, request.dao, head);
   const policy = await reader.policy(request.dao, head);
   const { d, enrolled } = await enrolledDeployment(reader, deps.repoRoot, request.network, request.dao, head);
+  const mode = enrolled ? await guardMode(reader, d.guard, request.dao, head) : null;
   const arming = deps.core.guardArming(policy, d.guard);
   const template = deps.core.enrolmentDrafts(d.guard);
-  return { d, reader, head, dao, policy, enrolled, arming, template, state: armingState(arming, template, enrolled) };
+  return { d, reader, head, dao, policy, enrolled, mode, arming, template, state: armingState(arming, template, enrolled) };
 }
 
 export interface ArmingReport {
@@ -82,6 +90,7 @@ export async function arming(deps: Deps & { repoRoot: string }, request: { dao: 
   const g = await readGuard(deps, request);
   const contracts = await contractsAsRecorded(g.reader, g.d, g.head);
   stopUnlessAsRecorded(g.d, contracts, 'Whether the guard is armed is not shown until both providers show each contract running the recorded build with no access key.');
+  const keyChange = await pendingKeyLines(g.reader, g.d.guard, g.head);
   return {
     title: `kaap arming ${request.dao} on ${request.network}`,
     facts: [
@@ -89,9 +98,10 @@ export async function arming(deps: Deps & { repoRoot: string }, request: { dao: 
       `DAO: Sputnik ${g.dao.version} (code hash ${g.dao.codeHash})`,
       `Kaap on ${request.network}: ${describeDeployment(g.d)}`,
       `guard: ${g.d.guard}; enrolled in the guard: ${g.enrolled ? 'yes' : 'no'}`,
+      ...(g.mode === null ? [] : [`mode in the guard: ${modeWords(g.mode)}`]),
     ],
     contracts: contractBlock(contracts),
-    lines: armingLines(g.arming, g.template, g.state),
+    lines: [...keyChange, ...armingLines(g.arming, g.template, g.state)],
   };
 }
 

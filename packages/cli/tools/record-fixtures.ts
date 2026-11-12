@@ -15,6 +15,8 @@ export const CASES: Record<string, string[]> = {
   'check-survival-132': ['check', 'survival-is-near.sputnik-dao.near', '132', '--network', 'mainnet'],
   'check-kmxv7-13': ['check', 'kmxv7.sputnik-dao.near', '13', '--network', 'mainnet'],
   'check-testnet-7': ['check', 'kaap-dao-1029064008.testnet', '7', '--network', 'testnet'],
+  // The 11 Nov demo DAO's request to sign a hash nobody has explained, still open.
+  'check-1111-7': ['check', 'kaap-dao-1111072928.testnet', '7'],
   'check-wrap-near': ['check', 'wrap.near', '1'],
   'census-sample-5': ['census', '--sample', '5'],
   'verify-1029-2': ['verify', 'kaap-dao-1029064008.testnet', '2', '--network', 'testnet'],

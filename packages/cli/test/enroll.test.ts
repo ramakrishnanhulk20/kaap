@@ -187,8 +187,8 @@ test('enroll refuses a DAO on Sputnik 2, whose kinds Kaap has not tested', async
   assert.match(err, /runs Sputnik 2\.0; Kaap's enrolment drafts use the ChangePolicyAddOrUpdateRole kind and are tested only on Sputnik 3$/);
 });
 
-test('arming and enroll only read: the two testnet providers, view_account, view_access_key_list and four views', async () => {
-  const views = new Set(['get_contracts_metadata', 'get_policy', 'is_enrolled', 'get_last_proposal_id']);
+test('arming and enroll only read: the two testnet providers, view_account, view_access_key_list and six views', async () => {
+  const views = new Set(['get_contracts_metadata', 'get_policy', 'is_enrolled', 'get_last_proposal_id', 'veto_unreadable', 'pending_key']);
   for (const fixture of ['arming-1029', 'arming-nb', 'enroll-1029', 'enroll-nb']) {
     const { log } = await run(fixture);
     for (const r of log) {
