@@ -87,8 +87,9 @@ def build_kolam(centre, cols=7, rows=4, spacing=0.46):
 LANTERN_DROP = 0.78
 
 
-def build_lantern():
-    """A brass hand lantern with a glowing glass, hanging from its own top ring at the origin."""
+def build_lantern(flame=1.0):
+    """A brass hand lantern with a glowing glass, hanging from its own top ring at the origin.
+    `flame` scales its light, for the flicker."""
     k = 1.55
     brass = materials.brass()
     objs = []
@@ -97,7 +98,7 @@ def build_lantern():
     v, f = shapes.lathe([(0.0, -0.09), (0.035, -0.09), (0.11, -0.13), (0.13, -0.17), (0.1, -0.195), (0.0, -0.195)], 40)
     objs.append(shapes.make_object("lantern_cap", v * k, f, brass, 0.004))
     v, f = shapes.lathe([(0.0, -0.19), (0.09, -0.19), (0.15, -0.27), (0.16, -0.36), (0.125, -0.46), (0.1, -0.485), (0.0, -0.485)], 40)
-    objs.append(shapes.make_object("lantern_glass", v * k, f, materials.light(palette.GLOW, 4.0, "lantern_glass")))
+    objs.append(shapes.make_object("lantern_glass", v * k, f, materials.light(palette.GLOW, 4.0 * flame, "lantern_glass")))
     v, f = shapes.lathe([(0.0, -0.48), (0.12, -0.48), (0.155, -0.5), (0.165, -0.56), (0.14, -0.6), (0.0, -0.6)], 40)
     objs.append(shapes.make_object("lantern_base", v * k, f, brass, 0.004))
     for i in range(4):
@@ -108,7 +109,7 @@ def build_lantern():
         v, f = shapes.tube(shapes.catmull(path, 0.02), 0.009 * k, 6)
         objs.append(shapes.make_object("lantern_wire%d" % i, v, f, brass))
     data = bpy.data.lights.new("lantern_light", "POINT")
-    data.energy = 9.0
+    data.energy = 9.0 * flame
     data.color = palette.hex_to_linear(palette.GLOW)
     data.shadow_soft_size = 0.12
     lamp = bpy.data.objects.new("lantern_light", data)
@@ -144,11 +145,13 @@ def build_seal(name, at, radius=0.07):
 
 
 def build_thread_ball(centre, radius=0.2):
-    """A ball of thread: a core, wound round one way and then crossed over the top the other way."""
+    """A ball of thread: a core, wound round one way and then crossed over the top the other way.
+    The winding keeps its thickness when the ball is bigger, so a fuller ball has more turns."""
     centre = np.asarray(centre, dtype=float)
     parts = [shapes.sphere(radius * 0.9)]
     a = np.linspace(0.0, 2 * np.pi, 36, endpoint=False)
-    for tilt, count, span in ((0.0, 15, 0.93), (math.radians(64.0), 8, 0.5)):
+    for tilt, turns, span in ((0.0, 15, 0.93), (math.radians(64.0), 8, 0.5)):
+        count = max(3, round(turns * radius / 0.2))
         for i in range(count):
             x = radius * span * (2.0 * (i + 0.5) / count - 1.0)
             r = math.sqrt(radius * radius - x * x)
@@ -160,15 +163,15 @@ def build_thread_ball(centre, radius=0.2):
     return shapes.make_object("thread_ball", v + centre, f, materials.thread(palette.TURMERIC))
 
 
-def build_strand(points):
-    """A loose length of the same thread, lying where the points lead it."""
-    path = shapes.catmull(points, 0.011)
-    v, f = shapes.cord(path, 0.026, 0.023, 0.15)
-    return shapes.make_object("thread_strand", v, f, materials.thread(palette.TURMERIC))
+def build_thread(path, ply_radius, helix_radius, period):
+    """The thread laid along a path of closely spaced points."""
+    v, f = shapes.cord(path, ply_radius, helix_radius, period)
+    return shapes.make_object("thread", v, f, materials.thread(palette.TURMERIC))
 
 
-def build_palm(height=2.3):
-    """A coconut palm: a trunk of turned rings leaning a little, a crown of fronds, three coconuts."""
+def build_palm(height=2.3, sway=0.0):
+    """A coconut palm: a trunk of turned rings leaning a little, a crown of fronds, three coconuts.
+    `sway` is the angle of the slow swing that lifts and drops each frond in turn."""
     objs = []
     count = 8
     step = height / count
@@ -194,7 +197,8 @@ def build_palm(height=2.3):
         steps = 16
         for k in range(steps + 1):
             s = k / steps
-            centre = top + along * (length * s) + np.array([0.0, 0.0, 0.5 * math.sin(math.pi * 0.75 * s) - 1.05 * s * s])
+            droop = 1.05 + 0.05 * math.sin(sway + 0.9 * i)
+            centre = top + along * (length * s) + np.array([0.0, 0.0, 0.5 * math.sin(math.pi * 0.75 * s) - droop * s * s])
             half = 0.02 + 0.2 * math.sin(math.pi * min(1.0, s * 1.06)) ** 0.7
             verts += [centre - across * half, centre + across * half]
             if k:

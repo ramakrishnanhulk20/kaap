@@ -12,10 +12,28 @@ SENSOR_MM = 36.0
 FSTOP = 0.6
 ASPECT = 2.0
 
+# Closer views of parts of the same set, for the pictures beside the page's "how it works" steps:
+# where the camera looks, from how far, and how steeply down.
+SHOTS = {
+    "queue": ((-2.25, -0.2, 1.0), 13.5, 12.0),
+    "light": ((-0.05, -0.3, 1.62), 11.5, 10.0),
+    "door": ((2.15, -0.35, 1.38), 11.0, 11.0),
+}
+# What the lens focuses on. None means the watchman, the middle of the whole set.
+FOCUS = None
+
 
 def set_aspect(width, height):
     global ASPECT
     ASPECT = float(width) / float(height)
+
+
+def use_shot(name):
+    """Point the camera at one of the closer views, and focus there."""
+    global TARGET, DISTANCE, PITCH_DEG, FOCUS
+    target, DISTANCE, PITCH_DEG = SHOTS[name]
+    TARGET = np.array(target)
+    FOCUS = TARGET
 
 
 def location():

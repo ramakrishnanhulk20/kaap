@@ -161,8 +161,9 @@ def paper(hex_color, name=None):
     return mat
 
 
-def letter_face(colour_path, glow_path, width, height, glow_strength, name):
-    """The front of a letter, painted from an image. With a glow image, lamplight shows through the sheet."""
+def letter_face(plain_path, lit_path, glow_path, width, height, lit, glow_strength, name):
+    """The front of a letter, painted from pictures. `lit` runs from 0, the sealed sheet as it is,
+    to 1, with lamplight coming through it and showing what is inside."""
     mat, nt = _new_material(name)
     bsdf = _principled(nt)
     coord = _node(nt, "ShaderNodeTexCoord")
@@ -176,23 +177,26 @@ def letter_face(colour_path, glow_path, width, height, glow_strength, name):
         scale.inputs[1].default_value = 1.0 / size
         scale.inputs[2].default_value = 0.5
         nt.links.new(scale.outputs["Value"], uv.inputs[slot])
-    img = _node(nt, "ShaderNodeTexImage", interpolation="Cubic", extension="EXTEND")
-    img.image = bpy.data.images.load(colour_path)
-    img.image.colorspace_settings.name = "sRGB"
-    nt.links.new(uv.outputs["Vector"], img.inputs["Vector"])
-    nt.links.new(img.outputs["Color"], bsdf.inputs["Base Color"])
+
+    def picture(path, colour_space):
+        img = _node(nt, "ShaderNodeTexImage", interpolation="Cubic", extension="EXTEND")
+        img.image = bpy.data.images.load(path, check_existing=True)
+        img.image.colorspace_settings.name = colour_space
+        nt.links.new(uv.outputs["Vector"], img.inputs["Vector"])
+        return img.outputs["Color"]
+
+    plain = picture(plain_path, "sRGB")
     bsdf.inputs["Roughness"].default_value = 0.8
     bsdf.inputs["Specular IOR Level"].default_value = 0.15
-    if glow_path:
-        glow = _node(nt, "ShaderNodeTexImage", interpolation="Cubic", extension="EXTEND")
-        glow.image = bpy.data.images.load(glow_path)
-        glow.image.colorspace_settings.name = "Non-Color"
-        nt.links.new(uv.outputs["Vector"], glow.inputs["Vector"])
-        power = _node(nt, "ShaderNodeMath", operation="MULTIPLY")
-        nt.links.new(glow.outputs["Color"], power.inputs[0])
-        power.inputs[1].default_value = glow_strength
-        bsdf.inputs["Emission Color"].default_value = _rgba(palette.GLOW)
-        nt.links.new(power.outputs["Value"], bsdf.inputs["Emission Strength"])
+    if lit <= 0.0 or not lit_path:
+        nt.links.new(plain, bsdf.inputs["Base Color"])
+        return mat
+    nt.links.new(_mix_colour(nt, float(lit), plain, picture(lit_path, "sRGB")), bsdf.inputs["Base Color"])
+    power = _node(nt, "ShaderNodeMath", operation="MULTIPLY")
+    nt.links.new(picture(glow_path, "Non-Color"), power.inputs[0])
+    power.inputs[1].default_value = glow_strength * lit
+    bsdf.inputs["Emission Color"].default_value = _rgba(palette.GLOW)
+    nt.links.new(power.outputs["Value"], bsdf.inputs["Emission Strength"])
     return mat
 
 

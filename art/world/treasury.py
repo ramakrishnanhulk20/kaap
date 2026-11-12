@@ -79,7 +79,7 @@ def _door():
     return objs
 
 
-def _window():
+def _window(gold):
     """A round barred window with gold shining out: this is where the money is."""
     turn = math.radians(-90.0 + WINDOW_TURN_DEG)
     spot = np.array([RADIUS * math.cos(turn), RADIUS * math.sin(turn), 1.16])
@@ -89,7 +89,7 @@ def _window():
     objs.append(shapes.make_object("window_rim", shapes.moved(v, spot, yaw), f, materials.brass()))
     v, f = shapes.sphere(0.18, (1.0, 0.12, 1.0), segments=32, rings=16)
     objs.append(shapes.make_object("window_gold", shapes.moved(v, spot, yaw), f,
-                                   materials.light(palette.GOLD_GLOW, 2.2, "window_gold")))
+                                   materials.light(palette.GOLD_GLOW, 2.2 * gold, "window_gold")))
     for x in (-0.065, 0.065):
         path = np.array([[x, -0.03, -0.17], [x, -0.03, 0.17]])
         v, f = shapes.tube(shapes.resample(path, 0.02), 0.014, 8, up=(0.0, 1.0, 0.0))
@@ -118,36 +118,50 @@ def wrap_point(turns, height):
     return np.array([r * math.cos(math.radians(turn)), r * math.sin(math.radians(turn)), height])
 
 
-def _thread():
-    """Three turns of thread round the tower, knotted in a bow across the door, with two tasselled ends."""
-    cotton = materials.thread(palette.TURMERIC)
-    knot_out = LEAF_FRONT + CORD_REACH + 0.01
-    points = []
-    for t in np.linspace(0.0, 1.0, 360 * WRAPS // 2 + 1):
-        height = 0.87 + 0.24 * t + 0.012 * math.sin(11.0 * t)
-        # The first and last few degrees bend to the knot, so both ends disappear into it.
-        near_end = max(0.0, 1.0 - min(t, 1.0 - t) * WRAPS * 360.0 / 14.0)
-        points.append(wrap_point(t * WRAPS, height + (KNOT_HEIGHT - height) * near_end))
-    path = shapes.resample(np.array(points), 0.011)
-    v, f = shapes.cord(path, CORD_PLY, CORD_HELIX, CORD_PERIOD)
-    objs = [shapes.make_object("thread_wraps", v, f, cotton)]
+THREAD_START_TURNS = -28.0 / 360.0
 
-    knot = np.array([0.0, -(knot_out + 0.05), KNOT_HEIGHT])
-    v, f = shapes.sphere(0.095, (1.0, 0.8, 0.88), segments=24, rings=12)
-    objs.append(shapes.make_object("thread_knot", v + knot, f, cotton))
+
+def wrap_path():
+    """The thread's way round the tower, in the tower's own frame: it arrives on the wall to one
+    side of the door, climbs slowly through three turns and ends at the knot in front of the door."""
+    points = []
+    steps = 360 * WRAPS // 2 + 1
+    for t in np.linspace(0.0, 1.0, steps):
+        turns = THREAD_START_TURNS + t * (WRAPS - THREAD_START_TURNS)
+        height = 0.87 + 0.24 * t + 0.012 * math.sin(11.0 * t)
+        # The last few degrees bend to the knot, so the end disappears into it.
+        near_end = max(0.0, 1.0 - (1.0 - t) * (WRAPS - THREAD_START_TURNS) * 360.0 / 14.0)
+        points.append(wrap_point(turns, height + (KNOT_HEIGHT - height) * near_end))
+    return np.array(points)
+
+
+def build_bow(amount, sway=0.0):
+    """The knot across the door with its two loops and two tasselled ends. `amount` grows it from
+    nothing (0) to tied (1); `sway` is the angle of the slow swing of the hanging ends."""
+    if amount <= 0.02:
+        return []
+    cotton = materials.thread(palette.TURMERIC)
+    grown = min(1.0, amount)
+    knot = np.array([0.0, -(LEAF_FRONT + CORD_REACH + 0.06), KNOT_HEIGHT])
+    v, f = shapes.sphere(0.095 * min(1.0, 0.4 + 0.6 * amount), (1.0, 0.8, 0.88), segments=24, rings=12)
+    objs = [shapes.make_object("thread_knot", v + knot, f, cotton)]
     for side in (-1, 1):
-        loop = [knot, knot + [side * 0.2, -0.02, 0.17], knot + [side * 0.37, -0.03, 0.1],
-                knot + [side * 0.3, -0.02, -0.03], knot + [side * 0.04, 0.0, -0.01]]
+        reach = np.array([side * amount, amount, amount])
+        loop = [knot, knot + reach * [0.2, -0.02, 0.17], knot + reach * [0.37, -0.03, 0.1],
+                knot + reach * [0.3, -0.02, -0.03], knot + reach * [0.04, 0.0, -0.01]]
         v, f = shapes.cord(shapes.catmull(loop, 0.01), 0.026, 0.023, 0.15, up=(0.0, -1.0, 0.0))
         objs.append(shapes.make_object("thread_bow%d" % side, v, f, cotton))
-        drop = 0.5 if side < 0 else 0.4
-        tail = [knot, knot + [side * 0.07, -0.02, -0.16], knot + [side * 0.13, -0.03, -0.34], knot + [side * 0.11, -0.03, -drop]]
+        drop = (0.5 if side < 0 else 0.4) * grown
+        swing = 0.018 * math.sin(2.0 * sway + side)
+        tail = [knot, knot + [side * 0.07, -0.02, -0.32 * drop], knot + [side * 0.13 + 0.5 * swing, -0.03, -0.68 * drop],
+                knot + [side * 0.11 + swing, -0.03, -drop]]
         v, f = shapes.cord(shapes.catmull(tail, 0.01), 0.026, 0.023, 0.15, up=(0.0, -1.0, 0.0))
         objs.append(shapes.make_object("thread_tail%d" % side, v, f, cotton))
         v, f = shapes.lathe([(0.0, 0.03), (0.045, 0.01), (0.055, -0.03), (0.035, -0.06), (0.062, -0.19), (0.0, -0.19)], 24)
-        objs.append(shapes.make_object("thread_tassel%d" % side, v + knot + [side * 0.11, -0.03, -drop], f, cotton))
+        objs.append(shapes.make_object("thread_tassel%d" % side, v * grown + knot + [side * 0.11 + swing, -0.03, -drop], f, cotton))
     return objs
 
 
-def build_treasury():
-    return _tower() + _door() + _window() + _thread()
+def build_treasury(gold=1.0):
+    """The tower, its door and its window. `gold` scales how brightly the money inside shines."""
+    return _tower() + _door() + _window(gold)
