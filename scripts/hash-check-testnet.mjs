@@ -17,6 +17,8 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   REPO, TGAS, accountFor, baseEncode, blockAt, call, loadState, provider, refusal, returned, txLink, viewFinal, viewFinalRaw,
 } from './setup-demo-dao.mjs';
@@ -111,6 +113,11 @@ async function main() {
   const daoReceipt = filed.outcome.receipts_outcome.find((r) => r.outcome.executor_id === dao);
   const filedAt = await blockAt(daoReceipt.block_hash);
   console.log(`filed: proposal #${id} "${DESCRIPTION}", bond ${bond} yocto, at block ${filedAt.height}: ${txLink(filed.hash)}`);
+  // The demo's own planted text is no secret, and a page that shows this proposal needs the exact
+  // bytes behind its hash, so they are saved beside the deployment record.
+  const saved = { network: 'testnet', dao, proposal_id: id, description: DESCRIPTION, message, nonce_base64: nonce.toString('base64'), recipient, standard: 'nep413', payload_hash: payloadHash, filed_tx: filed.hash, filed_at_block: filedAt.height };
+  writeFileSync(join(REPO, 'deployments', 'demo-hash-text.json'), [JSON.stringify(saved, null, 2), ''].join(String.fromCharCode(10)));
+  console.log('saved the text behind the hash to deployments/demo-hash-text.json');
 
   const read = await viewFinalRaw(dao, 'get_proposal', { id });
   const block = await provider.viewBlock({ blockId: read.blockHeight });

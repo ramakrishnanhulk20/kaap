@@ -1,0 +1,13 @@
+{
+  "network": "testnet",
+  "dao": "kaap-dao-1111072928.testnet",
+  "proposal_id": 7,
+  "description": "Authenticate DAO for confidential intents",
+  "message": "{\"signer_id\":\"kaap-dao-1111072928.testnet\",\"deadline\":\"2026-11-19T05:47:23.917Z\",\"intents\":[{\"intent\":\"add_public_key\",\"public_key\":\"ed25519:5ASfrukKB4z2oA1bUfQUD5xSc5vuzArLJydBhBTmFNzM\"}]}",
+  "nonce_base64": "d6+zmX7K5ICgx3PI/RLOM5SyCdvLRJR+ZuV8/cE/K8M=",
+  "recipient": "intents.near",
+  "standard": "nep413",
+  "payload_hash": "fcccd15e7cfcd8489a86c110f3e466c66bb12bca6a32ff5ed0151f21d5d10c7f",
+  "filed_tx": "8yzyLUo3KYifzGxxMh3Azi7Qu5PiULasEcA5V42mmzg",
+  "filed_at_block": 277321553
+}
