@@ -18,9 +18,10 @@ use ed25519_dalek::{Signer as _, SigningKey};
 use kaap_verdict::{kind_hash, verdict_bytes, verdict_hash, AiStatus, FindingCode, Network, Severity, Verdict};
 use near_api::types::account::ContractState;
 use near_api::types::transaction::result::ExecutionFinalResult;
+use near_api::types::Reference;
 use near_api::{Account, AccountId, Chain, Contract, CryptoHash, NearGas, NearToken, NetworkConfig, Signer};
 use near_sandbox::config::{DEFAULT_GENESIS_ACCOUNT, DEFAULT_GENESIS_ACCOUNT_PRIVATE_KEY};
-use near_sandbox::Sandbox;
+use near_sandbox::{Sandbox, SandboxConfig};
 use serde_json::{json, Value};
 use tokio::sync::{Semaphore, SemaphorePermit};
 
@@ -41,6 +42,7 @@ const ONE_DAY_NS: u64 = 24 * 60 * 60 * 1_000_000_000;
 // testnet deploy uses the first one's public key until the sealed key replaces it.
 pub const VERDICT_KEY_SEED: [u8; 32] = [7; 32];
 pub const OTHER_KEY_SEED: [u8; 32] = [9; 32];
+pub const THIRD_KEY_SEED: [u8; 32] = [11; 32];
 
 /// Each sandbox is a full neard process, and cargo runs one test per core at once. On this 8 GB
 /// machine, with other builds running beside the tests, four sandboxes at a time is the cap.
@@ -92,6 +94,11 @@ fn outer_target_dir() -> Result<PathBuf> {
         .ok_or_else(|| anyhow::anyhow!("unexpected test binary path {}", exe.display()))
 }
 
+/// A file in this repository, by its path from the repo root.
+pub fn repo_path(relative: &str) -> PathBuf {
+    Path::new(REPO_ROOT).join(relative)
+}
+
 /// Reads the fetched mainnet binary and refuses to go on unless it is the 3.2 release.
 pub fn sputnik_wasm() -> Result<Vec<u8>> {
     let path = Path::new(SPUTNIK_WASM);
@@ -124,6 +131,10 @@ impl SealedSigner {
 
     pub fn other_key() -> Self {
         Self { key: SigningKey::from_bytes(&OTHER_KEY_SEED) }
+    }
+
+    pub fn third_key() -> Self {
+        Self { key: SigningKey::from_bytes(&THIRD_KEY_SEED) }
     }
 
     /// "ed25519:<base58>", the only spelling the contracts accept.
@@ -193,8 +204,22 @@ pub struct Env {
 
 impl Env {
     pub async fn start() -> Result<Self> {
+        Self::start_with(SandboxConfig::default()).await
+    }
+
+    /// A sandbox whose epochs are so long that skipping days of blocks is one jump; across an
+    /// epoch boundary the node fast-forwards one epoch at a time.
+    pub async fn start_with_long_epochs() -> Result<Self> {
+        Self::start_with(SandboxConfig {
+            additional_genesis: Some(json!({ "epoch_length": 1_000_000 })),
+            ..SandboxConfig::default()
+        })
+        .await
+    }
+
+    async fn start_with(config: SandboxConfig) -> Result<Self> {
         let slot = SANDBOX_SLOTS.acquire().await?;
-        let sandbox = Sandbox::start_sandbox().await?;
+        let sandbox = Sandbox::start_sandbox_with_config(config).await?;
         let network = NetworkConfig::from_rpc_url("sandbox", sandbox.rpc_addr.parse()?);
         // Accounts made by the sandbox share the genesis test key, which is public by design.
         let signer = Signer::from_secret_key(DEFAULT_GENESIS_ACCOUNT_PRIVATE_KEY.parse()?)?;
@@ -262,6 +287,41 @@ impl Env {
         Ok(Chain::block().fetch_from(&self.network).await?.header.timestamp / 1_000_000)
     }
 
+    /// Skips blocks until the block time is at least `target_ms`, and returns the block time
+    /// then. A skipped block moves the clock by about one block time (310 ms in the sandbox with
+    /// long epochs), so the rate is measured on a short skip first. Quick only on a sandbox from
+    /// `start_with_long_epochs`.
+    pub async fn advance_clock_to(&self, target_ms: u64) -> Result<u64> {
+        let mut now = self.chain_time_ms().await?;
+        let mut per_block_ms = 0;
+        for _ in 0..10 {
+            if now >= target_ms {
+                return self.wait_for_final_block(target_ms).await;
+            }
+            let blocks = if per_block_ms == 0 { 100 } else { (target_ms - now).div_ceil(per_block_ms) };
+            self.sandbox.fast_forward(blocks).await?;
+            let after = self.chain_time_ms().await?;
+            per_block_ms = ((after - now) / blocks).max(1);
+            now = after;
+        }
+        anyhow::bail!("the sandbox clock stopped at {now} ms, short of {target_ms}")
+    }
+
+    /// Waits until the last final block is at or past `target_ms`, and returns the block time then.
+    /// A transaction is signed against the final block, which trails the newest one. Straight
+    /// after a skip it can still be a block from before the skip, and a transaction signed
+    /// against that is refused as expired.
+    async fn wait_for_final_block(&self, target_ms: u64) -> Result<u64> {
+        for _ in 0..100 {
+            let last_final = Chain::block().at(Reference::Final).fetch_from(&self.network).await?;
+            if last_final.header.timestamp / 1_000_000 >= target_ms {
+                return self.chain_time_ms().await;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        anyhow::bail!("the final block never caught up with the skip to {target_ms} ms")
+    }
+
     /// Deploys Sputnik 3.2 to `dao` with a council role [council] holding "*:*" and a guard role
     /// [guard] holding only VoteReject, and checks the deployed code hash afterwards.
     pub async fn deploy_sputnik(
@@ -302,6 +362,18 @@ impl Env {
 
     /// Files a proposal from `proposer`, attaching exactly the bond the live policy asks for.
     pub async fn add_proposal(&self, dao: &AccountId, proposer: &AccountId, kind: Value) -> Result<u64> {
+        self.add_proposal_with_gas(dao, proposer, kind, NearGas::from_tgas(300)).await
+    }
+
+    /// `add_proposal` with the gas the proposer chooses; kinds near kaap-verdict's 256 KiB limit
+    /// need more than 300 Tgas to file.
+    pub async fn add_proposal_with_gas(
+        &self,
+        dao: &AccountId,
+        proposer: &AccountId,
+        kind: Value,
+        gas: NearGas,
+    ) -> Result<u64> {
         let bond: u128 = self.view(dao, "get_policy", json!({})).await?["proposal_bond"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("policy has no proposal_bond"))?
@@ -313,7 +385,7 @@ impl Env {
                 "add_proposal",
                 json!({ "proposal": { "description": "kaap guard test", "kind": kind } }),
                 NearToken::from_yoctonear(bond),
-                NearGas::from_tgas(300),
+                gas,
             )
             .await?;
         Ok(outcome.into_result()?.json::<u64>()?)
@@ -323,9 +395,20 @@ impl Env {
         self.view(dao, "get_proposal", json!({ "id": id })).await
     }
 
-    /// The kind as the DAO returns it, written back as compact JSON.
+    /// The `get_proposal` answer exactly as the DAO returned it, before any JSON parser saw it.
+    pub async fn proposal_text(&self, dao: &AccountId, id: u64) -> Result<String> {
+        let bytes = Contract(dao.clone())
+            .call_function("get_proposal", json!({ "id": id }))
+            .read_only_raw()
+            .fetch_from(&self.network)
+            .await?
+            .data;
+        Ok(String::from_utf8(bytes)?)
+    }
+
+    /// The kind exactly as the DAO returned it, the bytes Kaap's worker forwards to `veto`.
     pub async fn kind_json(&self, dao: &AccountId, id: u64) -> Result<String> {
-        Ok(serde_json::to_string(&self.proposal(dao, id).await?["kind"])?)
+        Ok(raw_field(&self.proposal_text(dao, id).await?, "kind")?.to_owned())
     }
 
     pub async fn status(&self, dao: &AccountId, id: u64) -> Result<String> {
@@ -359,6 +442,70 @@ pub const GUARD_REJECT_KINDS: [&str; 16] = [
     "policy_update_default_vote_policy",
     "policy_update_parameters",
 ];
+
+fn skip_space(text: &[u8], mut at: usize) -> usize {
+    while matches!(text.get(at), Some(b' ' | b'\n' | b'\r' | b'\t')) {
+        at += 1;
+    }
+    at
+}
+
+/// Where the one JSON value that starts at `start` ends, found by serde_json itself.
+fn value_end(text: &str, start: usize) -> Result<usize> {
+    let mut values = serde_json::Deserializer::from_str(&text[start..]).into_iter::<Value>();
+    match values.next() {
+        Some(Ok(_)) => Ok(start + values.byte_offset()),
+        Some(Err(error)) => Err(error.into()),
+        None => anyhow::bail!("no JSON value at byte {start}"),
+    }
+}
+
+/// The exact text of `field` in the JSON object `object`, not a re-encoding of it. serde_json
+/// here has no raw-value feature, so the slice is cut at the offsets its own parser reports.
+pub fn raw_field<'a>(object: &'a str, field: &str) -> Result<&'a str> {
+    let bytes = object.as_bytes();
+    let mut at = skip_space(bytes, 0);
+    anyhow::ensure!(bytes.get(at) == Some(&b'{'), "not a JSON object");
+    at += 1;
+    loop {
+        at = skip_space(bytes, at);
+        anyhow::ensure!(bytes.get(at) != Some(&b'}'), "no field {field:?}");
+        let key_end = value_end(object, at)?;
+        let key: String = serde_json::from_str(&object[at..key_end])?;
+        at = skip_space(bytes, key_end);
+        anyhow::ensure!(bytes.get(at) == Some(&b':'), "no colon after {key:?}");
+        at = skip_space(bytes, at + 1);
+        let end = value_end(object, at)?;
+        if key == field {
+            return Ok(&object[at..end]);
+        }
+        at = skip_space(bytes, end);
+        anyhow::ensure!(bytes.get(at) == Some(&b','), "no field {field:?}");
+        at += 1;
+    }
+}
+
+/// The exact text of every item of the JSON array `array`.
+pub fn raw_items(array: &str) -> Result<Vec<&str>> {
+    let bytes = array.as_bytes();
+    let mut at = skip_space(bytes, 0);
+    anyhow::ensure!(bytes.get(at) == Some(&b'['), "not a JSON array");
+    at = skip_space(bytes, at + 1);
+    let mut items = Vec::new();
+    if bytes.get(at) == Some(&b']') {
+        return Ok(items);
+    }
+    loop {
+        let end = value_end(array, at)?;
+        items.push(&array[at..end]);
+        at = skip_space(bytes, end);
+        match bytes.get(at) {
+            Some(b',') => at = skip_space(bytes, at + 1),
+            Some(b']') => return Ok(items),
+            _ => anyhow::bail!("unterminated array"),
+        }
+    }
+}
 
 /// The contract's own refusal text, or an error if the call went through.
 pub fn refusal(outcome: ExecutionFinalResult) -> Result<String> {

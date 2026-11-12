@@ -9,8 +9,10 @@
 // - the real sealed signer or OutLayer: the test holds the signing key (common::SealedSigner);
 // - TokenWeight voting, a Guard role with more than one member, or a guard matched by a second
 //   role; C16's "disarmed" report belongs to the worker and the CLI;
-// - a DAO call that runs out of gas inside a 300 Tgas veto: gas_report prints where that starts
-//   for policy kinds, and nothing asserts it;
+// - kind shapes other than the two measured (`Shape`): one that costs more per byte than both
+//   could need more than MIN_VETO_GAS at the size limit, and nothing here searches for one;
+// - a DAO whose own current policy is large, which makes every vote in that DAO cost more than
+//   in the two-role test DAO;
 // - two vetoes for one proposal in the same block, or the guard account running out of storage
 //   balance.
 
@@ -25,6 +27,11 @@ use serde_json::{json, Value};
 /// What a DAO attaches to `enroll`; the guard keeps the storage cost and sends the rest back.
 const ENROL_DEPOSIT: NearToken = NearToken::from_millinear(10);
 
+/// The least gas `veto` accepts, which every veto here attaches unless a test says otherwise.
+const VETO_GAS: NearGas = NearGas::from_gas(kaap_guard::MIN_VETO_GAS.as_gas());
+const MAX_VETO_KIND_BYTES: usize = kaap_guard::MAX_VETO_KIND_BYTES;
+const KEY_CHANGE_DELAY_MS: u64 = kaap_guard::KEY_CHANGE_DELAY_MS;
+
 struct World {
     env: Env,
     guard: AccountId,
@@ -38,7 +45,15 @@ struct World {
 /// A fresh sandbox with the guard deployed for the sandbox network, one Sputnik 3.2 DAO with the
 /// guard as its only Guard member, and that DAO enrolled by its own approved proposal.
 async fn world() -> Result<World> {
-    let env = Env::start().await?;
+    world_on(Env::start().await?).await
+}
+
+/// `world` on a sandbox whose clock can skip a day in one jump.
+async fn world_with_clock() -> Result<World> {
+    world_on(Env::start_with_long_epochs().await?).await
+}
+
+async fn world_on(env: Env) -> Result<World> {
     let guard = env.account("guard", 30).await?;
     let dao = env.account("dao", 50).await?;
     let alice = env.account("alice", 200).await?;
@@ -69,11 +84,16 @@ impl World {
         Ok(dao)
     }
 
-    /// Enrols `dao` the way a real DAO does: a FunctionCall proposal to `enroll` that attaches
-    /// the storage deposit, approved by its council. Returns the approval transaction, whose
-    /// guard receipt is the enrolment itself.
+    /// Enrols `dao` the way a real DAO does: a FunctionCall proposal to `enroll` with `{}` that
+    /// attaches the storage deposit, approved by its council. Returns the approval transaction,
+    /// whose guard receipt is the enrolment itself.
     async fn enroll(&self, dao: &AccountId) -> Result<ExecutionFinalResult> {
-        let approval = self.dao_calls_guard(dao, "enroll", ENROL_DEPOSIT).await?;
+        self.enroll_with(dao, json!({})).await
+    }
+
+    /// `enroll` with the arguments `args`.
+    async fn enroll_with(&self, dao: &AccountId, args: Value) -> Result<ExecutionFinalResult> {
+        let approval = self.dao_calls_guard(dao, "enroll", args, ENROL_DEPOSIT).await?;
         anyhow::ensure!(
             self.env.view(&self.guard, "is_enrolled", json!({ "dao": dao })).await? == json!(true),
             "{dao} approved its enrolment but the guard does not list it"
@@ -81,19 +101,25 @@ impl World {
         Ok(approval)
     }
 
+    async fn veto_unreadable(&self, dao: &AccountId) -> Result<bool> {
+        let on = self.env.view(&self.guard, "veto_unreadable", json!({ "dao": dao })).await?;
+        on.as_bool().ok_or_else(|| anyhow::anyhow!("veto_unreadable returned {on}"))
+    }
+
     /// `dao` files and approves a FunctionCall proposal that calls `method` on the guard with
-    /// `deposit` and the 10 Tgas the guard README tells DAOs to give it.
+    /// `args`, `deposit` and the 10 Tgas the guard README tells DAOs to give it.
     async fn dao_calls_guard(
         &self,
         dao: &AccountId,
         method: &str,
+        args: Value,
         deposit: NearToken,
     ) -> Result<ExecutionFinalResult> {
         let kind = json!({ "FunctionCall": {
             "receiver_id": self.guard,
             "actions": [{
                 "method_name": method,
-                "args": b64(b"{}"),
+                "args": b64(serde_json::to_string(&args)?.as_bytes()),
                 "deposit": deposit.as_yoctonear().to_string(),
                 "gas": NearGas::from_tgas(10).as_gas().to_string()
             }]
@@ -144,8 +170,7 @@ impl World {
         signature_b64: &str,
         kind_json: &str,
     ) -> Result<ExecutionFinalResult> {
-        self.veto_raw_with_gas(verdict_b64, signature_b64, kind_json, NearGas::from_tgas(300))
-            .await
+        self.veto_raw_with_gas(verdict_b64, signature_b64, kind_json, VETO_GAS).await
     }
 
     /// `veto_raw` with the gas the stranger chooses to attach.
@@ -227,6 +252,43 @@ impl World {
             )
             .await
     }
+
+    /// Calls a guard method that takes no arguments, with 30 Tgas.
+    async fn call_guard(&self, caller: &AccountId, method: &str, deposit_yocto: u128) -> Result<ExecutionFinalResult> {
+        self.env
+            .call(caller, &self.guard, method, json!({}), NearToken::from_yoctonear(deposit_yocto), NearGas::from_tgas(30))
+            .await
+    }
+
+    async fn accepted_key(&self) -> Result<Value> {
+        self.env.view(&self.guard, "accepted_key", json!({})).await
+    }
+
+    async fn pending_key(&self) -> Result<Value> {
+        self.env.view(&self.guard, "pending_key", json!({})).await
+    }
+
+    /// The owner announces `key`; returns the time it may take effect, after checking the event.
+    async fn announce(&self, key: &str) -> Result<u64> {
+        let before = self.env.chain_time_ms().await?;
+        let outcome = self.set_accepted_key(&self.owner, key, 1).await?;
+        let after = self.env.chain_time_ms().await?;
+        let all = events(&outcome);
+        outcome.into_result()?;
+        let announced = event(&all, "key_change_announced")?;
+        let entry = &announced["data"][0];
+        anyhow::ensure!(entry["old_key"] == self.accepted_key().await?, "{announced}");
+        anyhow::ensure!(entry["new_key"] == json!(key), "{announced}");
+        let due = entry["effective_at_ms"]
+            .as_u64()
+            .ok_or_else(|| anyhow::anyhow!("no effective_at_ms in {announced}"))?;
+        anyhow::ensure!(
+            (before + KEY_CHANGE_DELAY_MS..=after + KEY_CHANGE_DELAY_MS).contains(&due),
+            "the change is due at {due}, not a day after the announcement ({before} to {after})"
+        );
+        anyhow::ensure!(self.pending_key().await? == json!({ "key": key, "effective_at_ms": due }));
+        Ok(due)
+    }
 }
 
 fn event<'a>(all: &'a [Value], name: &str) -> Result<&'a Value> {
@@ -267,7 +329,7 @@ async fn enrolment_storage_is_paid_by_the_dao_and_refunded_when_it_leaves() -> R
     };
     let start = w.env.account_view(&w.guard).await?;
 
-    w.enroll(&dao).await?.into_result()?;
+    w.enroll_with(&dao, json!({ "veto_unreadable": true })).await?.into_result()?;
     let enrolled = w.env.account_view(&w.guard).await?;
     let added = enrolled.storage_usage - start.storage_usage;
     let kept = enrolled.amount.as_yoctonear() - start.amount.as_yoctonear();
@@ -275,12 +337,21 @@ async fn enrolment_storage_is_paid_by_the_dao_and_refunded_when_it_leaves() -> R
     anyhow::ensure!(added > 0 && free(&enrolled) >= free(&start), "the guard paid for the enrolment");
     anyhow::ensure!(kept < ENROL_DEPOSIT.as_yoctonear() / 2, "the excess deposit was not refunded");
 
-    w.dao_calls_guard(&dao, "unenroll", NearToken::from_yoctonear(0)).await?.into_result()?;
+    // The setting was paid for with the enrolment, so changing it adds nothing.
+    let zero = NearToken::from_yoctonear(0);
+    w.dao_calls_guard(&dao, "set_veto_unreadable", json!({ "on": false }), zero).await?.into_result()?;
+    anyhow::ensure!(!w.veto_unreadable(&dao).await?, "the mode did not change");
+    let changed = w.env.account_view(&w.guard).await?;
+    anyhow::ensure!(changed.storage_usage == enrolled.storage_usage, "changing the mode added storage");
+    w.dao_calls_guard(&dao, "set_veto_unreadable", json!({ "on": true }), zero).await?.into_result()?;
+
+    w.dao_calls_guard(&dao, "unenroll", json!({}), zero).await?.into_result()?;
     let left = w.env.account_view(&w.guard).await?;
     println!("unenrolment freed {} bytes", enrolled.storage_usage - left.storage_usage);
     anyhow::ensure!(left.storage_usage == start.storage_usage, "unenrolment left storage behind");
     anyhow::ensure!(free(&left) >= free(&start), "the unenrolment refund came out of the guard's own balance");
     anyhow::ensure!(w.env.view(&w.guard, "is_enrolled", json!({ "dao": dao })).await? == json!(false));
+    anyhow::ensure!(!w.veto_unreadable(&dao).await?, "unenrolment kept the strict setting");
 
     let text = assert_refused(
         w.env.call(&w.stranger, &w.guard, "enroll", json!({}), NearToken::from_yoctonear(0), NearGas::from_tgas(30)).await?,
@@ -437,6 +508,81 @@ async fn hash_unverified_needs_a_high_code_beside_it_to_back_a_veto() -> Result<
     w.assert_rejected_by_guard(&w.dao, id).await
 }
 
+/// A request that shows only a hash Kaap could not read: no other finding, risk Unknown.
+fn hash_only(verdict: Verdict) -> Verdict {
+    Verdict {
+        risk: Severity::Unknown,
+        floor: Severity::Unknown,
+        findings: vec![FindingCode::HashUnverified],
+        ai_status: AiStatus::Unavailable,
+        ..verdict
+    }
+}
+
+/// C8: an unread hash alerts by default and is vetoed only for a treasury that chose it at
+/// enrolment. The same verdict is refused, then lands once its DAO enrols again in strict mode.
+#[tokio::test]
+async fn strict_mode_is_chosen_at_enrolment_and_vetoes_a_hash_only_request() -> Result<()> {
+    let w = world().await?;
+    anyhow::ensure!(!w.veto_unreadable(&w.dao).await?, "a DAO enrolled with {{}} must not be strict");
+    let id = w.file_transfer(&w.dao, 5).await?;
+    let (kind_json, verdict) = w.fresh(&w.dao, id).await?;
+    let unread = hash_only(verdict);
+    let outcome = w.veto(&unread, &kind_json).await?;
+    w.assert_refused_untouched(outcome, "ERR_NOT_VETOABLE", &w.dao, id, &unread).await?;
+
+    let zero = NearToken::from_yoctonear(0);
+    w.dao_calls_guard(&w.dao, "unenroll", json!({}), zero).await?.into_result()?;
+    let approval = w.enroll_with(&w.dao, json!({ "veto_unreadable": true })).await?;
+    let all = events(&approval);
+    approval.into_result()?;
+    let enrolled = event(&all, "enrolled")?;
+    anyhow::ensure!(enrolled["data"] == json!([{ "dao": w.dao, "veto_unreadable": true }]), "{enrolled}");
+    anyhow::ensure!(w.veto_unreadable(&w.dao).await?);
+
+    let outcome = w.veto(&unread, &kind_json).await?;
+    print_outcomes("hash-only verdict on a strict DAO", &outcome);
+    outcome.into_result()?;
+    w.assert_rejected_by_guard(&w.dao, id).await?;
+    anyhow::ensure!(w.veto_result(&unread).await? == json!("Ok"));
+
+    // Every verdict without HASH_UNVERIFIED still meets the ordinary rule or nothing.
+    let id = w.file_transfer(&w.dao, 5).await?;
+    let (kind_json, verdict) = w.fresh(&w.dao, id).await?;
+    let ai_only = Verdict {
+        floor: Severity::Medium,
+        findings: vec![FindingCode::NewRecipient],
+        ai_status: AiStatus::Verified,
+        ..verdict.clone()
+    };
+    let outcome = w.veto(&ai_only, &kind_json).await?;
+    w.assert_refused_untouched(outcome, "ERR_NOT_VETOABLE", &w.dao, id, &ai_only).await?;
+    w.veto(&verdict, &kind_json).await?.into_result()?;
+    w.assert_rejected_by_guard(&w.dao, id).await
+}
+
+#[tokio::test]
+async fn only_an_enrolled_dao_sets_its_own_mode_and_each_change_is_announced() -> Result<()> {
+    let w = world().await?;
+    let zero = NearToken::from_yoctonear(0);
+    let text = assert_refused(
+        w.env.call(&w.stranger, &w.guard, "set_veto_unreadable", json!({ "on": true }), zero, NearGas::from_tgas(30)).await?,
+        "ERR_NOT_ENROLLED",
+    )?;
+    println!("set_veto_unreadable from an account that never enrolled refused with: {text}");
+    anyhow::ensure!(!w.veto_unreadable(&w.stranger).await?);
+
+    for on in [true, false] {
+        let approval = w.dao_calls_guard(&w.dao, "set_veto_unreadable", json!({ "on": on }), zero).await?;
+        let all = events(&approval);
+        approval.into_result()?;
+        let changed = event(&all, "mode_changed")?;
+        anyhow::ensure!(changed["data"] == json!([{ "dao": w.dao, "veto_unreadable": on }]), "{changed}");
+        anyhow::ensure!(w.veto_unreadable(&w.dao).await? == on, "the view did not follow the change to {on}");
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn err_expired_one_millisecond_after_expiry() -> Result<()> {
     let w = world().await?;
@@ -543,6 +689,84 @@ async fn a_kind_with_its_sets_in_another_order_is_accepted_and_the_vote_lands() 
     Ok(())
 }
 
+/// The kind is exactly as long as kaap-verdict's canonical form of it, the rule `veto` applies.
+fn ensure_canonical_length(source: &str, kind: &str) -> Result<()> {
+    let canonical = kaap_verdict::canonical_kind(kind.as_bytes())
+        .map_err(|error| anyhow::anyhow!("{source}: {error}"))?;
+    anyhow::ensure!(
+        canonical.len() == kind.len(),
+        "{source}: the kind is {} bytes and its canonical form {}: {}",
+        kind.len(),
+        canonical.len(),
+        kind.chars().take(300).collect::<String>()
+    );
+    Ok(())
+}
+
+/// Every `get_proposal` answer recorded from testnet and mainnet in the CLI's fixtures, and every
+/// proposal inside a recorded `get_proposals` answer, as the RPC returned it. The worker forwards
+/// these exact bytes, so none may break the guard's length rule.
+#[test]
+fn every_recorded_kind_is_as_long_as_its_canonical_form() -> Result<()> {
+    let mut paths: Vec<_> = std::fs::read_dir(repo_path("packages/cli/test/fixtures"))?
+        .map(|entry| entry.map(|e| e.path()))
+        .collect::<Result<_, _>>()?;
+    paths.sort();
+    let (mut single, mut listed) = (0, 0);
+    for path in paths.iter().filter(|p| p.extension().is_some_and(|e| e == "json")) {
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
+        let fixture: Value = serde_json::from_str(&std::fs::read_to_string(path)?)?;
+        for exchange in fixture["exchanges"].as_array().into_iter().flatten() {
+            let Some(body) = exchange["body"].as_str().and_then(|b| serde_json::from_str::<Value>(b).ok())
+            else {
+                continue;
+            };
+            let method = body["params"]["method_name"].as_str().unwrap_or_default();
+            if method != "get_proposal" && method != "get_proposals" {
+                continue;
+            }
+            let answer: Value = serde_json::from_str(exchange["text"].as_str().unwrap_or("null"))?;
+            let Some(text) = answer["result"]["result_text"].as_str() else {
+                continue;
+            };
+            let proposals = if method == "get_proposal" { vec![text] } else { raw_items(text)? };
+            for proposal in proposals {
+                ensure_canonical_length(&format!("{name} {method}"), raw_field(proposal, "kind")?)?;
+                if method == "get_proposal" {
+                    single += 1;
+                } else {
+                    listed += 1;
+                }
+            }
+        }
+    }
+    println!("{single} recorded get_proposal kinds and {listed} kinds inside get_proposals answers, each at its canonical length");
+    anyhow::ensure!(single > 0 && listed > 0, "the fixtures hold no proposal answers");
+    Ok(())
+}
+
+/// Every planted evaluation record, filed on the real Sputnik 3.2 binary and read back raw.
+#[tokio::test]
+async fn every_planted_kind_reads_back_from_sputnik_at_its_canonical_length() -> Result<()> {
+    let w = world().await?;
+    let records = std::fs::read_to_string(repo_path("eval/planted/planted.jsonl"))?;
+    let mut filed = 0;
+    for line in records.lines().filter(|line| !line.trim().is_empty()) {
+        let record: Value = serde_json::from_str(line)?;
+        let name = record["id"].as_str().unwrap_or("?").to_owned();
+        let id = w
+            .env
+            .add_proposal(&w.dao, &w.alice, record["kind"].clone())
+            .await
+            .map_err(|error| anyhow::anyhow!("{name}: add_proposal refused it: {error}"))?;
+        ensure_canonical_length(&name, &w.env.kind_json(&w.dao, id).await?)?;
+        filed += 1;
+    }
+    println!("{filed} planted kinds read back from Sputnik, each at its canonical length");
+    anyhow::ensure!(filed == 73, "expected the 73 planted records, filed {filed}");
+    Ok(())
+}
+
 /// The guard's own receipt succeeded, the DAO's failed with `dao_error`, the callback recorded
 /// the refusal and said so, and the proposal kept the status `status`.
 async fn assert_refusal_recorded(
@@ -636,8 +860,46 @@ async fn a_veto_on_a_proposal_its_members_already_decided_is_refused_and_recorde
     Ok(())
 }
 
+/// C19: a key change is announced, and for a day the accepted key alone counts; then anyone may
+/// apply it, and from then on only the new key counts.
 #[tokio::test]
-async fn only_the_owner_changes_the_key_and_only_with_one_yocto() -> Result<()> {
+async fn a_key_change_waits_a_day_and_until_then_only_the_accepted_key_counts() -> Result<()> {
+    let w = world_with_clock().await?;
+    let original = w.sealed.public_key();
+    let next = SealedSigner::other_key();
+    assert_refused(w.call_guard(&w.stranger, "apply_key_change", 0).await?, "ERR_NO_PENDING_KEY")?;
+
+    let due = w.announce(&next.public_key()).await?;
+    anyhow::ensure!(w.accepted_key().await? == json!(original), "the announcement changed the key");
+
+    let id = w.file_transfer(&w.dao, 5).await?;
+    let (kind_json, verdict) = w.fresh(&w.dao, id).await?;
+    let (verdict_b64, signature_b64) = next.sign(&verdict);
+    let outcome = w.veto_raw(&verdict_b64, &signature_b64, &kind_json).await?;
+    w.assert_refused_untouched(outcome, "ERR_BAD_SIGNATURE", &w.dao, id, &verdict).await?;
+    let text = assert_refused(w.call_guard(&w.stranger, "apply_key_change", 0).await?, "ERR_TOO_EARLY")?;
+    println!("apply_key_change a day early refused with: {text}");
+
+    let now = w.env.advance_clock_to(due).await?;
+    println!("clock moved to {now}, the change was due at {due}");
+    let applied = w.call_guard(&w.stranger, "apply_key_change", 0).await?;
+    let all = events(&applied);
+    applied.into_result()?;
+    let changed = event(&all, "key_changed")?;
+    anyhow::ensure!(changed["data"] == json!([{ "old_key": original, "new_key": next.public_key() }]), "{changed}");
+    anyhow::ensure!(w.accepted_key().await? == json!(next.public_key()));
+    anyhow::ensure!(w.pending_key().await?.is_null());
+
+    let (kind_json, verdict) = w.fresh(&w.dao, id).await?;
+    let outcome = w.veto(&verdict, &kind_json).await?;
+    w.assert_refused_untouched(outcome, "ERR_BAD_SIGNATURE", &w.dao, id, &verdict).await?;
+    let (verdict_b64, signature_b64) = next.sign(&verdict);
+    w.veto_raw(&verdict_b64, &signature_b64, &kind_json).await?.into_result()?;
+    w.assert_rejected_by_guard(&w.dao, id).await
+}
+
+#[tokio::test]
+async fn only_the_owner_announces_or_cancels_a_key_change_and_only_with_one_yocto() -> Result<()> {
     let w = world().await?;
     let original = w.sealed.public_key();
     let replacement = SealedSigner::other_key().public_key();
@@ -646,21 +908,50 @@ async fn only_the_owner_changes_the_key_and_only_with_one_yocto() -> Result<()> 
     println!("set_accepted_key from a non-owner refused with: {text}");
     let text = assert_refused(w.set_accepted_key(&w.owner, &replacement, 0).await?, "ERR_NEED_ONE_YOCTO")?;
     println!("set_accepted_key without one yoctoNEAR refused with: {text}");
-    anyhow::ensure!(w.env.view(&w.guard, "accepted_key", json!({})).await? == json!(original));
+    anyhow::ensure!(w.pending_key().await?.is_null());
+    assert_refused(w.call_guard(&w.owner, "cancel_key_change", 1).await?, "ERR_NO_PENDING_KEY")?;
 
-    let changed = w.set_accepted_key(&w.owner, &replacement, 1).await?;
-    let all = events(&changed);
-    changed.into_result()?;
-    let event = event(&all, "key_changed")?;
-    anyhow::ensure!(event["data"][0]["old_key"] == json!(original), "{event}");
-    anyhow::ensure!(event["data"][0]["new_key"] == json!(replacement), "{event}");
-    anyhow::ensure!(w.env.view(&w.guard, "accepted_key", json!({})).await? == json!(replacement));
+    w.announce(&replacement).await?;
+    let text = assert_refused(w.call_guard(&w.stranger, "cancel_key_change", 1).await?, "ERR_NOT_OWNER")?;
+    println!("cancel_key_change from a non-owner refused with: {text}");
+    let text = assert_refused(w.call_guard(&w.owner, "cancel_key_change", 0).await?, "ERR_NEED_ONE_YOCTO")?;
+    println!("cancel_key_change without one yoctoNEAR refused with: {text}");
 
-    // A verdict the old key signed stops working at once.
+    let cancelled = w.call_guard(&w.owner, "cancel_key_change", 1).await?;
+    let all = events(&cancelled);
+    cancelled.into_result()?;
+    let event = event(&all, "key_change_cancelled")?;
+    anyhow::ensure!(event["data"] == json!([{ "key": replacement }]), "{event}");
+    anyhow::ensure!(w.pending_key().await?.is_null());
+    anyhow::ensure!(w.accepted_key().await? == json!(original));
+    assert_refused(w.call_guard(&w.stranger, "apply_key_change", 0).await?, "ERR_NO_PENDING_KEY")?;
+
+    // The accepted key never stopped counting.
     let id = w.file_transfer(&w.dao, 5).await?;
     let (kind_json, verdict) = w.fresh(&w.dao, id).await?;
-    let outcome = w.veto(&verdict, &kind_json).await?;
-    w.assert_refused_untouched(outcome, "ERR_BAD_SIGNATURE", &w.dao, id, &verdict).await
+    w.veto(&verdict, &kind_json).await?.into_result()?;
+    w.assert_rejected_by_guard(&w.dao, id).await
+}
+
+#[tokio::test]
+async fn a_second_announcement_replaces_the_first_and_restarts_the_clock() -> Result<()> {
+    let w = world_with_clock().await?;
+    let first = SealedSigner::other_key().public_key();
+    let second = SealedSigner::third_key().public_key();
+    let first_due = w.announce(&first).await?;
+    w.env.advance_clock_to(first_due - KEY_CHANGE_DELAY_MS / 2).await?;
+    let second_due = w.announce(&second).await?;
+    anyhow::ensure!(second_due >= first_due + KEY_CHANGE_DELAY_MS / 2, "the clock did not restart");
+
+    let now = w.env.advance_clock_to(first_due).await?;
+    anyhow::ensure!(now < second_due, "the clock overshot the second announcement's time");
+    let text = assert_refused(w.call_guard(&w.stranger, "apply_key_change", 0).await?, "ERR_TOO_EARLY")?;
+    println!("apply_key_change at the first announcement's time refused with: {text}");
+
+    w.env.advance_clock_to(second_due).await?;
+    w.call_guard(&w.stranger, "apply_key_change", 0).await?.into_result()?;
+    anyhow::ensure!(w.accepted_key().await? == json!(second));
+    Ok(())
 }
 
 #[tokio::test]
@@ -701,9 +992,59 @@ async fn ownership_moves_only_when_the_proposed_owner_accepts() -> Result<()> {
     Ok(())
 }
 
+/// How a big policy kind spends its bytes. Both cost the most per byte of any kind measured:
+/// many short strings in sets the guard sorts and Sputnik hashes.
+#[derive(Clone, Copy, Debug)]
+enum Shape {
+    /// 80 roles, each a list of members named like `m3-41.sandbox`.
+    ManyRoles,
+    /// Two roles with very long lists of the shortest account ids NEAR allows, so each byte
+    /// carries as many members as it can.
+    LongLists,
+}
+
+impl Shape {
+    fn roles(self) -> usize {
+        match self {
+            Shape::ManyRoles => 80,
+            Shape::LongLists => 2,
+        }
+    }
+
+    fn member(self, role: usize, n: usize) -> String {
+        match self {
+            Shape::ManyRoles => format!("m{role}-{n}.{NETWORK}"),
+            Shape::LongLists => short_id(n),
+        }
+    }
+}
+
+/// The `n`th string of two or more characters from [0-9a-z], shortest first. Each is a valid
+/// NEAR account id and none repeats.
+fn short_id(n: usize) -> String {
+    const DIGITS: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
+    let (mut len, mut first) = (2u32, 0);
+    while n - first >= 36usize.pow(len) {
+        first += 36usize.pow(len);
+        len += 1;
+    }
+    let mut rest = n - first;
+    let mut id = vec![b'0'; len as usize];
+    for slot in id.iter_mut().rev() {
+        *slot = DIGITS[rest % 36];
+        rest /= 36;
+    }
+    String::from_utf8(id).unwrap_or_default()
+}
+
 /// A full ChangePolicy body with `roles` extra Group roles of `members` members each, on top of
 /// the council and guard roles, to measure what a big policy kind costs.
 fn big_policy(w: &World, roles: usize, members: usize) -> Value {
+    shaped_policy(w, Shape::ManyRoles, roles, members, 0)
+}
+
+/// `big_policy` in `shape`, with `pad` more characters in the last role's name.
+fn shaped_policy(w: &World, shape: Shape, roles: usize, members: usize, pad: usize) -> Value {
     let permissions: Vec<String> = GUARD_REJECT_KINDS
         .iter()
         .map(|label| format!("{label}:AddProposal"))
@@ -715,9 +1056,10 @@ fn big_policy(w: &World, roles: usize, members: usize) -> Value {
                 "vote_policy": {} }),
     ];
     for r in 0..roles {
-        let group: Vec<String> = (0..members).map(|m| format!("m{r}-{m}.{NETWORK}")).collect();
+        let group: Vec<String> = (0..members).map(|m| shape.member(r, m)).collect();
+        let pad = if r + 1 == roles { "x".repeat(pad) } else { String::new() };
         all_roles.push(json!({
-            "name": format!("role-{r}"),
+            "name": format!("role-{r}{pad}"),
             "kind": { "Group": group },
             "permissions": permissions,
             "vote_policy": { "transfer": { "weight_kind": "RoleWeight", "quorum": "0", "threshold": [1, 2] } }
@@ -733,9 +1075,120 @@ fn big_policy(w: &World, roles: usize, members: usize) -> Value {
     })
 }
 
+/// A ChangePolicy kind in `shape` of exactly `bytes` bytes of compact JSON: as many members per
+/// role as fit, and the last role's name padded for the rest.
+fn policy_kind_of_size(w: &World, shape: Shape, bytes: usize) -> Result<Value> {
+    let kind = |members, pad| {
+        json!({ "ChangePolicy": { "policy": shaped_policy(w, shape, shape.roles(), members, pad) } })
+    };
+    let size = |members| serde_json::to_string(&kind(members, 0)).map(|text| text.len());
+    let (mut fits, mut over) = (0, 1);
+    while size(over)? <= bytes {
+        fits = over;
+        over *= 2;
+    }
+    while over - fits > 1 {
+        let mid = (fits + over) / 2;
+        if size(mid)? <= bytes {
+            fits = mid;
+        } else {
+            over = mid;
+        }
+    }
+    let pad = bytes
+        .checked_sub(size(fits)?)
+        .ok_or_else(|| anyhow::anyhow!("no {shape:?} policy is as small as {bytes} bytes"))?;
+    let kind = kind(fits, pad);
+    anyhow::ensure!(serde_json::to_string(&kind)?.len() == bytes);
+    Ok(kind)
+}
+
+/// Files a ChangePolicy of exactly `bytes` bytes, as the DAO returns it, and gives back its id and
+/// that text.
+async fn file_policy_of_size(w: &World, shape: Shape, bytes: usize) -> Result<(u64, String)> {
+    let kind = policy_kind_of_size(w, shape, bytes)?;
+    let id = w
+        .env
+        .add_proposal_with_gas(&w.dao, &w.alice, kind, NearGas::from_tgas(1000))
+        .await?;
+    let kind_json = w.env.kind_json(&w.dao, id).await?;
+    anyhow::ensure!(
+        kind_json.len() == bytes,
+        "the DAO returned {} bytes for a {bytes}-byte {shape:?} kind",
+        kind_json.len()
+    );
+    Ok((id, kind_json))
+}
+
+/// Gas burnt by the guard's `veto` receipt and by the DAO's `act_proposal` receipt, in Tgas.
+fn guard_and_dao_gas(w: &World, outcome: &ExecutionFinalResult) -> Result<(f64, f64)> {
+    let tgas = |gas: NearGas| gas.as_gas() as f64 / 1e12;
+    let guard = step_on(outcome, &w.guard)?[0].gas_burnt;
+    let dao = step_on(outcome, &w.dao).map(|steps| steps[0].gas_burnt).unwrap_or(NearGas::from_gas(0));
+    Ok((tgas(guard), tgas(dao)))
+}
+
+/// The invariant at the edge: a kind of exactly `MAX_VETO_KIND_BYTES`, in each measured shape,
+/// lands with exactly `MIN_VETO_GAS`, one gas unit less is refused and leaves the verdict usable,
+/// and one byte more is refused before anything is read.
+#[tokio::test]
+async fn a_kind_at_the_size_limit_lands_with_exactly_the_least_gas_and_nothing_less() -> Result<()> {
+    let w = world().await?;
+    for shape in [Shape::ManyRoles, Shape::LongLists] {
+        let (id, kind_json) = file_policy_of_size(&w, shape, MAX_VETO_KIND_BYTES).await?;
+        let expires = w.env.chain_time_ms().await? + TEN_MINUTES_MS;
+        let verdict = vetoable_verdict(&w.guard, &w.dao, id, &kind_json, expires)?;
+        let (verdict_b64, signature_b64) = w.sealed.sign(&verdict);
+
+        let one_less = NearGas::from_gas(VETO_GAS.as_gas() - 1);
+        let short = w.veto_raw_with_gas(&verdict_b64, &signature_b64, &kind_json, one_less).await?;
+        println!("LIMIT | {shape:?} | {MAX_VETO_KIND_BYTES} | {} gas | refused", one_less.as_gas());
+        w.assert_refused_untouched(short, "ERR_NOT_ENOUGH_GAS", &w.dao, id, &verdict).await?;
+
+        let outcome = w.veto_raw_with_gas(&verdict_b64, &signature_b64, &kind_json, VETO_GAS).await?;
+        let (guard, dao) = guard_and_dao_gas(&w, &outcome)?;
+        println!("LIMIT | {shape:?} | {MAX_VETO_KIND_BYTES} | {} gas | landed | guard {guard:.2} | DAO {dao:.2}", VETO_GAS.as_gas());
+        outcome.into_result()?;
+        w.assert_rejected_by_guard(&w.dao, id).await?;
+        anyhow::ensure!(w.veto_result(&verdict).await? == json!("Ok"));
+    }
+
+    let (id, kind_json) = file_policy_of_size(&w, Shape::LongLists, MAX_VETO_KIND_BYTES + 1).await?;
+    let (_, verdict) = w.fresh(&w.dao, id).await?;
+    let outcome = w.veto(&verdict, &kind_json).await?;
+    w.assert_refused_untouched(outcome, "ERR_KIND_TOO_LARGE", &w.dao, id, &verdict).await
+}
+
+/// A padded spelling of a large kind hashes like the kind the verdict reviewed, so only its length
+/// tells it apart. Past the size limit it is refused for its size, within it for its length; the
+/// verdict stays unused either way, and the kind as the DAO returned it then lands.
+#[tokio::test]
+async fn a_padded_spelling_of_a_large_kind_is_refused_and_the_compact_one_then_lands() -> Result<()> {
+    let w = world().await?;
+    let kind = json!({ "ChangePolicy": { "policy": big_policy(&w, 80, 110) } });
+    let id = w.env.add_proposal(&w.dao, &w.alice, kind).await?;
+    let (kind_json, verdict) = w.fresh(&w.dao, id).await?;
+
+    let probe = format!("{kind_json}{}", " ".repeat(60_000));
+    anyhow::ensure!(kaap_verdict::kind_hash(probe.as_bytes()).ok() == Some(verdict.kind_hash));
+    println!("a {}-byte kind with 60,000 spaces after it is {} bytes", kind_json.len(), probe.len());
+    let outcome = w.veto(&verdict, &probe).await?;
+    w.assert_refused_untouched(outcome, "ERR_KIND_TOO_LARGE", &w.dao, id, &verdict).await?;
+
+    let padded = format!("{kind_json}{}", " ".repeat(MAX_VETO_KIND_BYTES - kind_json.len()));
+    anyhow::ensure!(kaap_verdict::kind_hash(padded.as_bytes()).ok() == Some(verdict.kind_hash));
+    let outcome = w.veto(&verdict, &padded).await?;
+    w.assert_refused_untouched(outcome, "ERR_BAD_KIND", &w.dao, id, &verdict).await?;
+
+    w.veto(&verdict, &kind_json).await?.into_result()?;
+    w.assert_rejected_by_guard(&w.dao, id).await?;
+    anyhow::ensure!(w.veto_result(&verdict).await? == json!("Ok"));
+    Ok(())
+}
+
 /// A signed verdict is public before the worker uses it. A stranger who sends it first with
 /// enough gas for the guard but too little for the DAO's vote on a big kind must not be able to
-/// spend it: the short call fails whole, and the honest 300 Tgas call still lands.
+/// spend it: the short call fails whole, and a call with `MIN_VETO_GAS` still lands.
 #[tokio::test]
 async fn a_veto_with_too_little_gas_for_the_vote_fails_whole_and_leaves_the_verdict_usable(
 ) -> Result<()> {
@@ -759,7 +1212,7 @@ async fn a_veto_with_too_little_gas_for_the_vote_fails_whole_and_leaves_the_verd
     anyhow::ensure!(w.veto_result(&verdict).await?.is_null(), "a refused call left a veto result");
 
     let outcome = w.veto_raw(&verdict_b64, &signature_b64, &kind_json).await?;
-    print_outcomes("the same verdict with 300 Tgas", &outcome);
+    print_outcomes("the same verdict with MIN_VETO_GAS", &outcome);
     outcome.into_result()?;
     w.assert_rejected_by_guard(&w.dao, id).await?;
     anyhow::ensure!(w.veto_result(&verdict).await? == json!("Ok"));
@@ -771,14 +1224,27 @@ async fn a_veto_with_too_little_gas_for_the_vote_fails_whole_and_leaves_the_verd
 /// `cargo test -p kaap-guard --test guard_sandbox gas_report -- --nocapture`.
 #[tokio::test]
 async fn gas_report() -> Result<()> {
-    let w = world().await?;
+    let w = world_with_clock().await?;
     let guard_bytes = || async { Ok::<u64, anyhow::Error>(w.env.account_view(&w.guard).await?.storage_usage) };
+    let zero = NearToken::from_yoctonear(0);
     let dao = w.add_dao("dao-gas", false).await?;
     let before = guard_bytes().await?;
     let enrolment = w.enroll(&dao).await?;
     report_gas("enroll, through the DAO's approved FunctionCall proposal", &enrolment);
     enrolment.into_result()?;
     println!("GAS | enroll | guard storage added (bytes) | {}", guard_bytes().await? - before);
+
+    let strict = w.add_dao("dao-gas-strict", false).await?;
+    let before = guard_bytes().await?;
+    let enrolment = w.enroll_with(&strict, json!({ "veto_unreadable": true })).await?;
+    report_gas("enroll with veto_unreadable true, through the DAO's approved proposal", &enrolment);
+    enrolment.into_result()?;
+    println!("GAS | enroll strict | guard storage added (bytes) | {}", guard_bytes().await? - before);
+    let before = guard_bytes().await?;
+    let change = w.dao_calls_guard(&strict, "set_veto_unreadable", json!({ "on": false }), zero).await?;
+    report_gas("set_veto_unreadable, through the DAO's approved proposal", &change);
+    change.into_result()?;
+    println!("GAS | set_veto_unreadable | guard storage added (bytes) | {}", guard_bytes().await? as i64 - before as i64);
 
     let id = w.file_transfer(&w.dao, 5).await?;
     let (kind_json, verdict) = w.fresh(&w.dao, id).await?;
@@ -799,8 +1265,8 @@ async fn gas_report() -> Result<()> {
         w.assert_rejected_by_guard(&w.dao, id).await?;
     }
 
-    // Padding a FunctionCall's args is the cheapest way for a proposer to make a kind big. These
-    // are printed, not asserted, to show where a veto stops fitting in one 300 Tgas transaction.
+    // Padding a FunctionCall's args is the cheapest way for a proposer to make a kind big; all
+    // three stay under the size limit. Printed, not asserted.
     for raw_bytes in [48 * 1024, 96 * 1024, 144 * 1024] {
         let kind = json!({ "FunctionCall": {
             "receiver_id": format!("target.{NETWORK}"),
@@ -822,55 +1288,22 @@ async fn gas_report() -> Result<()> {
             w.env.status(&w.dao, id).await?
         );
     }
-    // Policy-shaped kinds cost the most per byte. These find the largest one whose vote still
-    // lands with the 300 Tgas every veto attaches, in steps of about 1.4 KB from 200 KB, then two
-    // far above it, the last just under kaap-verdict's 256 KiB limit.
-    let mut largest_landed = 0;
-    let mut smallest_not_landed = usize::MAX;
-    for (roles, members) in [
-        (60, 80),
-        (80, 110),
-        (80, 112),
-        (80, 113),
-        (80, 114),
-        (80, 115),
-        (80, 116),
-        (80, 117),
-        (80, 118),
-        (80, 120),
-        (80, 130),
-        (80, 154),
-    ] {
-        let kind = json!({ "ChangePolicy": { "policy": big_policy(&w, roles, members) } });
-        let id = match w.env.add_proposal(&w.dao, &w.alice, kind).await {
-            Ok(id) => id,
-            Err(error) => {
-                println!("GAS | ChangePolicy of {roles} roles x {members} members | add_proposal failed: {error}");
-                continue;
-            }
-        };
-        let (kind_json, verdict) = w.fresh(&w.dao, id).await?;
-        let outcome = w.veto(&verdict, &kind_json).await?;
-        report_gas(&format!("veto, large ChangePolicy kind of {} bytes", kind_json.len()), &outcome);
-        let status = w.env.status(&w.dao, id).await?;
-        println!(
-            "GAS | large ChangePolicy kind of {} bytes | status after veto | {status} | veto_result {}",
-            kind_json.len(),
-            w.veto_result(&verdict).await?
-        );
-        if status == "Rejected" {
-            largest_landed = largest_landed.max(kind_json.len());
-        } else {
-            let reason = match step_on(&outcome, &w.dao)?[0].clone().into_result() {
-                Ok(_) => "the DAO's receipt succeeded".to_owned(),
-                Err(error) => receipt_error(&error),
-            };
-            println!("GAS | large ChangePolicy kind of {} bytes | DAO receipt | {reason}", kind_json.len());
-            smallest_not_landed = smallest_not_landed.min(kind_json.len());
+    // Policy kinds cost the most per byte. Both measured shapes at half the size limit and at the
+    // limit, with the MIN_VETO_GAS every veto attaches, then the refusal one byte over it.
+    for shape in [Shape::ManyRoles, Shape::LongLists] {
+        for bytes in [MAX_VETO_KIND_BYTES / 2, MAX_VETO_KIND_BYTES] {
+            let (id, _) = file_policy_of_size(&w, shape, bytes).await?;
+            let (kind_json, verdict) = w.fresh(&w.dao, id).await?;
+            let outcome = w.veto(&verdict, &kind_json).await?;
+            report_gas(&format!("veto, {shape:?} ChangePolicy kind of {bytes} bytes"), &outcome);
+            outcome.into_result()?;
+            w.assert_rejected_by_guard(&w.dao, id).await?;
         }
     }
-    println!("GAS | largest ChangePolicy kind whose vote landed with 300 Tgas | {largest_landed} bytes");
-    println!("GAS | smallest ChangePolicy kind whose vote did not land | {smallest_not_landed} bytes");
+    let (id, _) = file_policy_of_size(&w, Shape::LongLists, MAX_VETO_KIND_BYTES + 1).await?;
+    let (kind_json, verdict) = w.fresh(&w.dao, id).await?;
+    let outcome = w.veto(&verdict, &kind_json).await?;
+    report_gas("veto of a kind one byte over the limit (ERR_KIND_TOO_LARGE)", &outcome);
 
     let id = w.file_transfer(&w.dao, 5).await?;
     let stored = w.env.kind_json(&w.dao, id).await?;
@@ -912,5 +1345,21 @@ async fn gas_report() -> Result<()> {
         report_gas(&format!("enrolled_daos page of {limit}, called as a transaction"), &page);
         anyhow::ensure!(page.into_result()?.json::<Vec<String>>()?.len() as u64 == limit);
     }
+
+    let next = SealedSigner::other_key().public_key();
+    let announced = w.set_accepted_key(&w.owner, &next, 1).await?;
+    report_gas("set_accepted_key, announcing a change", &announced);
+    announced.into_result()?;
+    let cancelled = w.call_guard(&w.owner, "cancel_key_change", 1).await?;
+    report_gas("cancel_key_change", &cancelled);
+    cancelled.into_result()?;
+    let before = guard_bytes().await?;
+    let due = w.announce(&next).await?;
+    println!("GAS | pending key | guard storage added (bytes) | {}", guard_bytes().await? - before);
+    w.env.advance_clock_to(due).await?;
+    let applied = w.call_guard(&w.stranger, "apply_key_change", 0).await?;
+    report_gas("apply_key_change, by an account with no role", &applied);
+    applied.into_result()?;
+    println!("GAS | apply_key_change | guard storage left over (bytes) | {}", guard_bytes().await? as i64 - before as i64);
     Ok(())
 }

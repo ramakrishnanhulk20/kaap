@@ -25,13 +25,14 @@ const STRANGER: &str = "stranger.near";
 // Fixed throwaway seeds keep every run identical; they guard nothing.
 const VERDICT_SEED: [u8; 32] = [7; 32];
 const OTHER_SEED: [u8; 32] = [9; 32];
+const THIRD_SEED: [u8; 32] = [11; 32];
 const NOW_MS: u64 = 1_800_000_000_000;
 const PROPOSAL_ID: u64 = 7;
 // 0.01 NEAR, what a DAO is told to attach to `enroll`.
 const ENROL_DEPOSIT: u128 = 10_000_000_000_000_000_000_000;
-// Spaces on purpose: the guard must forward these bytes as they are, not a re-encoding (C5).
-const KIND: &str =
-    r#"{"Transfer": {"token_id": "", "receiver_id": "a1ice.near", "amount": "1000", "msg": null}}"#;
+// Sputnik's own key order, which is not the canonical order: the guard must forward these bytes as
+// they are, not a re-encoding (C5).
+const KIND: &str = r#"{"Transfer":{"token_id":"","receiver_id":"a1ice.near","amount":"1000","msg":null}}"#;
 
 fn account(id: &str) -> AccountId {
     id.parse().unwrap()
@@ -43,13 +44,17 @@ fn key_string(seed: &[u8; 32]) -> String {
 }
 
 fn set_context(predecessor: &str, deposit_yocto: u128) {
+    set_context_at(predecessor, deposit_yocto, NOW_MS);
+}
+
+fn set_context_at(predecessor: &str, deposit_yocto: u128, now_ms: u64) {
     testing_env!(VMContextBuilder::new()
         .current_account_id(account(GUARD))
         .predecessor_account_id(account(predecessor))
         .signer_account_id(account(predecessor))
         .attached_deposit(NearToken::from_yoctonear(deposit_yocto))
-        .block_timestamp(NOW_MS * 1_000_000)
-        .prepaid_gas(Gas::from_tgas(300))
+        .block_timestamp(now_ms * 1_000_000)
+        .prepaid_gas(MIN_VETO_GAS)
         .build());
 }
 
@@ -100,16 +105,25 @@ fn signed(v: &Verdict, seed: &[u8; 32]) -> (Base64VecU8, Base64VecU8) {
 
 /// A guard for the sandbox network with DAO enrolled, and the context left at STRANGER.
 fn guard() -> KaapGuard {
+    guard_with(None)
+}
+
+/// `guard`, with DAO enrolled by `enroll(veto_unreadable)`.
+fn guard_with(veto_unreadable: Option<bool>) -> KaapGuard {
     set_context(GUARD, 0);
     let mut guard = KaapGuard::new(account(OWNER), key_string(&VERDICT_SEED), "sandbox".to_owned());
     set_context(DAO, ENROL_DEPOSIT);
-    guard.enroll();
+    guard.enroll(veto_unreadable);
     set_context(STRANGER, 0);
     guard
 }
 
 fn veto(guard: &mut KaapGuard, v: &Verdict, kind: &str) {
-    let (verdict, signature) = signed(v, &VERDICT_SEED);
+    veto_signed_by(guard, v, kind, &VERDICT_SEED);
+}
+
+fn veto_signed_by(guard: &mut KaapGuard, v: &Verdict, kind: &str, seed: &[u8; 32]) {
+    let (verdict, signature) = signed(v, seed);
     let _ = guard.veto(verdict, signature, kind.to_owned());
 }
 
@@ -174,25 +188,68 @@ fn veto_rule_follows_c9() {
     use AiStatus::*;
     use FindingCode::*;
     use Severity::*;
+    // (verdict, vetoable for a DAO that kept the default, vetoable for a strict DAO)
     let cases = [
-        (with(Critical, Critical, vec![DescContradicts], Unavailable), true),
-        (with(Critical, High, vec![PolicyAddsApprover], Verified), true),
-        (with(Critical, High, vec![PolicyAddsApprover], Unverified), false),
-        (with(Critical, High, vec![PolicyAddsApprover], Unavailable), false),
-        (with(Critical, Medium, vec![NewRecipient], Verified), false),
-        (with(Critical, Unknown, vec![HashUnverified, UnknownCall], Verified), false),
-        (with(Critical, Critical, vec![HashUnverified], Verified), false),
-        (with(Critical, Critical, vec![], Verified), false),
-        (with(High, Critical, vec![DescContradicts], Verified), false),
+        (with(Critical, Critical, vec![DescContradicts], Unavailable), true, true),
+        (with(Critical, High, vec![PolicyAddsApprover], Verified), true, true),
+        (with(Critical, High, vec![PolicyAddsApprover], Unverified), false, false),
+        (with(Critical, High, vec![PolicyAddsApprover], Unavailable), false, false),
+        (with(Critical, Medium, vec![NewRecipient], Verified), false, false),
+        (with(Critical, Unknown, vec![HashUnverified, UnknownCall], Verified), false, true),
+        (with(Critical, Critical, vec![HashUnverified], Verified), false, true),
+        (with(Critical, Critical, vec![], Verified), false, false),
+        (with(High, Critical, vec![DescContradicts], Verified), false, false),
         // A medium code beside an unexplained hash cannot back a veto; a high one can.
-        (with(Critical, High, vec![HashUnverified, NewRecipient], Verified), false),
-        (with(Critical, High, vec![HashUnverified, PolicyAddsApprover], Verified), true),
-        (with(Critical, Critical, vec![HashUnverified, LargeAmount, CrossChainOut], Verified), false),
-        (with(Critical, Critical, vec![EmptyDescription, HashMismatch], Unavailable), true),
+        (with(Critical, High, vec![HashUnverified, NewRecipient], Verified), false, true),
+        (with(Critical, High, vec![HashUnverified, PolicyAddsApprover], Verified), true, true),
+        (with(Critical, Critical, vec![HashUnverified, LargeAmount, CrossChainOut], Verified), false, true),
+        (with(Critical, Critical, vec![EmptyDescription, HashMismatch], Unavailable), true, true),
+        // On the strict path the risk need not be critical: the unread hash is the reason.
+        (with(Unknown, Unknown, vec![HashUnverified], Unavailable), false, true),
+        (with(Low, Low, vec![HashUnverified], Unavailable), false, true),
+        (with(Medium, Medium, vec![NewRecipient, UnknownCall], Unavailable), false, false),
     ];
-    for (v, vetoable) in cases {
-        assert_eq!(is_vetoable(&v), vetoable, "{v:?}");
+    for (v, vetoable, vetoable_when_strict) in cases {
+        assert_eq!(is_vetoable(&v, false), vetoable, "{v:?}");
+        assert_eq!(is_vetoable(&v, true), vetoable_when_strict, "strict: {v:?}");
     }
+}
+
+/// A request that shows only a hash Kaap could not read: no other finding, risk Unknown.
+fn hash_only() -> Verdict {
+    Verdict {
+        risk: Severity::Unknown,
+        floor: Severity::Unknown,
+        findings: vec![FindingCode::HashUnverified],
+        ..verdict()
+    }
+}
+
+#[test]
+#[should_panic(expected = "ERR_NOT_VETOABLE")]
+fn err_not_vetoable_for_a_hash_only_request_on_a_dao_that_kept_the_default() {
+    let mut g = guard();
+    veto(&mut g, &hash_only(), KIND);
+}
+
+#[test]
+fn a_strict_dao_has_a_hash_only_request_vetoed() {
+    let mut g = guard_with(Some(true));
+    veto(&mut g, &hash_only(), KIND);
+    assert!(g.was_used(hex::encode(verdict_hash(&hash_only()))));
+}
+
+#[test]
+#[should_panic(expected = "ERR_NOT_VETOABLE")]
+fn err_not_vetoable_on_a_strict_dao_for_an_ai_only_critical() {
+    let mut g = guard_with(Some(true));
+    let v = Verdict {
+        floor: Severity::Medium,
+        findings: vec![FindingCode::NewRecipient],
+        ai_status: AiStatus::Verified,
+        ..verdict()
+    };
+    veto(&mut g, &v, KIND);
 }
 
 #[test]
@@ -221,10 +278,11 @@ fn hash_unverified_beside_a_high_code_is_vetoable() {
     assert!(g.was_used(hex::encode(verdict_hash(&v))));
 }
 
-// Bytes that are not a verdict, so the gas check is shown to come before every other check.
+// Bytes that are not a verdict and a kind over the size limit, so the gas check is shown to come
+// before every other check.
 #[test]
 #[should_panic(expected = "ERR_NOT_ENOUGH_GAS")]
-fn err_not_enough_gas_one_unit_below_300_tgas_comes_first() {
+fn err_not_enough_gas_one_unit_below_the_minimum_comes_first() {
     let mut g = guard();
     testing_env!(VMContextBuilder::new()
         .current_account_id(account(GUARD))
@@ -233,7 +291,70 @@ fn err_not_enough_gas_one_unit_below_300_tgas_comes_first() {
         .prepaid_gas(Gas::from_gas(MIN_VETO_GAS.as_gas() - 1))
         .build());
     let (_, signature) = signed(&verdict(), &VERDICT_SEED);
-    let _ = g.veto(Base64VecU8(vec![1, 2, 3]), signature, KIND.to_owned());
+    let _ = g.veto(Base64VecU8(vec![1, 2, 3]), signature, " ".repeat(MAX_VETO_KIND_BYTES + 1));
+}
+
+// Whether the gas lands a kind at the limit is measured in the sandbox (guard.rs); this pins the
+// rounding the two constants were set by.
+#[test]
+fn the_veto_gas_and_the_size_limit_are_rounded_as_measured_and_fit_one_transaction() {
+    const {
+        assert!(MIN_VETO_GAS.as_gas() <= Gas::from_tgas(1_000).as_gas());
+        assert!(MIN_VETO_GAS.as_gas().is_multiple_of(Gas::from_tgas(50).as_gas()));
+        assert!(MAX_VETO_KIND_BYTES.is_multiple_of(1024));
+        assert!(MAX_VETO_KIND_BYTES < kaap_verdict::canonical::MAX_CANON_BYTES);
+    }
+}
+
+// Bytes that are not a verdict, so the size check is shown to come before the verdict is read.
+#[test]
+#[should_panic(expected = "ERR_KIND_TOO_LARGE")]
+fn err_kind_too_large_one_byte_over_the_limit_comes_before_the_verdict_is_read() {
+    let mut g = guard();
+    let (_, signature) = signed(&verdict(), &VERDICT_SEED);
+    let _ = g.veto(Base64VecU8(vec![1, 2, 3]), signature, " ".repeat(MAX_VETO_KIND_BYTES + 1));
+}
+
+#[test]
+#[should_panic(expected = "ERR_BAD_VERDICT")]
+fn a_kind_of_exactly_the_size_limit_passes_the_size_check() {
+    let mut g = guard();
+    let (_, signature) = signed(&verdict(), &VERDICT_SEED);
+    let _ = g.veto(Base64VecU8(vec![1, 2, 3]), signature, " ".repeat(MAX_VETO_KIND_BYTES));
+}
+
+// The padded text has the reviewed kind's hash; only its length gives it away.
+#[test]
+#[should_panic(expected = "ERR_BAD_KIND")]
+fn err_bad_kind_for_the_reviewed_kind_padded_with_spaces() {
+    let mut g = guard();
+    let padded = format!("{KIND}{}", " ".repeat(1_000));
+    assert_eq!(kind_hash(padded.as_bytes()).unwrap(), verdict().kind_hash);
+    veto(&mut g, &verdict(), &padded);
+}
+
+#[test]
+#[should_panic(expected = "ERR_BAD_KIND")]
+fn err_bad_kind_for_the_reviewed_kind_with_an_escaped_letter() {
+    let mut g = guard();
+    // The first letter of the receiver written as a JSON escape: a backslash, then u0061.
+    let escaped = KIND.replace("a1ice", &format!("{}u00611ice", char::from(0x5c)));
+    assert_eq!(escaped.len(), KIND.len() + 5);
+    assert_eq!(kind_hash(escaped.as_bytes()).unwrap(), verdict().kind_hash);
+    veto(&mut g, &verdict(), &escaped);
+}
+
+#[test]
+fn a_kind_with_its_keys_in_another_order_is_accepted_and_forwarded_as_given() {
+    let mut g = guard();
+    let reordered = r#"{"Transfer":{"msg":null,"amount":"1000","receiver_id":"a1ice.near","token_id":""}}"#;
+    assert_eq!(reordered.len(), KIND.len());
+    veto(&mut g, &verdict(), reordered);
+    let expected = format!(r#"{{"id":{PROPOSAL_ID},"action":"VoteReject","proposal":{reordered}}}"#);
+    match get_created_receipts()[0].actions.as_slice() {
+        [MockAction::FunctionCallWeight { args, .. }] => assert_eq!(args, expected.as_bytes()),
+        other => panic!("the DAO receipt must hold one function call, got {other:?}"),
+    }
 }
 
 #[test]
@@ -403,18 +524,79 @@ fn err_bad_network_for_a_capitalised_name() {
     let _ = KaapGuard::new(account(OWNER), key_string(&VERDICT_SEED), "Testnet".to_owned());
 }
 
+/// A guard with nothing enrolled, the context left at DAO with the enrolment deposit attached.
+fn bare_guard() -> KaapGuard {
+    set_context(GUARD, 0);
+    let g = KaapGuard::new(account(OWNER), key_string(&VERDICT_SEED), "sandbox".to_owned());
+    set_context(DAO, ENROL_DEPOSIT);
+    g
+}
+
 #[test]
 fn enroll_emits_the_nep297_event_in_the_agreed_shape() {
-    set_context(GUARD, 0);
-    let mut g = KaapGuard::new(account(OWNER), key_string(&VERDICT_SEED), "sandbox".to_owned());
-    set_context(DAO, ENROL_DEPOSIT);
-    g.enroll();
+    let mut g = bare_guard();
+    g.enroll(None);
     assert!(g.is_enrolled(account(DAO)));
-    let logs = get_logs();
+    assert!(!g.veto_unreadable(account(DAO)));
     assert_eq!(
-        logs.last().unwrap(),
-        r#"EVENT_JSON:{"standard":"kaap-guard","version":"1.0.0","event":"enrolled","data":[{"dao":"dao.near"}]}"#
+        get_logs().last().unwrap(),
+        r#"EVENT_JSON:{"standard":"kaap-guard","version":"1.0.0","event":"enrolled","data":[{"dao":"dao.near","veto_unreadable":false}]}"#
     );
+}
+
+#[test]
+fn enroll_with_veto_unreadable_makes_the_dao_strict_and_says_so() {
+    let mut g = bare_guard();
+    g.enroll(Some(true));
+    assert!(g.veto_unreadable(account(DAO)));
+    assert_eq!(
+        get_logs().last().unwrap(),
+        r#"EVENT_JSON:{"standard":"kaap-guard","version":"1.0.0","event":"enrolled","data":[{"dao":"dao.near","veto_unreadable":true}]}"#
+    );
+}
+
+#[test]
+fn veto_unreadable_is_false_for_an_account_that_never_enrolled() {
+    let g = guard_with(Some(true));
+    assert!(!g.veto_unreadable(account(STRANGER)));
+}
+
+#[test]
+#[should_panic(expected = "ERR_NOT_ENROLLED")]
+fn err_not_enrolled_on_set_veto_unreadable() {
+    let mut g = guard();
+    g.set_veto_unreadable(true);
+}
+
+#[test]
+fn set_veto_unreadable_changes_only_the_callers_setting_writes_no_storage_and_says_so() {
+    let mut g = guard();
+    set_context("other-dao.near", ENROL_DEPOSIT);
+    g.enroll(None);
+    set_context(DAO, 0);
+    let before = env::storage_usage();
+    g.set_veto_unreadable(true);
+    g.enrolled.flush();
+    assert_eq!(env::storage_usage(), before);
+    assert!(g.veto_unreadable(account(DAO)));
+    assert!(!g.veto_unreadable(account("other-dao.near")));
+    assert_eq!(
+        get_logs().last().unwrap(),
+        r#"EVENT_JSON:{"standard":"kaap-guard","version":"1.0.0","event":"mode_changed","data":[{"dao":"dao.near","veto_unreadable":true}]}"#
+    );
+    g.set_veto_unreadable(false);
+    assert!(!g.veto_unreadable(account(DAO)));
+}
+
+#[test]
+fn unenroll_clears_the_setting() {
+    let mut g = guard_with(Some(true));
+    set_context(DAO, 0);
+    g.unenroll();
+    assert!(!g.veto_unreadable(account(DAO)));
+    set_context(DAO, ENROL_DEPOSIT);
+    g.enroll(None);
+    assert!(!g.veto_unreadable(account(DAO)), "a new enrolment must not inherit the old setting");
 }
 
 #[test]
@@ -422,7 +604,7 @@ fn enroll_emits_the_nep297_event_in_the_agreed_shape() {
 fn err_already_enrolled() {
     let mut g = guard();
     set_context(DAO, ENROL_DEPOSIT);
-    g.enroll();
+    g.enroll(Some(true));
 }
 
 #[test]
@@ -454,11 +636,11 @@ fn refund_sent_to(who: &str) -> NearToken {
     }
 }
 
-/// Enrols `who` and returns what the storage cost and what came back.
-fn enrol_and_measure(g: &mut KaapGuard, who: &str) -> (NearToken, NearToken) {
+/// Enrols `who` with `veto_unreadable` and returns what the storage cost and what came back.
+fn enrol_and_measure(g: &mut KaapGuard, who: &str, veto_unreadable: Option<bool>) -> (NearToken, NearToken) {
     set_context(who, ENROL_DEPOSIT);
     let before = env::storage_usage();
-    g.enroll();
+    g.enroll(veto_unreadable);
     let cost = storage_cost(env::storage_usage() - before);
     (cost, refund_sent_to(who))
 }
@@ -468,15 +650,18 @@ fn enrol_and_measure(g: &mut KaapGuard, who: &str) -> (NearToken, NearToken) {
 fn err_not_enough_deposit_on_enroll() {
     let mut g = guard();
     set_context("new-dao.near", 1);
-    g.enroll();
+    g.enroll(None);
 }
 
 #[test]
 fn enroll_charges_the_storage_it_writes_and_refunds_the_rest() {
     let mut g = guard();
-    let (cost, refund) = enrol_and_measure(&mut g, "new-dao.near");
+    let (cost, refund) = enrol_and_measure(&mut g, "new-dao-a.near", None);
     assert!(!cost.is_zero());
     assert_eq!(refund, NearToken::from_yoctonear(ENROL_DEPOSIT).saturating_sub(cost));
+    // An entry's size follows its account id, so the two names have the same length.
+    let (strict_cost, _) = enrol_and_measure(&mut g, "new-dao-b.near", Some(true));
+    assert_eq!(strict_cost, cost, "the setting's storage is paid at enrolment whatever its value");
 }
 
 #[test]
@@ -484,8 +669,8 @@ fn unenroll_refunds_exactly_what_each_enrolment_charged() {
     let mut g = guard();
     let short = "a.near";
     let long = "a-much-longer-dao-name-for-the-storage-test.sputnik-dao.near";
-    let (short_cost, _) = enrol_and_measure(&mut g, short);
-    let (long_cost, _) = enrol_and_measure(&mut g, long);
+    let (short_cost, _) = enrol_and_measure(&mut g, short, None);
+    let (long_cost, _) = enrol_and_measure(&mut g, long, Some(true));
     assert!(long_cost > short_cost);
 
     // The short entry leaves first, so the long one moves into its slot in the set.
@@ -505,7 +690,7 @@ fn enrolled_daos_pages_and_caps_the_limit() {
     let mut g = guard();
     for i in 0..(MAX_ENROLLED_PAGE + 5) {
         set_context(&format!("dao-{i}.near"), ENROL_DEPOSIT);
-        g.enroll();
+        g.enroll(None);
     }
     let total = MAX_ENROLLED_PAGE + 6;
     assert_eq!(g.enrolled_daos(0, 1_000).len() as u64, MAX_ENROLLED_PAGE);
@@ -539,12 +724,72 @@ fn err_bad_key_on_set_accepted_key() {
     g.set_accepted_key(key_string(&OTHER_SEED).replace("ed25519", "ED25519"));
 }
 
-#[test]
-fn set_accepted_key_swaps_the_key_and_says_so() {
+/// The owner announces the key of `seed` at `at_ms`; the context is left at the owner, so the
+/// call's logs can still be read.
+fn announce(g: &mut KaapGuard, seed: &[u8; 32], at_ms: u64) {
+    set_context_at(OWNER, 1, at_ms);
+    g.set_accepted_key(key_string(seed));
+}
+
+const DUE_MS: u64 = NOW_MS + KEY_CHANGE_DELAY_MS;
+
+/// A guard whose accepted key moved to OTHER_SEED's at DUE_MS, the context left at STRANGER then.
+fn changed_guard() -> KaapGuard {
     let mut g = guard();
-    set_context(OWNER, 1);
-    g.set_accepted_key(key_string(&OTHER_SEED));
+    announce(&mut g, &OTHER_SEED, NOW_MS);
+    set_context_at(STRANGER, 0, DUE_MS);
+    g.apply_key_change();
+    g
+}
+
+/// A vetoable verdict still fresh at DUE_MS.
+fn verdict_at_due_time() -> Verdict {
+    Verdict { expires_at_ms: DUE_MS + 60_000, ..verdict() }
+}
+
+#[test]
+fn set_accepted_key_announces_the_change_and_leaves_the_key_in_force() {
+    let mut g = guard();
+    announce(&mut g, &OTHER_SEED, NOW_MS);
+    let event = event_json(get_logs().last().unwrap());
+    assert_eq!(event["event"], "key_change_announced");
+    assert_eq!(event["data"][0]["old_key"], key_string(&VERDICT_SEED).as_str());
+    assert_eq!(event["data"][0]["new_key"], key_string(&OTHER_SEED).as_str());
+    assert_eq!(event["data"][0]["effective_at_ms"], DUE_MS);
+    assert_eq!(g.accepted_key(), key_string(&VERDICT_SEED));
+    assert_eq!(
+        g.pending_key(),
+        Some(PendingKey { key: key_string(&OTHER_SEED), effective_at_ms: DUE_MS })
+    );
+
+    set_context(STRANGER, 0);
+    veto(&mut g, &verdict(), KIND);
+    assert!(g.was_used(hex::encode(verdict_hash(&verdict()))), "the accepted key stopped counting");
+}
+
+#[test]
+#[should_panic(expected = "ERR_BAD_SIGNATURE")]
+fn err_bad_signature_from_the_pending_key_before_it_applies() {
+    let mut g = guard();
+    announce(&mut g, &OTHER_SEED, NOW_MS);
+    set_context(STRANGER, 0);
+    veto_signed_by(&mut g, &verdict(), KIND, &OTHER_SEED);
+}
+
+#[test]
+#[should_panic(expected = "ERR_TOO_EARLY")]
+fn err_too_early_one_millisecond_before_the_change_is_due() {
+    let mut g = guard();
+    announce(&mut g, &OTHER_SEED, NOW_MS);
+    set_context_at(STRANGER, 0, DUE_MS - 1);
+    g.apply_key_change();
+}
+
+#[test]
+fn apply_key_change_by_anyone_at_the_due_millisecond_swaps_the_key_and_says_so() {
+    let g = changed_guard();
     assert_eq!(g.accepted_key(), key_string(&OTHER_SEED));
+    assert_eq!(g.pending_key(), None);
     let event = event_json(get_logs().last().unwrap());
     assert_eq!(event["event"], "key_changed");
     assert_eq!(event["data"][0]["old_key"], key_string(&VERDICT_SEED).as_str());
@@ -552,13 +797,85 @@ fn set_accepted_key_swaps_the_key_and_says_so() {
 }
 
 #[test]
+fn the_new_key_is_obeyed_once_the_change_applies() {
+    let mut g = changed_guard();
+    veto_signed_by(&mut g, &verdict_at_due_time(), KIND, &OTHER_SEED);
+    assert!(g.was_used(hex::encode(verdict_hash(&verdict_at_due_time()))));
+}
+
+#[test]
 #[should_panic(expected = "ERR_BAD_SIGNATURE")]
 fn err_bad_signature_from_the_old_key_after_a_key_change() {
+    let mut g = changed_guard();
+    veto(&mut g, &verdict_at_due_time(), KIND);
+}
+
+#[test]
+#[should_panic(expected = "ERR_NO_PENDING_KEY")]
+fn err_no_pending_key_on_apply_with_nothing_pending() {
+    let mut g = guard();
+    g.apply_key_change();
+}
+
+#[test]
+#[should_panic(expected = "ERR_NO_PENDING_KEY")]
+fn err_no_pending_key_on_a_second_apply() {
+    let mut g = changed_guard();
+    g.apply_key_change();
+}
+
+#[test]
+#[should_panic(expected = "ERR_NO_PENDING_KEY")]
+fn err_no_pending_key_on_cancel_with_nothing_pending() {
     let mut g = guard();
     set_context(OWNER, 1);
-    g.set_accepted_key(key_string(&OTHER_SEED));
-    set_context(STRANGER, 0);
-    veto(&mut g, &verdict(), KIND);
+    g.cancel_key_change();
+}
+
+#[test]
+#[should_panic(expected = "ERR_NOT_OWNER")]
+fn err_not_owner_on_cancel_key_change() {
+    let mut g = guard();
+    announce(&mut g, &OTHER_SEED, NOW_MS);
+    set_context(STRANGER, 1);
+    g.cancel_key_change();
+}
+
+#[test]
+#[should_panic(expected = "ERR_NEED_ONE_YOCTO")]
+fn err_need_one_yocto_on_cancel_key_change() {
+    let mut g = guard();
+    announce(&mut g, &OTHER_SEED, NOW_MS);
+    set_context(OWNER, 0);
+    g.cancel_key_change();
+}
+
+#[test]
+fn cancel_key_change_clears_the_pending_key_and_says_so() {
+    let mut g = guard();
+    announce(&mut g, &OTHER_SEED, NOW_MS);
+    set_context(OWNER, 1);
+    g.cancel_key_change();
+    assert_eq!(g.pending_key(), None);
+    assert_eq!(g.accepted_key(), key_string(&VERDICT_SEED));
+    let event = event_json(get_logs().last().unwrap());
+    assert_eq!(event["event"], "key_change_cancelled");
+    assert_eq!(event["data"][0]["key"], key_string(&OTHER_SEED).as_str());
+}
+
+#[test]
+#[should_panic(expected = "ERR_TOO_EARLY")]
+fn a_second_announcement_restarts_the_clock() {
+    let mut g = guard();
+    announce(&mut g, &OTHER_SEED, NOW_MS);
+    let second_at = NOW_MS + KEY_CHANGE_DELAY_MS / 2;
+    announce(&mut g, &THIRD_SEED, second_at);
+    assert_eq!(
+        g.pending_key(),
+        Some(PendingKey { key: key_string(&THIRD_SEED), effective_at_ms: second_at + KEY_CHANGE_DELAY_MS })
+    );
+    set_context_at(STRANGER, 0, DUE_MS);
+    g.apply_key_change();
 }
 
 #[test]

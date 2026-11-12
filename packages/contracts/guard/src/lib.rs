@@ -6,6 +6,7 @@
 //! from the signed verdict, the method and the action are fixed in this file, and `veto` is the
 //! only method that calls another contract (C15). The only other promises are plain refunds of
 //! a caller's own storage deposit, sent back to that caller by `enroll` and `unenroll` (C29).
+//! The owner can replace the accepted key only by announcing the new one a day ahead (C19).
 //!
 //! The code is immutable on purpose. There is no upgrade method, and the deploy script deletes
 //! the account's full-access key right after `new`. A new version is a new contract, which a DAO
@@ -13,11 +14,11 @@
 
 use kaap_verdict::severity::min_severity;
 use kaap_verdict::verdict::VERDICT_VERSION;
-use kaap_verdict::{kind_hash, verdict_bytes, verdict_hash, AiStatus, FindingCode, Severity, Verdict};
+use kaap_verdict::{canonical_kind, verdict_bytes, verdict_hash, AiStatus, FindingCode, Severity, Verdict};
 use near_sdk::borsh::BorshDeserialize;
 use near_sdk::json_types::Base64VecU8;
 use near_sdk::serde::de::IgnoredAny;
-use near_sdk::store::{IterableSet, LookupMap};
+use near_sdk::store::{IterableMap, LookupMap};
 use near_sdk::{
     env, near, require, AccountId, CurveType, Gas, GasWeight, NearToken, PanicOnDefault, Promise,
     PromiseError, PublicKey,
@@ -42,6 +43,9 @@ pub const ERR_NEED_ONE_YOCTO: &str = "ERR_NEED_ONE_YOCTO";
 pub const ERR_NOT_PENDING_OWNER: &str = "ERR_NOT_PENDING_OWNER";
 pub const ERR_NOT_ENOUGH_DEPOSIT: &str = "ERR_NOT_ENOUGH_DEPOSIT";
 pub const ERR_NOT_ENOUGH_GAS: &str = "ERR_NOT_ENOUGH_GAS";
+pub const ERR_KIND_TOO_LARGE: &str = "ERR_KIND_TOO_LARGE";
+pub const ERR_NO_PENDING_KEY: &str = "ERR_NO_PENDING_KEY";
+pub const ERR_TOO_EARLY: &str = "ERR_TOO_EARLY";
 
 /// The most entries `enrolled_daos` returns in one page. Measured as a transaction: 1.30 Tgas for
 /// one entry and 2.14 Tgas for twelve, about 0.08 Tgas each, so a full page of 100 is about
@@ -58,12 +62,26 @@ pub const RESULT_OK: &str = "Ok";
 /// guard's own needs (weight 1), which is how a 198 KB ChangePolicy veto landed with 155 Tgas.
 pub const ACT_PROPOSAL_GAS: Gas = Gas::from_tgas(100);
 
-/// Gas every `veto` call must attach, 300 Tgas, the amount Kaap's worker sends. Every caller's
-/// veto must carry the gas the largest vetoable kind needs, because the verdict is spent once the
-/// call is made, whatever the DAO answers, and a signed verdict is public before it is used. With
-/// less, a stranger could send it first with enough gas for the guard but too little for the
-/// DAO's vote on a big kind, and so waste it. GAS.md measures the largest kind 300 Tgas carries.
-pub const MIN_VETO_GAS: Gas = Gas::from_tgas(300);
+/// The longest `kind_json` a veto accepts, 217 KiB. Measured in the sandbox against Sputnik 3.2
+/// with 1,000 Tgas attached, the most one NEAR transaction carries (packages/contracts/GAS.md):
+/// policy kinds of two shapes, 80 roles of member lists and two roles of very long lists of the
+/// shortest account ids, landed at every size up to kaap-verdict's 256 KiB limit. That limit,
+/// 262,144 bytes, less 15 percent is 222,822, rounded down to whole KiB.
+pub const MAX_VETO_KIND_BYTES: usize = 217 * 1024;
+
+/// Gas every `veto` call must attach, 900 Tgas. The verdict is spent once the guard's receipt
+/// succeeds, whatever the DAO answers, and a signed verdict is public before it is used, so every
+/// accepted call must carry the vote on the costliest kind the guard accepts. Measured: a
+/// 222,208-byte policy kind of two roles with very long member lists landed with 750 Tgas and not
+/// with 749 (the guard burnt 317.1 Tgas and the DAO 422.7); the 80-roles shape of the same size
+/// landed with 323. 750 Tgas plus 20 percent is 900, a whole 50 Tgas and under the 1,000 Tgas a
+/// transaction may carry. What is not burnt is refunded.
+pub const MIN_VETO_GAS: Gas = Gas::from_tgas(900);
+
+/// How long after the owner announces a new accepted key it may take effect: 24 hours (decided
+/// 12 Nov 2026). Members are alerted when it is announced, and the owner can cancel it, before a
+/// verdict signed by the new key counts (C19).
+pub const KEY_CHANGE_DELAY_MS: u64 = 86_400_000;
 
 /// Gas for `on_veto_result`, which reads one promise result, writes one entry and logs one
 /// event. Measured at 1.62 Tgas whatever the kind's size; 10 Tgas is six times that.
@@ -88,12 +106,18 @@ pub struct KaapGuard {
     owner: AccountId,
     pending_owner: Option<AccountId>,
     accepted_key: PublicKey,
+    /// An announced key change waiting out `KEY_CHANGE_DELAY_MS`. `veto` never checks a
+    /// signature against it.
+    pending_key: Option<PendingKey>,
     /// The network's name in kaap-verdict's own spelling ("mainnet", "testnet", "sandbox"). It is a
     /// string because kaap-verdict's `Network` has no borsh schema for the ABI build, and it is only
     /// ever produced by `network_name`, so both sides of the comparison in `veto` come out of the
     /// same serializer.
     network: String,
-    enrolled: IterableSet<AccountId>,
+    /// Each enrolled DAO and its `veto_unreadable` setting. The setting is written with the
+    /// enrolment and removed with it, so the enrolment deposit pays for it and changing it later
+    /// writes no new bytes.
+    enrolled: IterableMap<AccountId, bool>,
     /// Keyed by `kaap_verdict::verdict_hash`, the sha256 of the signed bytes, so a second signature
     /// or another base64 spelling of the same verdict is still the same entry.
     vetoes: LookupMap<[u8; 32], VetoOutcome>,
@@ -107,9 +131,40 @@ pub struct DaoEntry {
 
 #[near(serializers = [json])]
 #[derive(Clone, Debug)]
+pub struct DaoModeEntry {
+    pub dao: AccountId,
+    pub veto_unreadable: bool,
+}
+
+/// An announced change of the accepted key. `key` is "ed25519:<base58>", checked when it was
+/// announced; from the block time `effective_at_ms` on, `apply_key_change` may make it the
+/// accepted key.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PendingKey {
+    pub key: String,
+    pub effective_at_ms: u64,
+}
+
+#[near(serializers = [json])]
+#[derive(Clone, Debug)]
 pub struct KeyChangedEntry {
     pub old_key: String,
     pub new_key: String,
+}
+
+#[near(serializers = [json])]
+#[derive(Clone, Debug)]
+pub struct KeyChangeAnnouncedEntry {
+    pub old_key: String,
+    pub new_key: String,
+    pub effective_at_ms: u64,
+}
+
+#[near(serializers = [json])]
+#[derive(Clone, Debug)]
+pub struct KeyEntry {
+    pub key: String,
 }
 
 #[near(serializers = [json])]
@@ -149,15 +204,21 @@ pub struct VetoResultEntry {
 #[near(event_json(standard = "kaap-guard"))]
 pub enum GuardEvent {
     #[event_version("1.0.0")]
-    Enrolled(Vec<DaoEntry>),
+    Enrolled(Vec<DaoModeEntry>),
     #[event_version("1.0.0")]
     Unenrolled(Vec<DaoEntry>),
+    #[event_version("1.0.0")]
+    ModeChanged(Vec<DaoModeEntry>),
     #[event_version("1.0.0")]
     VetoSent(Vec<VetoSentEntry>),
     #[event_version("1.0.0")]
     VetoCast(Vec<VetoResultEntry>),
     #[event_version("1.0.0")]
     VetoRefused(Vec<VetoResultEntry>),
+    #[event_version("1.0.0")]
+    KeyChangeAnnounced(Vec<KeyChangeAnnouncedEntry>),
+    #[event_version("1.0.0")]
+    KeyChangeCancelled(Vec<KeyEntry>),
     #[event_version("1.0.0")]
     KeyChanged(Vec<KeyChangedEntry>),
     #[event_version("1.0.0")]
@@ -182,9 +243,16 @@ fn require_one_yocto() {
 /// floor built from HASH_UNVERIFIED beside a medium code is not enough. The verdict carries codes
 /// without effects, so each code counts at `min_severity`, which never overstates it. When the
 /// floor is high, the AI is what raised it to critical, and only an AI answer proven by its
-/// attestation may do that. A floor of Unknown is refused like any floor below high: an
-/// unverifiable sign request alerts members but never triggers the guard (C8).
-fn is_vetoable(verdict: &Verdict) -> bool {
+/// attestation may do that. A floor of Unknown is refused like any floor below high: by default an
+/// unverifiable sign request alerts members but never triggers the guard.
+///
+/// `strict` is the DAO's own `veto_unreadable` setting (C8, decided 12 Nov 2026). When it is on,
+/// a verdict whose findings include HASH_UNVERIFIED is vetoable whatever its risk, because that
+/// treasury chose to have every request it cannot read rejected. Nothing else changes for it.
+fn is_vetoable(verdict: &Verdict, strict: bool) -> bool {
+    if strict && verdict.findings.contains(&FindingCode::HashUnverified) {
+        return true;
+    }
     let floor_high = matches!(verdict.floor, Severity::High | Severity::Critical);
     let backed_by_proof = verdict.findings.iter().any(|&code| {
         code != FindingCode::HashUnverified
@@ -246,8 +314,8 @@ fn parse_network(name: &str) -> String {
 
 #[near]
 impl KaapGuard {
-    /// Sets the owner, who alone may change the accepted key, the key whose signatures this
-    /// guard obeys, and the network it serves.
+    /// Sets the owner, who alone may announce a change of the accepted key, the key whose
+    /// signatures this guard obeys, and the network it serves. No key change is pending.
     ///
     /// Only the contract account itself may call this, so the deploy script batches it with the
     /// deploy. Panics with ERR_BAD_KEY unless `accepted_key` is exactly
@@ -260,8 +328,9 @@ impl KaapGuard {
             owner,
             pending_owner: None,
             accepted_key: parse_accepted_key(&accepted_key),
+            pending_key: None,
             network: parse_network(&network),
-            enrolled: IterableSet::new(b"e"),
+            enrolled: IterableMap::new(b"e"),
             vetoes: LookupMap::new(b"v"),
         }
     }
@@ -270,35 +339,57 @@ impl KaapGuard {
     /// through an ordinary FunctionCall proposal, so enrolment is the DAO's own vote. Any account
     /// can enrol itself, but a vote only counts in a DAO whose policy gives this guard a role.
     ///
-    /// The caller attaches the storage its entry takes, measured as it is written (0.01 NEAR
-    /// always covers it), and gets the rest back in the same call, so an enrolment never spends
-    /// the guard's own balance (C29). Panics with ERR_ALREADY_ENROLLED if the caller is already
-    /// enrolled and ERR_NOT_ENOUGH_DEPOSIT if the deposit does not cover the storage. Emits
-    /// `enrolled`.
+    /// `veto_unreadable` sets the DAO's strict mode: true has the guard also veto a request whose
+    /// signed hash Kaap could not read (C8). Absent or null means false, so `{}` enrols exactly
+    /// as before strict mode existed. The arguments must be a JSON object.
+    ///
+    /// The caller attaches the storage its entry takes, setting included, measured as it is
+    /// written (0.01 NEAR always covers it), and gets the rest back in the same call, so an
+    /// enrolment never spends the guard's own balance (C29). Panics with ERR_ALREADY_ENROLLED if
+    /// the caller is already enrolled and ERR_NOT_ENOUGH_DEPOSIT if the deposit does not cover
+    /// the storage. Emits `enrolled` with the DAO and its setting.
     #[payable]
-    pub fn enroll(&mut self) {
+    pub fn enroll(&mut self, veto_unreadable: Option<bool>) {
         let dao = env::predecessor_account_id();
+        let veto_unreadable = veto_unreadable.unwrap_or(false);
         let before = env::storage_usage();
-        require!(self.enrolled.insert(dao.clone()), ERR_ALREADY_ENROLLED);
-        // The set only writes to storage when flushed, and the charge must be what was written.
+        require!(!self.enrolled.contains_key(&dao), ERR_ALREADY_ENROLLED);
+        self.enrolled.insert(dao.clone(), veto_unreadable);
+        // The map only writes to storage when flushed, and the charge must be what was written.
         self.enrolled.flush();
         let cost = storage_cost(env::storage_usage().saturating_sub(before));
         let attached = env::attached_deposit();
         require!(attached >= cost, ERR_NOT_ENOUGH_DEPOSIT);
-        GuardEvent::Enrolled(vec![DaoEntry { dao: dao.clone() }]).emit();
+        GuardEvent::Enrolled(vec![DaoModeEntry { dao: dao.clone(), veto_unreadable }]).emit();
         refund(&dao, attached.saturating_sub(cost));
     }
 
-    /// Removes the calling account from the enrolled DAOs, after which `veto` refuses every
-    /// verdict that names it. Called the same way as `enroll`. The storage the entry frees goes
-    /// back to the caller, which is exactly what its enrolment charged: every entry's size
-    /// depends only on its own account id, whatever moves into its place in the set.
+    /// Turns the calling DAO's strict mode on or off (C8). A DAO calls it through an ordinary
+    /// FunctionCall proposal, so the change is the DAO's own vote. No deposit: the setting's
+    /// storage was paid at enrolment and its size never changes.
+    ///
+    /// Panics with ERR_NOT_ENROLLED unless the caller is enrolled. Emits `mode_changed` with the
+    /// DAO and the new setting, even when it is the old one.
+    pub fn set_veto_unreadable(&mut self, on: bool) {
+        let dao = env::predecessor_account_id();
+        let setting = self
+            .enrolled
+            .get_mut(&dao)
+            .unwrap_or_else(|| env::panic_str(ERR_NOT_ENROLLED));
+        *setting = on;
+        GuardEvent::ModeChanged(vec![DaoModeEntry { dao, veto_unreadable: on }]).emit();
+    }
+
+    /// Removes the calling account, and its setting, from the enrolled DAOs, after which `veto`
+    /// refuses every verdict that names it. Called the same way as `enroll`. The storage the
+    /// entry frees goes back to the caller, which is exactly what its enrolment charged: every
+    /// entry's size depends only on its own account id, whatever moves into its place in the map.
     ///
     /// Panics with ERR_NOT_ENROLLED if the caller is not enrolled. Emits `unenrolled`.
     pub fn unenroll(&mut self) {
         let dao = env::predecessor_account_id();
         let before = env::storage_usage();
-        require!(self.enrolled.remove(&dao), ERR_NOT_ENROLLED);
+        require!(self.enrolled.remove(&dao).is_some(), ERR_NOT_ENROLLED);
         self.enrolled.flush();
         let freed = before.saturating_sub(env::storage_usage());
         GuardEvent::Unenrolled(vec![DaoEntry { dao: dao.clone() }]).emit();
@@ -315,21 +406,24 @@ impl KaapGuard {
     /// unchanged (C5).
     ///
     /// Checks, in this order, each failure a panic with the error named:
-    /// the call attached at least `MIN_VETO_GAS`, 300 Tgas (ERR_NOT_ENOUGH_GAS);
+    /// the call attached at least `MIN_VETO_GAS`, 900 Tgas (ERR_NOT_ENOUGH_GAS);
+    /// `kind_json` is at most `MAX_VETO_KIND_BYTES`, 217 KiB (ERR_KIND_TOO_LARGE);
     /// the verdict decodes and has version 1 (ERR_BAD_VERDICT); the signature is valid for the
     /// accepted key (ERR_BAD_SIGNATURE); the verdict names this contract and this network
-    /// (ERR_WRONG_GUARD); its DAO is enrolled (ERR_NOT_ENROLLED); it meets the veto rule of C9
-    /// (ERR_NOT_VETOABLE); the block time is before `expires_at_ms` (ERR_EXPIRED); `kind_json`
-    /// hashes, through kaap-verdict's canonical form, to the verdict's `kind_hash`
-    /// (ERR_WRONG_KIND_HASH, or ERR_BAD_KIND when it cannot be canonicalised at all); `kind_json`
-    /// parses as JSON (ERR_BAD_KIND); the verdict was never used (ERR_REPLAY).
+    /// (ERR_WRONG_GUARD); its DAO is enrolled (ERR_NOT_ENROLLED); it meets the veto rule of C9,
+    /// widened by C8 when that DAO chose `veto_unreadable` (ERR_NOT_VETOABLE); the block time is
+    /// before `expires_at_ms` (ERR_EXPIRED); `kind_json`
+    /// can be canonicalised by kaap-verdict and is exactly as long as its canonical form
+    /// (ERR_BAD_KIND), and that form hashes to the verdict's `kind_hash` (ERR_WRONG_KIND_HASH);
+    /// `kind_json` parses as JSON (ERR_BAD_KIND); the verdict was never used (ERR_REPLAY).
     ///
     /// Then it marks the verdict used, emits `veto_sent`, and calls `act_proposal` on the DAO
     /// with `{"id":<proposal_id>,"action":"VoteReject","proposal":<kind_json>}`, no deposit and
     /// at least `ACT_PROPOSAL_GAS` plus every unit the guard does not use, followed by
     /// `on_veto_result`. Once the guard's receipt succeeds the verdict is spent, whatever the DAO
-    /// answers; that is why a call with less than 300 Tgas is refused before anything else, and
-    /// leaves the verdict unused. What is not burnt is refunded.
+    /// answers. The first two checks are why that never wastes it: a call with less than 900 Tgas
+    /// is refused before anything else, and 900 Tgas carries the vote on any kind the size and
+    /// length checks let through (C19). What is not burnt is refunded.
     pub fn veto(
         &mut self,
         verdict: Base64VecU8,
@@ -337,6 +431,7 @@ impl KaapGuard {
         kind_json: String,
     ) -> Promise {
         require!(env::prepaid_gas() >= MIN_VETO_GAS, ERR_NOT_ENOUGH_GAS);
+        require!(kind_json.len() <= MAX_VETO_KIND_BYTES, ERR_KIND_TOO_LARGE);
 
         let verdict = Verdict::try_from_slice(&verdict.0)
             .unwrap_or_else(|_| env::panic_str(ERR_BAD_VERDICT));
@@ -363,9 +458,12 @@ impl KaapGuard {
             .dao
             .parse()
             .unwrap_or_else(|_| env::panic_str(ERR_NOT_ENROLLED));
-        require!(self.enrolled.contains(&dao), ERR_NOT_ENROLLED);
+        let strict = *self
+            .enrolled
+            .get(&dao)
+            .unwrap_or_else(|| env::panic_str(ERR_NOT_ENROLLED));
 
-        require!(is_vetoable(&verdict), ERR_NOT_VETOABLE);
+        require!(is_vetoable(&verdict, strict), ERR_NOT_VETOABLE);
         require!(
             env::block_timestamp_ms() < verdict.expires_at_ms,
             ERR_EXPIRED
@@ -373,10 +471,15 @@ impl KaapGuard {
 
         // The canonical form absorbs the key and set order Sputnik's JSON may change between
         // reads, so the hash matches while the exact bytes, never the canonical ones, are sent.
-        match kind_hash(kind_json.as_bytes()) {
-            Ok(hash) => require!(hash == verdict.kind_hash, ERR_WRONG_KIND_HASH),
-            Err(_) => env::panic_str(ERR_BAD_KIND),
-        }
+        // Reordering keeps the length. Any other spelling of the same kind, padded or with an
+        // escaped character, is longer, costs more to read and could leave the DAO's call short
+        // of gas, so it is refused; every kind recorded from a chain has its canonical length.
+        let canonical =
+            canonical_kind(kind_json.as_bytes()).unwrap_or_else(|_| env::panic_str(ERR_BAD_KIND));
+        require!(canonical.len() == kind_json.len(), ERR_BAD_KIND);
+        // kaap-verdict's `kind_hash` is the sha256 of these same bytes. Hashing them here spares a
+        // second canonicalisation, the largest cost in this method.
+        require!(env::sha256_array(&canonical) == verdict.kind_hash, ERR_WRONG_KIND_HASH);
         // The canonical parser is stricter than this one, so after a hash match this cannot
         // fail today. It stays because the vote's arguments are built by concatenation, and that
         // is only sound while `kind_json` is exactly one JSON value.
@@ -453,21 +556,69 @@ impl KaapGuard {
         }
     }
 
-    /// Replaces the accepted key. Verdicts signed by the old key stop working at once.
+    /// Announces a new accepted key. Until `apply_key_change` runs, at least
+    /// `KEY_CHANGE_DELAY_MS` (24 hours) after this call, the current key stays the only one `veto`
+    /// obeys, so members are alerted and the owner can cancel first (C19). A second announcement
+    /// replaces the first and restarts the wait.
     ///
     /// Panics with ERR_NOT_OWNER unless the owner calls, ERR_NEED_ONE_YOCTO unless exactly one
     /// yoctoNEAR is attached, and ERR_BAD_KEY unless `key` is exactly
-    /// "ed25519:<base58 of 32 bytes>". Emits `key_changed` with the old and the new key, which
-    /// the worker turns into a member alert (C18).
+    /// "ed25519:<base58 of 32 bytes>". Emits `key_change_announced` with the current key, the new
+    /// one and the block time from which it may apply, which the worker turns into a member alert
+    /// (C18).
     #[payable]
     pub fn set_accepted_key(&mut self, key: String) {
         self.require_owner();
         require_one_yocto();
-        let new_key = parse_accepted_key(&key);
+        parse_accepted_key(&key);
+        let effective_at_ms = env::block_timestamp_ms().saturating_add(KEY_CHANGE_DELAY_MS);
+        self.pending_key = Some(PendingKey { key: key.clone(), effective_at_ms });
+        GuardEvent::KeyChangeAnnounced(vec![KeyChangeAnnouncedEntry {
+            old_key: self.accepted_key.to_string(),
+            new_key: key,
+            effective_at_ms,
+        }])
+        .emit();
+    }
+
+    /// Withdraws the announced key change; the current key stays.
+    ///
+    /// Panics with ERR_NOT_OWNER unless the owner calls, ERR_NEED_ONE_YOCTO unless exactly one
+    /// yoctoNEAR is attached, and ERR_NO_PENDING_KEY when no change is announced. Emits
+    /// `key_change_cancelled` with the withdrawn key.
+    #[payable]
+    pub fn cancel_key_change(&mut self) {
+        self.require_owner();
+        require_one_yocto();
+        let pending = self
+            .pending_key
+            .take()
+            .unwrap_or_else(|| env::panic_str(ERR_NO_PENDING_KEY));
+        GuardEvent::KeyChangeCancelled(vec![KeyEntry { key: pending.key }]).emit();
+    }
+
+    /// Makes the announced key the accepted key once its wait is over, after which verdicts
+    /// signed by the old key are refused. Anyone may call it, with no deposit: the owner chose
+    /// the key a day earlier and this only carries the choice out.
+    ///
+    /// Panics with ERR_NO_PENDING_KEY when no change is announced and ERR_TOO_EARLY while the
+    /// block time is before its `effective_at_ms`. Emits `key_changed` with the old and the new
+    /// key.
+    pub fn apply_key_change(&mut self) {
+        let pending = self
+            .pending_key
+            .take()
+            .unwrap_or_else(|| env::panic_str(ERR_NO_PENDING_KEY));
+        require!(
+            env::block_timestamp_ms() >= pending.effective_at_ms,
+            ERR_TOO_EARLY
+        );
+        // The same parser that checked it when it was announced.
+        let new_key = parse_accepted_key(&pending.key);
         let old_key = std::mem::replace(&mut self.accepted_key, new_key);
         GuardEvent::KeyChanged(vec![KeyChangedEntry {
             old_key: old_key.to_string(),
-            new_key: key,
+            new_key: pending.key,
         }])
         .emit();
     }
@@ -516,19 +667,31 @@ impl KaapGuard {
         self.accepted_key.to_string()
     }
 
+    /// The announced key change, if any: the key and the block time in milliseconds from which
+    /// `apply_key_change` may make it the accepted key. Until then `veto` ignores it.
+    pub fn pending_key(&self) -> Option<PendingKey> {
+        self.pending_key.clone()
+    }
+
     /// The network this guard serves: "mainnet", "testnet" or "sandbox".
     pub fn network(&self) -> String {
         self.network.clone()
     }
 
-    /// The account that alone may change the accepted key.
+    /// The account that alone may announce or cancel a change of the accepted key.
     pub fn owner(&self) -> AccountId {
         self.owner.clone()
     }
 
     /// Whether `dao` has enrolled and not since unenrolled.
     pub fn is_enrolled(&self, dao: AccountId) -> bool {
-        self.enrolled.contains(&dao)
+        self.enrolled.contains_key(&dao)
+    }
+
+    /// Whether `dao` chose strict mode, so the guard also vetoes its requests with an unread
+    /// signed hash. False for an account that is not enrolled.
+    pub fn veto_unreadable(&self, dao: AccountId) -> bool {
+        self.enrolled.get(&dao).copied().unwrap_or(false)
     }
 
     /// One page of enrolled DAOs, in storage order, starting at `from_index`. `limit` is capped
@@ -537,7 +700,7 @@ impl KaapGuard {
     pub fn enrolled_daos(&self, from_index: u64, limit: u64) -> Vec<AccountId> {
         let skip = usize::try_from(from_index).unwrap_or(usize::MAX);
         let take = usize::try_from(limit.min(MAX_ENROLLED_PAGE)).unwrap_or(0);
-        self.enrolled.iter().skip(skip).take(take).cloned().collect()
+        self.enrolled.keys().skip(skip).take(take).cloned().collect()
     }
 
     /// Whether the verdict with this `kaap_verdict::verdict_hash` (64 hex characters) was used.
