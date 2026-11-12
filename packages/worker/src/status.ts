@@ -11,8 +11,9 @@
 // a signal's fields, so no key, token, chat id or provider text can reach it. Token and text
 // requests are counted per client address, which a caller cannot choose (6e): the connecting
 // address, or for a request from the HTTPS proxy on the same machine, the one address that proxy
-// adds to X-Forwarded-For (HOSTING.md). On a host whose own proxy fronts every connection,
-// KAAP_HTTP_PROXY=platform says so, and that proxy's entry is used for every request.
+// adds to X-Forwarded-For (HOSTING.md). On a host whose own proxy fronts every connection and
+// writes the caller's address into X-Real-IP, KAAP_HTTP_PROXY=x-real-ip says so, and that header
+// is used for every request.
 //
 // A text arrives as ciphertext only the sealed program can open, and the worker never holds it in
 // any other form. Neither the ciphertext nor the reply key is logged, stored or echoed: every
@@ -115,8 +116,8 @@ export function textKeySigned(textKey: TextKey, acceptedKey: string): boolean {
 export interface StatusSettings {
   host: string;
   port: number;
-  /** `platform` when every connection comes through the host platform's proxy (KAAP_HTTP_PROXY). */
-  proxy: 'loopback' | 'platform';
+  /** `x-real-ip` when every connection comes through a host's proxy that writes that header (KAAP_HTTP_PROXY). */
+  proxy: ProxyRule;
   network: string;
   guard: string;
   botUsername: string;
@@ -184,20 +185,36 @@ function countKey(address: string): string {
   return `${a.split(':').slice(0, 4).join(':')}::/64`;
 }
 
-/** What a request is counted against: `countKey` of one address. A request from loopback came
- *  through the HTTPS proxy on the same machine, which adds the address its client connected from
- *  as the last entry of X-Forwarded-For: that one entry is trusted, and anything a client wrote
- *  before it is not. Any other peer is counted as it connects, its header ignored, unless `proxy`
- *  is `platform`: then every peer is the platform's proxy and its entry is used. A missing or
- *  unreadable entry counts against the proxy itself, which only ever makes the limit stricter. An
- *  IPv6 /64 network is one client. Not covered: a client that holds many /64 networks or many
- *  IPv4 addresses gets a count for each; the per-DAO daily caps still bound what its texts can
- *  spend, and a token spends nothing on chain. */
-export function clientAddress(peer: string | undefined, forwardedFor: string | string[] | undefined, proxy: 'loopback' | 'platform' = 'loopback'): string {
+export type ProxyRule = 'loopback' | 'x-real-ip';
+
+/** The two headers a proxy may name a caller in, as Node hands them over. */
+export interface SaidAddress {
+  forwardedFor?: string | string[] | undefined;
+  realIp?: string | string[] | undefined;
+}
+
+/** What a request is counted against: `countKey` of one address.
+ *
+ *  `loopback`: a request from loopback came through the HTTPS proxy on the same machine, which
+ *  adds the address its client connected from as the last entry of X-Forwarded-For. That one
+ *  entry is trusted, and anything a client wrote before it is not. Any other peer is counted as
+ *  it connects, its headers ignored.
+ *
+ *  `x-real-ip`: every peer is the host's proxy, which writes the caller's address into X-Real-IP
+ *  over whatever the caller sent. Only that header is read. X-Forwarded-For is not, because such
+ *  a proxy can pass a caller's own X-Forwarded-For through untouched: Railway's did on
+ *  12 Nov 2026, and twelve made-up entries got twelve separate counts.
+ *
+ *  A missing, doubled or unreadable value counts against the proxy itself, which only ever makes
+ *  the limit stricter. An IPv6 /64 network is one client. Not covered: a client that holds many
+ *  /64 networks or many IPv4 addresses gets a count for each; the per-DAO daily caps still bound
+ *  what its texts can spend, and a token spends nothing on chain. */
+export function clientAddress(peer: string | undefined, said: SaidAddress, proxy: ProxyRule = 'loopback'): string {
   const direct = oneForm(peer ?? '');
   if (direct === null) return 'unknown';
-  if (proxy !== 'platform' && !LOOPBACK.check(direct, isIP(direct) === 4 ? 'ipv4' : 'ipv6')) return countKey(direct);
-  const header = Array.isArray(forwardedFor) ? forwardedFor.join(',') : (forwardedFor ?? '');
+  if (proxy === 'x-real-ip') return countKey((typeof said.realIp === 'string' ? oneForm(said.realIp) : null) ?? direct);
+  if (!LOOPBACK.check(direct, isIP(direct) === 4 ? 'ipv4' : 'ipv6')) return countKey(direct);
+  const header = Array.isArray(said.forwardedFor) ? said.forwardedFor.join(',') : (said.forwardedFor ?? '');
   return countKey(oneForm(header.split(',').at(-1) ?? '') ?? direct);
 }
 
@@ -369,7 +386,7 @@ export class StatusServer {
    *  is echoed. A text is counted against its address once its shape checks out, and the count is
    *  taken again then, since several requests from one address can be read at the same time. */
   async #texts(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const address = clientAddress(req.socket.remoteAddress, req.headers['x-forwarded-for'], this.#s.proxy);
+    const address = clientAddress(req.socket.remoteAddress, { forwardedFor: req.headers['x-forwarded-for'], realIp: req.headers['x-real-ip'] }, this.#s.proxy);
     if (!this.#textsLeft(address, this.#d.now())) return this.#tooManyTexts(res, address, this.#d.now());
     const raw = await readBody(req, MAX_TEXT_BODY);
     const body = raw === null ? null : parseTextBody(raw);
@@ -432,7 +449,7 @@ export class StatusServer {
   /** POST /subscribe. A request is counted against its address once its body checks out, and the
    *  count is taken again then, since several requests from one address can be read at once. */
   async #subscribe(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const address = clientAddress(req.socket.remoteAddress, req.headers['x-forwarded-for'], this.#s.proxy);
+    const address = clientAddress(req.socket.remoteAddress, { forwardedFor: req.headers['x-forwarded-for'], realIp: req.headers['x-real-ip'] }, this.#s.proxy);
     if (!this.#tokensLeft(address, this.#d.now())) return this.#tooManyTokens(res, address, this.#d.now());
     const raw = await readBody(req, MAX_BODY);
     if (raw === null) return this.#json(res, 413, { error: 'body_too_large' });

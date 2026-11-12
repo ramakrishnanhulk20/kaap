@@ -3,10 +3,11 @@
 // DAO they concern, reach its members, and show on GET /status, which holds no secret; behind the
 // HTTPS proxy on the same machine, POST /subscribe counts each client by the address the proxy
 // saw, an IPv6 one by its /64 network, and a burst from one address gets no more tokens than the
-// limit; behind a platform's proxy (KAAP_HTTP_PROXY=platform) every request is counted by that
-// proxy's entry; and GET /proposal answers only for a watched DAO, in fixed words, hashes and
-// transaction ids. Not covered: what a real platform proxy writes into X-Forwarded-For, which
-// is checked against the live host after each deploy, and a worker
+// limit; behind a host's proxy (KAAP_HTTP_PROXY=x-real-ip) every request is counted by the
+// X-Real-IP that proxy wrote and never by X-Forwarded-For; and GET /proposal answers only for a
+// watched DAO, in fixed words, hashes and transaction ids. Not covered: whether a real host's
+// proxy overwrites X-Real-IP, which scripts/attack-caller-limit.mjs checks against the live
+// host after each deploy, and a worker
 // process that is down altogether, which only an outside check of /status sees, and the proxy's
 // own behaviour, which HOSTING.md checks on the VM.
 
@@ -233,13 +234,13 @@ test('GET /status shows each level with no secret in it, and POST /subscribe han
 });
 
 test('behind the HTTPS proxy on the same machine, POST /subscribe counts each client by the address the proxy saw', async () => {
-  assert.equal(clientAddress('198.51.100.20', '203.0.113.7'), '198.51.100.20', 'a peer that is not loopback cannot name another address');
-  assert.equal(clientAddress('127.0.0.1', '10.0.0.1, 203.0.113.7'), '203.0.113.7', 'only the entry the proxy added counts');
-  assert.equal(clientAddress('::ffff:127.0.0.1', ['10.0.0.1', '203.0.113.7']), '203.0.113.7');
-  assert.equal(clientAddress('::1', '::FFFF:203.0.113.7'), '203.0.113.7', 'one client, one written form');
-  assert.equal(clientAddress('127.0.0.1', undefined), '127.0.0.1', 'no header counts against the proxy itself');
-  assert.equal(clientAddress('127.0.0.1', '203.0.113.7, not-an-address'), '127.0.0.1');
-  assert.equal(clientAddress(undefined, '203.0.113.7'), 'unknown');
+  assert.equal(clientAddress('198.51.100.20', { forwardedFor: '203.0.113.7' }), '198.51.100.20', 'a peer that is not loopback cannot name another address');
+  assert.equal(clientAddress('127.0.0.1', { forwardedFor: '10.0.0.1, 203.0.113.7' }), '203.0.113.7', 'only the entry the proxy added counts');
+  assert.equal(clientAddress('::ffff:127.0.0.1', { forwardedFor: ['10.0.0.1', '203.0.113.7'] }), '203.0.113.7');
+  assert.equal(clientAddress('::1', { forwardedFor: '::FFFF:203.0.113.7' }), '203.0.113.7', 'one client, one written form');
+  assert.equal(clientAddress('127.0.0.1', {}), '127.0.0.1', 'no header counts against the proxy itself');
+  assert.equal(clientAddress('127.0.0.1', { forwardedFor: '203.0.113.7, not-an-address' }), '127.0.0.1');
+  assert.equal(clientAddress(undefined, { forwardedFor: '203.0.113.7' }), 'unknown');
 
   const s = await started();
   const http = new StatusServer({ health: s.health, subs: s.subs, log: s.log, now: s.c.now, watching: () => s.worker.watching(), texts: s.worker, proposal: () => null }, { host: '127.0.0.1', port: 0, proxy: 'loopback', network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 2, textsPerAddressHour: 3, textKey: null });
@@ -254,17 +255,17 @@ test('behind the HTTPS proxy on the same machine, POST /subscribe counts each cl
 });
 
 test('an IPv6 client is counted by its /64 network, and every written form of an IPv4 address as that address', () => {
-  assert.equal(clientAddress('2001:db8:1:2:3:4:5:6', undefined), '2001:db8:1:2::/64');
-  assert.equal(clientAddress('2001:db8:1:2::9', undefined), '2001:db8:1:2::/64', 'one /64, one count');
-  assert.equal(clientAddress('2001:0DB8:0001:0002::1', undefined), '2001:db8:1:2::/64', 'lower case, no leading zeros');
-  assert.equal(clientAddress('2001:db8:1:3::1', undefined), '2001:db8:1:3::/64', 'the next /64 is another client');
-  for (const mapped of ['::ffff:1.2.3.4', '::ffff:102:304', '0:0:0:0:0:ffff:102:304']) assert.equal(clientAddress(mapped, undefined), '1.2.3.4', mapped);
-  assert.equal(clientAddress('fe80::1%eth0', undefined), 'fe80:0:0:0::/64', 'read without its zone');
-  assert.equal(clientAddress('fe80::1%eth0', undefined), clientAddress('fe80::1', undefined));
-  assert.equal(clientAddress('not-an-address', undefined), 'unknown');
-  assert.equal(clientAddress('1.2.3.4%eth0', undefined), 'unknown', 'a zone makes no IPv4 address');
-  assert.equal(clientAddress('::1', '10.0.0.1, 2001:db8:1:2:aaaa::1'), '2001:db8:1:2::/64', 'the proxy entry is counted by its /64');
-  assert.equal(clientAddress('::1', undefined), '0:0:0:0::/64', 'no header counts against the proxy itself');
+  assert.equal(clientAddress('2001:db8:1:2:3:4:5:6', {}), '2001:db8:1:2::/64');
+  assert.equal(clientAddress('2001:db8:1:2::9', {}), '2001:db8:1:2::/64', 'one /64, one count');
+  assert.equal(clientAddress('2001:0DB8:0001:0002::1', {}), '2001:db8:1:2::/64', 'lower case, no leading zeros');
+  assert.equal(clientAddress('2001:db8:1:3::1', {}), '2001:db8:1:3::/64', 'the next /64 is another client');
+  for (const mapped of ['::ffff:1.2.3.4', '::ffff:102:304', '0:0:0:0:0:ffff:102:304']) assert.equal(clientAddress(mapped, {}), '1.2.3.4', mapped);
+  assert.equal(clientAddress('fe80::1%eth0', {}), 'fe80:0:0:0::/64', 'read without its zone');
+  assert.equal(clientAddress('fe80::1%eth0', {}), clientAddress('fe80::1', {}));
+  assert.equal(clientAddress('not-an-address', {}), 'unknown');
+  assert.equal(clientAddress('1.2.3.4%eth0', {}), 'unknown', 'a zone makes no IPv4 address');
+  assert.equal(clientAddress('::1', { forwardedFor: '10.0.0.1, 2001:db8:1:2:aaaa::1' }), '2001:db8:1:2::/64', 'the proxy entry is counted by its /64');
+  assert.equal(clientAddress('::1', {}), '0:0:0:0::/64', 'no header counts against the proxy itself');
 });
 
 test('requests from two addresses of one IPv6 /64 share one POST /subscribe limit', async () => {
@@ -306,15 +307,39 @@ test('six POST /subscribe requests read at once from one address get exactly the
   await s.worker.stop();
 });
 
-test('behind a platform proxy every request is counted by the entry that proxy added, and only when the setting says so', () => {
-  assert.equal(clientAddress('100.64.0.3', '203.0.113.7', 'platform'), '203.0.113.7');
-  assert.equal(clientAddress('100.64.0.3', '10.9.9.9, 203.0.113.7', 'platform'), '203.0.113.7', 'only the last entry, the one the proxy added, counts');
-  assert.equal(clientAddress('100.64.0.3', ['198.51.100.1', '2001:db8:1:2::9'], 'platform'), '2001:db8:1:2::/64', 'an IPv6 client is still its /64');
-  assert.equal(clientAddress('100.64.0.3', undefined, 'platform'), '100.64.0.3', 'no header counts against the proxy itself');
-  assert.equal(clientAddress('100.64.0.3', '203.0.113.7, not-an-address', 'platform'), '100.64.0.3', 'an unreadable entry counts against the proxy itself');
-  assert.equal(clientAddress('100.64.0.3', '203.0.113.7', 'loopback'), '100.64.0.3', 'without the setting a peer cannot name another address');
-  assert.equal(clientAddress('100.64.0.3', '203.0.113.7'), '100.64.0.3', 'loopback is the default');
-  assert.equal(clientAddress(undefined, '203.0.113.7', 'platform'), 'unknown');
+test('behind a host proxy every request is counted by the X-Real-IP that proxy wrote, and only when the setting says so', () => {
+  const proxy = '100.64.0.3';
+  assert.equal(clientAddress(proxy, { realIp: '203.0.113.7' }, 'x-real-ip'), '203.0.113.7');
+  assert.equal(clientAddress(proxy, { realIp: ' 203.0.113.7 ' }, 'x-real-ip'), '203.0.113.7');
+  assert.equal(clientAddress(proxy, { realIp: '2001:db8:1:2::9' }, 'x-real-ip'), '2001:db8:1:2::/64', 'an IPv6 client is still its /64');
+  // What the live host did on 12 Nov 2026: the caller's own X-Forwarded-For came through as sent.
+  for (let i = 1; i <= 12; i++) {
+    assert.equal(clientAddress(proxy, { forwardedFor: `203.0.113.${i}`, realIp: '198.51.100.20' }, 'x-real-ip'), '198.51.100.20', 'a made-up X-Forwarded-For changes nothing');
+  }
+  assert.equal(clientAddress(proxy, { forwardedFor: '203.0.113.7' }, 'x-real-ip'), proxy, 'no X-Real-IP counts against the proxy itself, whatever X-Forwarded-For says');
+  assert.equal(clientAddress(proxy, {}, 'x-real-ip'), proxy);
+  assert.equal(clientAddress(proxy, { realIp: '203.0.113.7, 198.51.100.20' }, 'x-real-ip'), proxy, 'two values are not one address');
+  assert.equal(clientAddress(proxy, { realIp: ['203.0.113.7', '198.51.100.20'] }, 'x-real-ip'), proxy, 'a doubled header is not one address');
+  assert.equal(clientAddress(proxy, { realIp: 'not-an-address' }, 'x-real-ip'), proxy, 'an unreadable value counts against the proxy itself');
+  assert.equal(clientAddress(proxy, { realIp: '203.0.113.7', forwardedFor: '203.0.113.7' }, 'loopback'), proxy, 'without the setting a peer cannot name another address');
+  assert.equal(clientAddress(proxy, { realIp: '203.0.113.7', forwardedFor: '203.0.113.7' }), proxy, 'loopback is the default');
+  assert.equal(clientAddress('127.0.0.1', { realIp: '198.51.100.20', forwardedFor: '10.9.9.9, 203.0.113.7' }), '203.0.113.7', 'the proxy on the same machine is read by its last X-Forwarded-For entry, never X-Real-IP');
+  assert.equal(clientAddress(undefined, { realIp: '203.0.113.7' }, 'x-real-ip'), 'unknown');
+});
+
+test('behind a host proxy, POST /subscribe cannot be asked past its limit by making up X-Forwarded-For', async () => {
+  const s = await started();
+  const http = new StatusServer({ health: s.health, subs: s.subs, log: s.log, now: s.c.now, watching: () => s.worker.watching(), texts: s.worker, proposal: () => null }, { host: '127.0.0.1', port: 0, proxy: 'x-real-ip', network: NETWORK, guard: GUARD, botUsername: 'kaap_test_bot', tokensPerAddressHour: 2, textsPerAddressHour: 3, textKey: null });
+  const base = `http://127.0.0.1:${await http.start()}`;
+  const ask = async (headers: Record<string, string>) => (await fetch(`${base}/subscribe`, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify({ dao: DAO }) })).status;
+  const real = '198.51.100.20';
+  assert.deepEqual([await ask({ 'x-real-ip': real, 'x-forwarded-for': '203.0.113.1' }), await ask({ 'x-real-ip': real, 'x-forwarded-for': '203.0.113.2' }), await ask({ 'x-real-ip': real, 'x-forwarded-for': '203.0.113.3' })], [200, 200, 429]);
+  assert.equal(events(s.lines(), 'rate_limited').at(-1)?.address, real);
+  assert.equal(await ask({ 'x-real-ip': '198.51.100.21', 'x-forwarded-for': '203.0.113.3' }), 200, 'another client behind the same proxy is not blocked by the first');
+  // With no X-Real-IP every caller is the proxy itself, here 127.0.0.1: one shared count.
+  assert.deepEqual([await ask({ 'x-forwarded-for': '203.0.113.4' }), await ask({ 'x-forwarded-for': '203.0.113.5' }), await ask({ 'x-forwarded-for': '203.0.113.6' })], [200, 200, 429]);
+  await http.stop();
+  await s.worker.stop();
 });
 
 test('GET /proposal shows the verdict and transaction ids of a watched DAO, and passes on nothing that does not fit its shape', async () => {
