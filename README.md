@@ -67,7 +67,7 @@ No wallet, no key and no test tokens are needed for any step here.
 2. Press **Read the demo treasury's hash-only request**. You see request #7, "Authenticate DAO for confidential intents", one finding, `HASH_UNVERIFIED`, and the line "The guard will not veto this. Members decide." Kaap cannot read a bare hash and says so.
 3. Press **Use the words saved for this demo request**. Kaap checks that the words hash to the request's 64 characters, then reads them. You see a second effect, an intents key change that adds a key, the findings `HASH_TEXT_DANGEROUS` (critical) and `INTENTS_KEY_CHANGE` (high), and "Kaap's guard must veto this."
 4. Go back to the home page and press **Watch a theft get stopped**. You see request #1: it says "Monthly salary payment to alice...", it pays `a1ice...`, and under it are the four transactions of the run that rejected it, each a link to the explorer.
-5. Type any mainnet treasury, for example one ending in `.sputnik-dao.near`, and press **Read it**. Kaap reads its latest request from two providers at one final block.
+5. Now a real one. On the check screen type a mainnet treasury, for example `marketing.sputnik-dao.near`, set **Network** to **Mainnet**, and press **Read it**. Kaap reads its latest request from two providers at one final block.
 
 To run the site yourself, with Node 24:
 
@@ -89,7 +89,7 @@ npm run build:ts -w packages/cli
 node packages/cli/dist/src/bin.js check kaap-dao-1111072928.testnet 1
 ```
 
-You see what the rejected request really does, read live from testnet:
+You see what the rejected request really does, read live from testnet. The lines about how it was read are left out here:
 
 ```
 kaap check kaap-dao-1111072928.testnet #1 on testnet
@@ -115,10 +115,11 @@ Then check the verdict the guard acted on, down to the sealed run that signed it
 node packages/cli/dist/src/bin.js verify kaap-dao-1111072928.testnet 1
 ```
 
-It prints 24 checks and ends with:
+It prints 24 checks and ends with these lines, with a newer block number:
 
 ```
 proposal 1 is Rejected at block 277347795
+AI evidence: none. This verdict carries no AI answer (AI unavailable), so there is nothing for https://cloud.near.ai/verify to check
 the guard voted to reject with this verdict, and the DAO took the vote
 
 result: all 24 checks pass; 12 of the passes rest on one node or on OutLayer's API alone, as their lines say
