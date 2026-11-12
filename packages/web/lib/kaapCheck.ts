@@ -8,6 +8,7 @@
 // check reads. It is loaded at run time, not bundled into the site, because it finds the wasm
 // by a path on disk.
 
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -88,7 +89,10 @@ interface Cli {
   refusalOf: (error: unknown) => Refusal | null;
 }
 
-const ENGINE = path.join(process.cwd(), 'engine');
+// A host that ships the route from the repository's root starts it there, not in this package.
+const ENGINE = [path.join(process.cwd(), 'engine'), path.join(process.cwd(), 'packages', 'web', 'engine')].find((dir) =>
+  existsSync(path.join(dir, 'kaap-check.mjs')),
+) ?? path.join(process.cwd(), 'engine');
 
 let cli: Promise<Cli> | null = null;
 
