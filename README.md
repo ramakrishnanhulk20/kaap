@@ -359,11 +359,11 @@ sha256sum packages/cli/wasm/kaap_core_wasm_bg.wasm packages/web/engine/kaap_core
 
 Run on 12 Nov 2026 on Ubuntu under WSL, with Rust 1.93.0 and Node 24.22.2.
 
-`cargo test --workspace`: **607 passed, 0 failed.**
+`cargo test --workspace`: **608 passed, 0 failed.**
 
 | Package | Tests | What they cover |
 |---|---|---|
-| kaap-core | 244 | The decoder, the Sputnik rule port, the hash checker and the description check: unit, property and golden tests, plus five suites that score the engine against the labelled set |
+| kaap-core | 245 | The decoder, the Sputnik rule port, the hash checker and the description check: unit, property and golden tests, plus five suites that score the engine against the labelled set |
 | kaap-core-diff | 2 | The rule port and the real Sputnik DAO 3.2 binary, run on the same inputs in a sandbox. About 16 minutes |
 | kaap-core-wasm | 14 | The WebAssembly interface the command line and the site call |
 | kaap-guard | 98 | 66 unit tests, and 32 in a sandbox against the real Sputnik DAO 3.2 binary. These test the guard in this repo, the version not deployed yet |
