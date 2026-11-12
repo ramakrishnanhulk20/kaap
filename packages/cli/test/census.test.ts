@@ -10,7 +10,7 @@ import { sampleOf } from '../src/census.js';
 import { Core } from '../src/core.js';
 import { RateLimiter } from '../src/limiter.js';
 import { main } from '../src/main.js';
-import type { HttpRequest } from '../src/net.js';
+import type { HttpRequest, Transport } from '../src/net.js';
 import { REQUESTS_PER_SECOND } from '../src/caps.js';
 import { fakeClock, load, replay, REPO_ROOT } from './replay.js';
 
@@ -59,6 +59,37 @@ test('census reads no policy and no votes-needed figure, only the factory, count
   for (const m of methods) assert.ok(allowed.has(m), m);
   assert.ok(!methods.has('get_policy'));
   assert.doesNotMatch(out, /threshold|quorum|votes? (are )?needed|approvals? needed/i);
+});
+
+test('a DAO the first provider refuses is read from the second, and the counts do not change', async () => {
+  const fx = load('census-sample-5.json');
+  const recorded = replay(fx, []);
+  const refusedFor = 'indonesia.sputnik-dao.near';
+  let refusals = 0;
+  const transport: Transport = async (r) => {
+    const host = new URL(r.url).host;
+    if (host === 'rpc.mainnet.fastnear.com') return recorded({ ...r, url: 'https://near.drpc.org' });
+    if (host === 'near.drpc.org' && (r.body ?? '').includes(`"account_id":"${refusedFor}"`)) {
+      refusals++;
+      return { status: 429, text: '' };
+    }
+    return recorded(r);
+  };
+  const lines = async (t: Transport) => {
+    const out: string[] = [];
+    const clock = fakeClock();
+    const code = await main(fx.argv, { transport: t, clock, limiter: new RateLimiter(REQUESTS_PER_SECOND, clock), loadCore: () => Core.load(), repoRoot: REPO_ROOT }, { out: (x) => out.push(x), err: (x) => out.push(x) });
+    assert.equal(code, 0, out.join('\n'));
+    return out.join('\n').split('\n');
+  };
+  const plain = await lines(recorded);
+  const fallen = await lines(transport);
+  assert.ok(refusals >= 4, 'the first provider was asked its full number of tries');
+  const numbered = (all: string[]) => all.filter((l) => /^[1-6]\. /.test(l));
+  assert.equal(numbered(plain).length, 6);
+  assert.deepEqual(numbered(fallen), numbered(plain));
+  assert.match(fallen.at(-1) as string, /; 1 DAOs read from rpc\.mainnet\.fastnear\.com at the same block, after near\.drpc\.org would not answer$/);
+  assert.doesNotMatch(plain.at(-1) as string, /would not answer/);
 });
 
 test('the sample is the same on every run, whatever order the factory lists DAOs in', () => {

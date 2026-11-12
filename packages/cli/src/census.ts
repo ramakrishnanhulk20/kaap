@@ -3,6 +3,10 @@
 // it scans N DAOs chosen by the sha256 of their names, so every run of the same N scans the same
 // DAOs, and the counts are of that sample, not scaled up.
 //
+// Every read is made at one final block. A DAO the first provider will not answer for is read
+// from the second at that same block, so a refusal part way through a long run costs one DAO's
+// requests and not the run, and which provider answered changes no count.
+//
 // It reads the factory's DAO list, each scanned DAO's proposal counter and its proposals back to a
 // year before the block read, and each active DAO's account. It never reads a policy, and it never
 // computes, prints or stores anything about how many votes a DAO's roles need.
@@ -43,6 +47,9 @@ export interface Deps {
 export interface CensusReport {
   block: { height: number; timestamp_ns: string };
   provider: string;
+  /** The provider asked for a DAO the first would not answer for, and how many DAOs that was. */
+  second_provider: string;
+  from_second: number;
   factory: string;
   daos: number;
   sample: number | null;
@@ -130,8 +137,9 @@ const callsSign = (p: Stored) => {
 
 export async function census(deps: Deps, sample: number | null): Promise<CensusReport> {
   const started = deps.clock.now();
-  const { primary, factory } = NETWORKS.mainnet;
+  const { primary, secondary, factory } = NETWORKS.mainnet;
   const p = new Provider(primary, deps.transport, deps.limiter, deps.clock);
+  const q = new Provider(secondary, deps.transport, deps.limiter, deps.clock);
   const head = await p.block('final');
   const list: unknown = JSON.parse((await p.view(factory, 'get_dao_list', {}, head.height, MAX_PAGE_BODY_BYTES)).text);
   if (!Array.isArray(list)) throw new RpcError(p.name, 'shape', 'the factory\'s DAO list is not a list');
@@ -143,11 +151,21 @@ export async function census(deps: Deps, sample: number | null): Promise<CensusR
   const chosen = sampleOf(daos, sample);
   const scans: (Scan | null)[] = new Array(chosen.length).fill(null);
   let next = 0;
+  let fromSecond = 0;
+  const scanEither = async (dao: string): Promise<Scan | null> => {
+    try {
+      return await scan(p, dao, head, since365, known);
+    } catch (e) {
+      if (!(e instanceof RpcError) || e.failure !== 'unavailable') throw e;
+      fromSecond++;
+      return scan(q, dao, head, since365, known);
+    }
+  };
   await Promise.all(
     Array.from({ length: Math.min(WORKERS, chosen.length) }, async () => {
       while (next < chosen.length) {
         const i = next++;
-        scans[i] = await scan(p, chosen[i] as string, head, since365, known);
+        scans[i] = await scanEither(chosen[i] as string);
       }
     }),
   );
@@ -166,6 +184,8 @@ export async function census(deps: Deps, sample: number | null): Promise<CensusR
   return {
     block: { height: head.height, timestamp_ns: head.timestampNs },
     provider: p.name,
+    second_provider: q.name,
+    from_second: fromSecond,
     factory,
     daos: daos.length,
     sample,
@@ -189,8 +209,8 @@ export async function census(deps: Deps, sample: number | null): Promise<CensusR
     pre_3_2_near: (old.reduce((sum, s) => sum + s.near, 0n) / 10n ** 24n).toString(),
     near_usd: near ? near[1] : null,
     unreadable: scans.filter((s) => s === null || s.gap).length,
-    requests: p.sent + 1,
-    retried: p.retried,
+    requests: p.sent + q.sent + 1,
+    retried: p.retried + q.retried,
     seconds: Math.round((deps.clock.now() - started) / 1000),
   };
 }
@@ -202,6 +222,7 @@ export function render(r: CensusReport): string {
     r.sample === null || r.sample >= r.daos
       ? `all ${count(r.daos)} DAOs made by ${r.factory}`
       : `a sample of ${count(r.scanned)} of the ${count(r.daos)} DAOs made by ${r.factory}: the first ${count(r.scanned)} by the sha256 of their names, the same sample on every run`;
+  const second = r.from_second === 0 ? '' : `; ${count(r.from_second)} DAOs read from ${r.second_provider} at the same block, after ${r.provider} would not answer`;
   const usd = r.near_usd === null ? 'no NEAR price was available' : `about $${count(Math.round(Number(r.pre_3_2_near) * r.near_usd))} at 1Click's NEAR price of ${r.near_usd} USD`;
   return [
     'kaap census: Sputnik DAOs on NEAR mainnet, read live',
@@ -216,6 +237,6 @@ export function render(r: CensusReport): string {
     `5. ${percent(r.approved_one_vote, r.approved)} of approved proposals (${count(r.approved_one_vote)} of ${count(r.approved)}) carry exactly one vote.`,
     `6. ${count(r.pre_3_2)} of the ${count(r.active_365)} DAOs active in the last year (${percent(r.pre_3_2, r.active_365)}) run Sputnik code older than 3.2, from before the March 2025 act_proposal kind check; they hold ${count(BigInt(r.pre_3_2_near))} NEAR in their own accounts (${usd}; tokens are not counted). ${count(r.unmapped)} run a code hash the factory does not list.`,
     '',
-    `requests: ${count(r.requests)} (${count(r.retried)} asked again), ${count(r.seconds)} seconds; DAOs whose proposals could not all be read: ${count(r.unreadable)}`,
+    `requests: ${count(r.requests)} (${count(r.retried)} asked again), ${count(r.seconds)} seconds; DAOs whose proposals could not all be read: ${count(r.unreadable)}${second}`,
   ].join('\n');
 }
