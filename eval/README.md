@@ -32,6 +32,14 @@ Node 24 or later, from the repository root. No install, no network, no Kaap code
 
 `kaap eval`, from the CLI in `packages/cli` (`node packages/cli/dist/src/bin.js eval` once it is built), runs Kaap's rules engine over the same 373 records and prints its scoreboards: how often the engine's output equals the labels, field by field. It scores the engine against this key; the three commands above check the key itself.
 
+## Kaap's AI second opinion on this key
+
+`packages/sealed/AI-EVAL.md` reports what Kaap's AI second opinion caught, missed and wrongly flagged on these records when they were run through the sealed job on OutLayer testnet, and how often the AI answered at all. Its rows are in `ai-runs/`: ids, risks, statuses, reason words, token counts, times and transaction ids, never an answer's text.
+
+`node eval/tools/ai-report.mjs --check`
+- Proves: `AI-EVAL.md` is byte for byte what the rows in `ai-runs/` and the labels here produce, the split files follow the split rule, and every row's cost matches the listed token price.
+- Does not prove: that a row is what OutLayer returned. Each row carries its testnet transaction id, so any one can be looked up on the explorer.
+
 ## What cannot be rerun
 
 - The labelling passes themselves. They were AI labellers working from the guide; their output is the label files here, and running them again would not give the same bytes.

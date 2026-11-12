@@ -13,6 +13,9 @@
 //   node scripts/ai-eval.mjs --report
 //     Scores what --out holds against the set's own labels. Sends nothing.
 //   --set <labels.jsonl> (repeatable) runs another set instead of eval/real and eval/planted.
+//   --split <ids file> keeps only the records of the set whose ids the file lists, one per line, in
+//     the set's order (eval/ai-runs/split-development.txt and split-test.txt). An id the set does not
+//     have, or one listed twice, stops the run, so a typo cannot quietly shrink a pass.
 //   --out <file> defaults to <the set's folder>/ai-runs/<UTC date>.jsonl and must lie inside that
 //     folder, so the results of a private set stay beside it and out of every public file.
 //   --thinking-budget <64-1024> sends `thinking_budget` with every input, so the model reasons
@@ -97,17 +100,18 @@ const WORD = /^[a-z_]{1,40}$/;
 class Stop extends Error {}
 
 function usage(why) {
-  throw new Stop(`${why}\nusage: node scripts/ai-eval.mjs [--dry-run | --report] [--set <labels.jsonl>]... [--out <file>] [--max-usd <dollars>] [--max-near <NEAR>] [--in-flight 1-4] [--thinking-budget 64-1024]`);
+  throw new Stop(`${why}\nusage: node scripts/ai-eval.mjs [--dry-run | --report] [--set <labels.jsonl>]... [--split <ids file>] [--out <file>] [--max-usd <dollars>] [--max-near <NEAR>] [--in-flight 1-4] [--thinking-budget 64-1024]`);
 }
 
 function options(argv) {
-  const o = { mode: 'live', sets: [], out: null, maxUsd: DEFAULT_MAX_USD, maxNear: DEFAULT_MAX_NEAR, inFlight: MAX_IN_FLIGHT, thinkingBudget: null };
+  const o = { mode: 'live', sets: [], split: null, out: null, maxUsd: DEFAULT_MAX_USD, maxNear: DEFAULT_MAX_NEAR, inFlight: MAX_IN_FLIGHT, thinkingBudget: null };
   for (let i = 0; i < argv.length; i++) {
     const value = () => argv[++i] ?? usage(`${argv[i - 1]} needs a value`);
     switch (argv[i]) {
       case '--dry-run': o.mode = 'dry-run'; break;
       case '--report': o.mode = 'report'; break;
       case '--set': o.sets.push(resolve(REPO, value())); break;
+      case '--split': o.split = resolve(REPO, value()); break;
       case '--out': o.out = resolve(REPO, value()); break;
       case '--max-usd': o.maxUsd = value(); break;
       case '--max-near': o.maxNear = value(); break;
@@ -179,6 +183,21 @@ function readSet(paths) {
     }
   }
   return records;
+}
+
+/** The records whose ids `file` lists, in the set's order. */
+function applySplit(records, file) {
+  if (!existsSync(file)) throw new Stop(`no split file at ${shown(file)}`);
+  const wanted = new Set();
+  for (const line of readFileSync(file, 'utf8').split('\n')) {
+    const id = line.trim();
+    if (!id) continue;
+    if (wanted.has(id)) throw new Stop(`${shown(file)} repeats id ${id}`);
+    wanted.add(id);
+  }
+  const kept = records.filter((r) => wanted.has(r.id));
+  if (kept.length !== wanted.size) throw new Stop(`${shown(file)} names ${wanted.size - kept.length} id(s) the set does not have`);
+  return kept;
 }
 
 async function loadCore() {
@@ -549,7 +568,8 @@ async function live(o, records) {
 
 try {
   const o = options(process.argv.slice(2));
-  const records = readSet(o.sets);
+  const all = readSet(o.sets);
+  const records = o.split === null ? all : applySplit(all, o.split);
   if (o.mode === 'report') {
     report(o, records, readLines(o.out));
     process.exit(0);
