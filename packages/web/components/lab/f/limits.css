@@ -1,0 +1,108 @@
+.toy-limits {
+  --wall: #b5472b;
+  --wall-deep: #9c3b22;
+  --chalk: #fff8ec;
+
+  position: relative;
+  padding: calc(clamp(72px, 12svh, 128px) + 26px) 0;
+  background: var(--wall);
+  color: var(--chalk);
+}
+
+/* The red and white stripes of the stage's rim, run along the top and bottom of the wall. */
+.toy-limits::before,
+.toy-limits::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 26px;
+  background: repeating-linear-gradient(90deg, var(--chalk) 0 34px, var(--wall) 34px 68px);
+  box-shadow: 0 0 0 1px var(--wall-deep);
+}
+
+.toy-limits::before {
+  top: 0;
+}
+
+.toy-limits::after {
+  bottom: 0;
+}
+
+.toy-limits-inner {
+  width: min(1220px, calc(100% - 64px));
+  margin-inline: auto;
+}
+
+.toy-limits .toy-label {
+  color: rgb(255 248 236 / 0.72);
+}
+
+.toy-limits-title {
+  margin: 12px 0 0;
+  max-width: 14em;
+  font-family: var(--font-grotesk), sans-serif;
+  font-size: clamp(2.2rem, 5vw, 4.4rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+
+.toy-limits-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 clamp(36px, 6vw, 96px);
+  margin-top: clamp(36px, 6svh, 64px);
+}
+
+.toy-limit {
+  padding: clamp(22px, 3.4svh, 32px) 0;
+  border-top: 1.5px solid rgb(255 248 236 / 0.32);
+}
+
+.toy-limit-title {
+  margin: 0;
+  font-family: var(--font-grotesk), sans-serif;
+  font-size: clamp(22px, 2.3vw, 32px);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+/* The word "cannot" is struck through with the thread, the one yellow thing on the page. */
+.toy-limit-cannot {
+  position: relative;
+  white-space: nowrap;
+}
+
+.toy-limit-cannot::after {
+  content: '';
+  position: absolute;
+  left: -3px;
+  right: -3px;
+  bottom: -0.12em;
+  height: 0.16em;
+  min-height: 4px;
+  border-radius: 99px;
+  background:
+    repeating-linear-gradient(-56deg, rgb(30 26 20 / 0.32) 0 1.4px, rgb(30 26 20 / 0) 1.4px 8px), var(--accent);
+}
+
+.toy-limit-text {
+  margin: 12px 0 0;
+  max-width: 32em;
+  font-family: var(--font-body), sans-serif;
+  font-size: 16.5px;
+  line-height: 1.55;
+  color: rgb(255 248 236 / 0.86);
+}
+
+@media (max-width: 859px) {
+  .toy-limits-inner {
+    width: calc(100% - 40px);
+  }
+
+  .toy-limits-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

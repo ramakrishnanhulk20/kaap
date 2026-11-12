@@ -1,13 +1,13 @@
 'use client';
 
 import { motion, useScroll, useTransform } from 'framer-motion';
-import Image from 'next/image';
-import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
+import proof from '@/data/proof.json';
 import { description, effectPhrase, proposalId } from '@/lib/labData';
 import { useStill } from './d/useStill';
+import { Nav } from './f/Closing';
+import Film from './f/Film';
 import './f/stage.css';
-
-const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
 // One twist of two-ply thread every 14px: each ply is a slanted lozenge.
 const TWIST = 14;
@@ -26,95 +26,66 @@ function Thread() {
   );
 }
 
+// The first screen comes in with plain CSS, in the order given here, so it shows before any
+// script has run.
+const order = (position: number) => ({ '--i': position }) as CSSProperties;
+
+/** The check page, opened on the disguised payment the guard rejected on testnet. */
+export const STOPPED_THEFT = `/check?dao=${proof.treasury.account}&network=${proof.network}&id=${proof.stopped.proposalId}`;
+
 export default function HeroF() {
   const still = useStill();
-  const picture = useRef<HTMLImageElement>(null);
-  const [loaded, setLoaded] = useState(false);
   const { scrollY } = useScroll();
   const drift = useTransform(scrollY, [0, 600], [0, 36]);
   // The engine's phrase starts a sentence; here it ends one.
   const reading = effectPhrase.charAt(0).toLowerCase() + effectPhrase.slice(1);
 
-  // A picture served from the browser's cache has loaded before React attaches onLoad.
-  useEffect(() => {
-    if (picture.current?.complete) setLoaded(true);
-  }, []);
-
-  const rise = (position: number) => ({
-    initial: still ? (false as const) : { opacity: 0, y: 22 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.7, ease: EASE, delay: 0.25 + position * 0.08 },
-  });
-
   return (
-    <section className="toy-hero">
-      <motion.div
-        className="toy-film"
-        style={still ? undefined : { y: drift }}
-        initial={still ? false : { opacity: 0, scale: 1.035 }}
-        animate={loaded || still ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.035 }}
-        transition={{ duration: 1.1, ease: EASE }}
-      >
-        <Image
-          src="/world/watchman.jpg"
-          alt="A set of painted wooden toys. Three treasury members bring sealed letters to a striped round treasury. A watchman with a big moustache holds one letter up to his lantern, and the light shows a key hidden inside it. A yellow thread is tied around the treasury and knotted across its door."
-          width={3000}
-          height={1500}
-          priority
-          ref={picture}
-          onLoad={() => setLoaded(true)}
-          sizes="(max-width: 859px) 170vw, 100vw"
-        />
-        <span className="toy-lamp" aria-hidden="true" />
+    <section id="top" className="toy-hero">
+      <Nav />
+      <motion.div className="toy-film" style={still ? undefined : { y: drift }}>
+        <Film />
       </motion.div>
 
       <div className="toy-words">
         <div>
-          <motion.p {...rise(0)} className="toy-label">
+          <p className="toy-label toy-rise" style={order(0)}>
             A guard for NEAR treasuries
-          </motion.p>
-          <motion.h1 {...rise(1)} className="toy-title">
+          </p>
+          <h1 className="toy-title toy-rise" style={order(1)}>
             <span className="toy-tied">
               Stops a theft.
-              <motion.span
-                className="absolute inset-0"
-                aria-hidden="true"
-                initial={still ? false : { clipPath: 'inset(0% 100% -30% 0%)' }}
-                animate={{ clipPath: 'inset(0% 0% -30% 0%)' }}
-                transition={{ duration: 0.8, delay: 0.85, ease: 'easeOut' }}
-              >
-                <Thread />
-              </motion.span>
+              <Thread />
             </span>
             <br />
             Can&apos;t make one.
-          </motion.h1>
-          <motion.p {...rise(2)} className="toy-name">
+          </h1>
+          <p className="toy-name toy-rise" style={order(2)}>
             <span className="toy-name-tamil">காப்பு</span>
             <span className="toy-name-meaning">kaappu, a thread tied for protection</span>
-          </motion.p>
+          </p>
         </div>
 
         <div>
-          <motion.p {...rise(3)} className="toy-pitch">
+          <p className="toy-pitch toy-rise" style={order(3)}>
             NEAR treasuries approve payments that show only a hash. Kaap reads each one, tells members in plain
             words what it will do, and vetoes the theft. It can reject. It can never approve or move a cent.
-          </motion.p>
-          <motion.div {...rise(4)} className="toy-actions">
-            <button type="button" className="toy-btn toy-btn--main">
+          </p>
+          <div className="toy-actions toy-rise" style={order(4)}>
+            <a className="toy-btn toy-btn--main" href="/check">
               Check a treasury
-            </button>
-            <button type="button" className="toy-btn toy-btn--side">
+            </a>
+            <a className="toy-btn toy-btn--side" href={STOPPED_THEFT}>
               Watch a theft get stopped
-            </button>
-          </motion.div>
-          <motion.p {...rise(5)} className="toy-live">
+            </a>
+          </div>
+          <p className="toy-live toy-rise" style={order(5)}>
             <span className="toy-live-dot" aria-hidden="true" />
             <span>
               On testnet, proposal #{proposalId} says &ldquo;{description}&rdquo;. Kaap reads the hash behind it:{' '}
               <b>{reading}</b>.
             </span>
-          </motion.p>
+          </p>
         </div>
       </div>
     </section>

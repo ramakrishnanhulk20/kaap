@@ -8,6 +8,7 @@ export interface Effect {
 export interface Reading {
   riskFloor: string;
   findingCodes: string[];
+  mustVeto: boolean;
 }
 
 // Effect kinds from the one a reader should hear about first to the last. A kind not listed here
@@ -57,9 +58,10 @@ const analyses = {
   withText: fixture.analysis_with_text.analysis,
 };
 
-const reading = (analysis: { risk_floor: string; findings: { code: string }[] }): Reading => ({
+const reading = (analysis: { risk_floor: string; must_veto: boolean; findings: { code: string }[] }): Reading => ({
   riskFloor: analysis.risk_floor,
   findingCodes: analysis.findings.map((finding) => finding.code),
+  mustVeto: analysis.must_veto,
 });
 
 export const hashHex: string = fixture.payload_hash_hex;

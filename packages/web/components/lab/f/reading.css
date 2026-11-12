@@ -1,0 +1,240 @@
+.toy-reading {
+  /* Status colours are colder than the turmeric accent, so an alarm never reads as decoration. */
+  --critical: #c4283c;
+  --sheet: #fcf7ea;
+  --stamp-red: #dc3a26;
+  --stamp-blue: #2b4da0;
+
+  position: relative;
+  padding: clamp(72px, 12svh, 136px) 0 clamp(72px, 12svh, 128px);
+  background: var(--bg);
+  color: var(--ink);
+  overflow-x: clip;
+}
+
+.toy-reading-inner {
+  width: min(1220px, calc(100% - 64px));
+  margin-inline: auto;
+}
+
+.toy-reading-title {
+  margin: 12px 0 0;
+  max-width: 15em;
+  font-family: var(--font-grotesk), sans-serif;
+  font-size: clamp(2rem, 4.3vw, 3.7rem);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+}
+
+.toy-reading-lede {
+  margin: 20px 0 0;
+  max-width: 38em;
+  font-family: var(--font-body), sans-serif;
+  font-size: clamp(16px, 1.3vw, 19px);
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.toy-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(84px, 9vw, 132px) minmax(0, 1fr);
+  align-items: center;
+  margin-top: clamp(40px, 7svh, 72px);
+}
+
+/* A sheet of airmail paper: slanted red and blue stripes round the edge, as on the letters the
+   toy members carry. */
+.toy-sheet {
+  position: relative;
+  padding: 13px;
+  border-radius: 12px;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--stamp-red) 0 11px,
+    var(--sheet) 11px 22px,
+    var(--stamp-blue) 22px 33px,
+    var(--sheet) 33px 44px
+  );
+  box-shadow:
+    0 1px 0 rgb(30 26 20 / 0.06),
+    0 18px 40px -18px rgb(72 48 12 / 0.34);
+}
+
+.toy-sheet--sealed {
+  rotate: -1.4deg;
+}
+
+.toy-sheet--read {
+  rotate: 1.1deg;
+}
+
+.toy-sheet-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: clamp(300px, 30vw, 380px);
+  padding: clamp(22px, 2.4vw, 34px);
+  border-radius: 5px;
+  background: var(--sheet);
+  overflow: hidden;
+}
+
+/* Lamplight coming through the sheet that has been read. */
+.toy-sheet-light {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 70% 62% at 50% 42%, rgb(255 208 112 / 0.62), rgb(255 216 134 / 0) 100%);
+  pointer-events: none;
+}
+
+.toy-sheet-label {
+  position: relative;
+  margin: 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.toy-sheet-words {
+  position: relative;
+  margin: 16px 0 0;
+  font-family: var(--font-serif), serif;
+  font-size: clamp(22px, 2.3vw, 31px);
+  font-weight: 600;
+  line-height: 1.16;
+  letter-spacing: -0.012em;
+  color: var(--ink);
+}
+
+.toy-sheet-small {
+  position: relative;
+  margin: 22px 0 0;
+  font-family: var(--font-body), sans-serif;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.toy-sheet-code {
+  position: relative;
+  margin: 8px 0 0;
+  font-family: var(--font-mono), monospace;
+  font-size: clamp(11.5px, 0.92vw, 13px);
+  line-height: 1.65;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+
+.toy-sheet-foot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 22px;
+  font-family: var(--font-body), sans-serif;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.toy-sheet-foot b {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.toy-wax {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 36% 30%, rgb(255 255 255 / 0.5), rgb(255 255 255 / 0) 34%),
+    radial-gradient(circle, var(--stamp-red) 0 44%, #b92d1c 46% 58%, var(--stamp-red) 60%);
+  box-shadow: 0 2px 5px rgb(120 30 16 / 0.35);
+}
+
+.toy-verdict {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  background: var(--critical);
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fff8ec;
+}
+
+/* The thread runs from one sheet to the other, with the lantern hanging at its middle. */
+.toy-between {
+  position: relative;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+}
+
+.toy-between-thread {
+  position: absolute;
+  left: -6px;
+  right: -6px;
+  top: 50%;
+  height: 10px;
+  translate: 0 -50%;
+  border-radius: 5px;
+  background:
+    repeating-linear-gradient(-56deg, rgb(30 26 20 / 0.3) 0 1.6px, rgb(30 26 20 / 0) 1.6px 9px), var(--accent);
+  transform-origin: left center;
+}
+
+.toy-between-lantern {
+  position: relative;
+  width: clamp(46px, 5vw, 64px);
+  height: auto;
+  filter: drop-shadow(0 0 18px rgb(255 200 96 / 0.85));
+}
+
+@media (max-width: 859px) {
+  .toy-reading-inner {
+    width: calc(100% - 40px);
+  }
+
+  .toy-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .toy-sheet--sealed,
+  .toy-sheet--read {
+    rotate: none;
+  }
+
+  .toy-sheet-body {
+    min-height: 0;
+  }
+
+  .toy-between {
+    height: 92px;
+  }
+
+  .toy-between-thread {
+    left: 50%;
+    right: auto;
+    top: -4px;
+    bottom: -4px;
+    width: 10px;
+    height: auto;
+    translate: -50% 0;
+    background:
+      repeating-linear-gradient(-34deg, rgb(30 26 20 / 0.3) 0 1.6px, rgb(30 26 20 / 0) 1.6px 9px), var(--accent);
+    transform-origin: center top;
+  }
+}

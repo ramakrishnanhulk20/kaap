@@ -1,0 +1,192 @@
+.toy-nav {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(1220px, calc(100% - 64px));
+  height: 64px;
+  margin-inline: auto;
+  color: var(--ink);
+}
+
+.toy-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-grotesk), sans-serif;
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.toy-mark {
+  width: 28px;
+  height: 28px;
+  overflow: visible;
+}
+
+.toy-mark path,
+.toy-mark circle {
+  transition: translate 240ms ease;
+}
+
+/* The bow's two ends swing when the brand is pointed at. */
+.toy-brand:hover .toy-mark-tail {
+  translate: 0 1.2px;
+}
+
+.toy-nav-links {
+  display: flex;
+  gap: clamp(18px, 2.6vw, 34px);
+}
+
+.toy-nav-link {
+  position: relative;
+  padding: 6px 0;
+  font-family: var(--font-body), sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.toy-nav-link::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  border-radius: 2px;
+  background:
+    repeating-linear-gradient(-56deg, rgb(30 26 20 / 0.3) 0 1.2px, rgb(30 26 20 / 0) 1.2px 6px), var(--accent);
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 200ms ease;
+}
+
+.toy-nav-link:hover::after,
+.toy-nav-link:focus-visible::after {
+  clip-path: inset(0 0 0 0);
+}
+
+.toy-nav-link:focus-visible,
+.toy-brand:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.toy-closing {
+  position: relative;
+  padding: clamp(72px, 13svh, 148px) 0 clamp(56px, 9svh, 96px);
+  background: var(--bg);
+  color: var(--ink);
+  text-align: center;
+}
+
+.toy-closing-title {
+  margin: 0 auto;
+  max-width: 13em;
+  font-family: var(--font-grotesk), sans-serif;
+  font-size: clamp(2.3rem, 5.6vw, 5rem);
+  font-weight: 800;
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+}
+
+.toy-closing-text {
+  margin: 22px auto 0;
+  max-width: 32em;
+  padding-inline: 20px;
+  font-family: var(--font-body), sans-serif;
+  font-size: clamp(16px, 1.35vw, 19px);
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.toy-closing .toy-actions {
+  justify-content: center;
+  margin-top: 30px;
+  padding-inline: 20px;
+}
+
+.toy-footer {
+  position: relative;
+  padding: 34px 0 40px;
+  background: var(--bg);
+  color: var(--muted);
+}
+
+/* The thread, laid along the top of the footer. */
+.toy-footer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: min(1220px, calc(100% - 64px));
+  height: 6px;
+  translate: -50% 0;
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(-56deg, rgb(30 26 20 / 0.3) 0 1.4px, rgb(30 26 20 / 0) 1.4px 8px), var(--accent);
+}
+
+.toy-footer-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px 32px;
+  width: min(1220px, calc(100% - 64px));
+  margin-inline: auto;
+  font-family: var(--font-body), sans-serif;
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.toy-footer-name {
+  font-family: var(--font-serif), serif;
+  font-size: 16px;
+  font-style: italic;
+}
+
+.toy-footer-name b {
+  font-family: var(--font-tamil), serif;
+  font-size: 17px;
+  font-style: normal;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+@media (max-width: 859px) {
+  .toy-nav {
+    width: calc(100% - 40px);
+    height: 56px;
+  }
+
+  .toy-nav-links {
+    gap: 18px;
+  }
+
+  .toy-nav-link--wide {
+    display: none;
+  }
+
+  .toy-footer::before,
+  .toy-footer-inner {
+    width: calc(100% - 40px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toy-mark path,
+  .toy-mark circle,
+  .toy-nav-link::after {
+    transition: none;
+  }
+}

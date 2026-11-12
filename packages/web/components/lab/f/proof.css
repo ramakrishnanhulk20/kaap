@@ -1,0 +1,179 @@
+.toy-proof {
+  --live: #1e8753;
+  --page: #fcf7ea;
+  --rule: rgb(43 77 160 / 0.2);
+  --margin-line: rgb(220 58 38 / 0.6);
+
+  position: relative;
+  padding: clamp(56px, 9svh, 104px) 0 clamp(80px, 13svh, 144px);
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.toy-proof-inner {
+  width: min(1220px, calc(100% - 64px));
+  margin-inline: auto;
+}
+
+.toy-proof-title {
+  margin: 12px 0 0;
+  max-width: 16em;
+  font-family: var(--font-grotesk), sans-serif;
+  font-size: clamp(2rem, 4.3vw, 3.7rem);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+}
+
+.toy-proof-lede {
+  margin: 20px 0 0;
+  max-width: 38em;
+  font-family: var(--font-body), sans-serif;
+  font-size: clamp(16px, 1.3vw, 19px);
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* A page from an account book: ruled lines, and the two red lines of the margin down the left. */
+.toy-ledger {
+  position: relative;
+  margin-top: clamp(36px, 6svh, 60px);
+  padding: 10px 0 14px;
+  border-radius: 10px;
+  background: var(--page);
+  box-shadow:
+    0 1px 0 rgb(30 26 20 / 0.06),
+    0 22px 44px -22px rgb(72 48 12 / 0.34);
+  overflow: hidden;
+}
+
+.toy-ledger::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: clamp(18px, 3.4vw, 46px);
+  width: 5px;
+  border-left: 1.5px solid var(--margin-line);
+  border-right: 1.5px solid var(--margin-line);
+  pointer-events: none;
+}
+
+.toy-ledger-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) 108px minmax(0, 1.5fr);
+  gap: clamp(16px, 2.4vw, 36px);
+  align-items: baseline;
+  padding: clamp(15px, 2.2svh, 21px) clamp(20px, 3vw, 40px) clamp(15px, 2.2svh, 21px) clamp(40px, 6vw, 84px);
+  border-bottom: 1px solid var(--rule);
+  transition: background-color 160ms ease;
+}
+
+.toy-ledger-row:last-child {
+  border-bottom: 0;
+}
+
+.toy-ledger-row:not(.toy-ledger-head):hover {
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+.toy-ledger-head {
+  font-family: var(--font-mono), monospace;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.toy-ledger-what {
+  font-family: var(--font-grotesk), sans-serif;
+  font-size: clamp(18px, 1.55vw, 22px);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+
+.toy-ledger-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--live);
+}
+
+.toy-ledger-state::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.toy-ledger-state--not {
+  color: var(--muted);
+}
+
+.toy-ledger-state--not::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+
+.toy-ledger-proof {
+  font-family: var(--font-body), sans-serif;
+  font-size: 15.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.toy-ledger-proof b {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.toy-ledger-link {
+  display: inline-block;
+  margin-top: 4px;
+  font-family: var(--font-mono), monospace;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.toy-ledger-link:hover {
+  text-decoration-color: var(--ink);
+}
+
+.toy-ledger-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 859px) {
+  .toy-proof-inner {
+    width: calc(100% - 40px);
+  }
+
+  .toy-ledger-head {
+    display: none;
+  }
+
+  .toy-ledger-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 14px;
+    padding: 16px 16px 16px 40px;
+  }
+
+  .toy-ledger-proof {
+    grid-column: 1 / -1;
+  }
+}

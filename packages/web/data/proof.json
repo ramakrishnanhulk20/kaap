@@ -1,0 +1,67 @@
+{
+  "source": "Written by packages/web/scripts/proof-data.mjs from deployments/testnet.json, deployments/demo-hash-text.json, packages/sealed/AI-EVAL.md and PROOF.md. Do not edit by hand.",
+  "network": "testnet",
+  "deployedAt": "2026-11-11T07:28:03Z",
+  "guard": {
+    "account": "kaap-guard-1111072803.testnet",
+    "codeSha256": "bf09d7bbb48f312eb4043bd7b585f3b02bbe9d8b7d5bc0bf31fec9319c663767",
+    "deployTx": "DEta1bNNm4gRYLqhZJ2HfwDnVtz294dgyEyLfiQVzsK1",
+    "keyDeletedTx": "6qEFvNiz5Guw1w2XaA6cS36kkRVhAJbPTtijgPEcTssM",
+    "accessKeysLeft": 0
+  },
+  "registry": {
+    "account": "kaap-registry-1111072803.testnet",
+    "codeSha256": "228c21366ffdaf58f31a6e3550fd9898bc9ae65d1182f7a9e84d2df3c07fb2c9",
+    "deployTx": "53xJksmZUhokY6rVNzXNcnadxAUEaN1RWPkdhJwMwiT7",
+    "keyDeletedTx": "GxMNoCaecyMRfF5k1dqtsxB4uCydKz8fUpzBkMm9gUF1",
+    "accessKeysLeft": 0
+  },
+  "treasury": {
+    "account": "kaap-dao-1111072928.testnet",
+    "codeSha256": "bf6f951ee5e45968e3367fa857bebf8bc80badec183998c2239c487237e0d7f6",
+    "deployTx": "GJDgwXkEEFqrRR4p24ruZrjdvtcM3Hrp9r1RboWx3ePz",
+    "keyDeletedTx": "GWAwWeDcpid7d2snZx2xY1t1qXvrFerztKgaZ7gJY2hZ",
+    "accessKeysLeft": 0,
+    "policyFrom": "the role setup of a live NEAR Business treasury on mainnet, read 29 Oct 2026, members removed",
+    "enrolled": true
+  },
+  "sealed": {
+    "project": "kaap-worker-1029053612.testnet/kaap-sealed",
+    "signingKey": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
+    "attestedRunTx": "7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC",
+    "attestationUrl": "https://testnet-api.outlayer.ai/attestations/by-tx/7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC"
+  },
+  "demoText": {
+    "dao": "kaap-dao-1111072928.testnet",
+    "proposalId": 7,
+    "message": "{\"signer_id\":\"kaap-dao-1111072928.testnet\",\"deadline\":\"2026-11-19T05:47:23.917Z\",\"intents\":[{\"intent\":\"add_public_key\",\"public_key\":\"ed25519:5ASfrukKB4z2oA1bUfQUD5xSc5vuzArLJydBhBTmFNzM\"}]}",
+    "nonce": "d6+zmX7K5ICgx3PI/RLOM5SyCdvLRJR+ZuV8/cE/K8M=",
+    "recipient": "intents.near",
+    "standard": "nep413"
+  },
+  "stopped": {
+    "record": "PROOF.md",
+    "proposalId": 1,
+    "said": "Monthly salary payment to alice...",
+    "paid": "a1ice...",
+    "seconds": 24.1,
+    "filedTx": "GaQuPteeaiPAqjow7ezLC7f2HqxbBHv53erE1N4C7g9A",
+    "sealedTx": "az5yNU7xixz2Qwrt8g4pNhygJTpceRqHJTK2zv7NF3J",
+    "recordedTx": "2T8fbLoy9gkFkbLThTMPsbRCf4RckfZVMVBvwvfqePmy",
+    "vetoTx": "AWWzynnmDdCYaKeSJA66Kr3h7DxW6ni9Sh6uHtH6v4M9"
+  },
+  "evaluation": {
+    "report": "packages/sealed/AI-EVAL.md",
+    "records": 298,
+    "caught": {
+      "withAi": 41,
+      "plain": 41,
+      "total": 54
+    },
+    "wronglyVetoed": {
+      "withAi": 0,
+      "plain": 0,
+      "total": 244
+    }
+  }
+}

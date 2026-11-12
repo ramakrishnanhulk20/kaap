@@ -1,0 +1,128 @@
+.toy-steps {
+  position: relative;
+  padding: clamp(56px, 9svh, 104px) 0 clamp(80px, 13svh, 144px);
+  background: var(--bg);
+  color: var(--ink);
+  overflow-x: clip;
+}
+
+.toy-steps-inner {
+  width: min(1220px, calc(100% - 64px));
+  margin-inline: auto;
+}
+
+.toy-steps-title {
+  margin: 12px 0 0;
+  max-width: 16em;
+  font-family: var(--font-grotesk), sans-serif;
+  font-size: clamp(2rem, 4.3vw, 3.7rem);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+}
+
+.toy-steps-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(28px, 4vw, 56px);
+  margin-top: clamp(40px, 7svh, 72px);
+}
+
+/* The shadow sits on a wrapper because the stamp's own edge is cut out with a mask, and a mask
+   would cut the shadow off too. */
+.toy-stamp-lift {
+  filter: drop-shadow(0 14px 16px rgb(72 48 12 / 0.2));
+  transition: rotate 220ms ease, translate 220ms ease;
+}
+
+.toy-step:nth-child(1) .toy-stamp-lift {
+  rotate: -1.6deg;
+}
+
+.toy-step:nth-child(2) .toy-stamp-lift {
+  rotate: 1.1deg;
+}
+
+.toy-step:nth-child(3) .toy-stamp-lift {
+  rotate: -0.8deg;
+}
+
+.toy-step:hover .toy-stamp-lift {
+  rotate: 0deg;
+  translate: 0 -4px;
+}
+
+/* A postage stamp: white paper with a row of punched holes along every edge. The first layer of
+   the mask keeps the middle whole; the second punches a hole every 19px, centred on the edges. */
+.toy-stamp {
+  --hole: 5.5px;
+  --pitch: 19px;
+
+  position: relative;
+  padding: 14px;
+  background: #fffaf0;
+  -webkit-mask:
+    linear-gradient(#000 0 0) center / calc(100% - 13px) calc(100% - 13px) no-repeat,
+    radial-gradient(circle, transparent var(--hole), #000 calc(var(--hole) + 0.7px)) calc(var(--pitch) / -2)
+      calc(var(--pitch) / -2) / var(--pitch) var(--pitch) round;
+  mask:
+    linear-gradient(#000 0 0) center / calc(100% - 13px) calc(100% - 13px) no-repeat,
+    radial-gradient(circle, transparent var(--hole), #000 calc(var(--hole) + 0.7px)) calc(var(--pitch) / -2)
+      calc(var(--pitch) / -2) / var(--pitch) var(--pitch) round;
+}
+
+.toy-stamp img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+.toy-stamp-value {
+  position: absolute;
+  top: 22px;
+  left: 24px;
+  font-family: var(--font-grotesk), sans-serif;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+
+.toy-step-title {
+  margin: clamp(20px, 3svh, 30px) 0 0;
+  font-family: var(--font-grotesk), sans-serif;
+  font-size: clamp(21px, 1.9vw, 27px);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+}
+
+.toy-step-text {
+  margin: 10px 0 0;
+  max-width: 30em;
+  font-family: var(--font-body), sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+@media (max-width: 859px) {
+  .toy-steps-inner {
+    width: calc(100% - 40px);
+  }
+
+  .toy-steps-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toy-stamp-lift {
+    transition: none;
+  }
+}

@@ -5,11 +5,11 @@ import { useSearchParams } from 'next/navigation';
 import { useSyncExternalStore } from 'react';
 import HeroD from './HeroD';
 import HeroE from './HeroE';
-import HeroF from './HeroF';
+import PageF from './PageF';
 import ThemeToggle from './ThemeToggle';
 
 const DIRECTIONS = [
-  { id: 'f', label: 'F  Watchman', Hero: HeroF },
+  { id: 'f', label: 'F  Watchman', Hero: PageF },
   { id: 'e', label: 'E  Kaappu', Hero: HeroE },
   { id: 'd', label: 'D  Ink', Hero: HeroD },
 ] as const;
