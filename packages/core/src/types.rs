@@ -154,12 +154,16 @@ pub enum Effect {
         for_account: String,
         amount: String,
     },
-    /// Kaap's own enrolment call: `enroll` on `ProposalInput::guard_account`, with no arguments
-    /// and at most `enrolment::DEPOSIT_YOCTO` attached. `deposit` is that NEAR in yoctoNEAR; the
-    /// guard keeps its storage cost and refunds the rest, so it is this effect, not a payment.
+    /// Kaap's own enrolment call: `enroll` on `ProposalInput::guard_account`, with the template's
+    /// arguments (`enrolment::args`) and at most `enrolment::DEPOSIT_YOCTO` attached. `deposit` is
+    /// that NEAR in yoctoNEAR; the guard keeps its storage cost and refunds the rest, so it is
+    /// this effect, not a payment. `strict` is true when the call also chooses strict mode (C8),
+    /// and is left out of the JSON otherwise, so a default enrolment reads as it always has.
     GuardEnrol {
         guard: String,
         deposit: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        strict: bool,
     },
     DefiCall {
         protocol: String,

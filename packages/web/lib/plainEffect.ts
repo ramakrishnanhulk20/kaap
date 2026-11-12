@@ -120,7 +120,9 @@ export function plainEffect(effect: Fields, decimals: Record<string, number> = {
     case 'guard_enrol': {
       const guard = text(effect.guard);
       const amount = sum(effect.deposit, 'near', decimals);
-      return guard && amount ? `Enrols this treasury in Kaap's guard ${guard}, attaching ${amount} for storage.` : null;
+      if (!guard || !amount || (effect.strict !== undefined && effect.strict !== true)) return null;
+      const mode = effect.strict === true ? ' It chooses strict mode: the guard will also reject any request whose signed hash Kaap has not read.' : '';
+      return `Enrols this treasury in Kaap's guard ${guard}, attaching ${amount} for storage.${mode}`;
     }
     case 'defi_call': {
       const protocol = text(effect.protocol);

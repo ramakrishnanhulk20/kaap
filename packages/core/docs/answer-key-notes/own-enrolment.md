@@ -34,8 +34,9 @@ on the printed JSON before and after).
    so a role named `guard` keeps firing GUARD_WEAKENED, as before this change.
 5. **`guard_enrol` is read only in the template's shape (accepted).** The receiver is exactly
    `ProposalInput::guard_account`, the method exactly `enroll`, the arguments `{}` or empty (empty
-   arguments are no arguments, ruling 2), and the deposit at most 0.01 NEAR, the template's own
-   deposit (packages/contracts/GAS.md line 31). A larger deposit, any argument, any other method on
+   arguments are no arguments, ruling 2) or, since strict mode, exactly `{"veto_unreadable":true}`,
+   and the deposit at most 0.01 NEAR, the template's own
+   deposit (packages/contracts/GAS.md line 31). A larger deposit, any other argument, any other method on
    the guard, `enroll` on any other account, or no guard account leaves the call as it was: an
    unknown call. A guard account that is one of the exact known accounts (`intents.near` and the
    rest) is not read as a guard. The deposit is the effect, not a payment: no ATTACHED_DEPOSIT and
@@ -52,7 +53,7 @@ on the printed JSON before and after).
 
 Section 3, the effects table, after `storage_deposit`:
 
-| `guard_enrol` | `guard`, `deposit` | `enroll` on the enrolled guard account, with no arguments and at most 0.01 NEAR attached: the DAO enrolling in Kaap's guard. The attached NEAR is this effect; the guard keeps its storage cost and refunds the rest |
+| `guard_enrol` | `guard`, `deposit`, and `strict` (true, or left out) | `enroll` on the enrolled guard account, with no arguments or with exactly `{"veto_unreadable":true}` (strict mode), and at most 0.01 NEAR attached: the DAO enrolling in Kaap's guard. The attached NEAR is this effect; the guard keeps its storage cost and refunds the rest |
 
 Section 4, `ATTACHED_DEPOSIT`: add `guard_enrol` to the effects whose deposit does not fire it.
 

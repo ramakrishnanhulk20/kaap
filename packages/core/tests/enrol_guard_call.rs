@@ -1,5 +1,6 @@
 // Kaap's own enrolment call, `enroll` on the enrolled guard account, read as a `guard_enrol` effect
-// with no UNKNOWN_CALL, UNKNOWN_VALUE or ATTACHED_DEPOSIT, and every other shape of call on or near
+// with no UNKNOWN_CALL, UNKNOWN_VALUE or ATTACHED_DEPOSIT, in both shapes the template writes (the
+// default one and the one that chooses strict mode), and every other shape of call on or near
 // the guard left an unknown call. The kind is built the way the enrolment template builds it, with
 // the template's own description, and read with no prices, so an unpriced NEAR amount would show.
 // It does NOT cover the guard account being Kaap's (the caller vouches for that), what the guard
@@ -59,9 +60,27 @@ fn the_cap_is_the_templates_one_hundredth_of_a_near() {
 fn enroll_on_the_guard_reads_as_guard_enrol() {
     for deposit in [enrolment::DEPOSIT_YOCTO, 2_390_000_000_000_000_000_000] {
         let a = read(&call(GUARD, enrolment::METHOD, &json!({}), deposit), Some(GUARD));
-        assert_eq!(a.effects, vec![Effect::GuardEnrol { guard: GUARD.into(), deposit: deposit.to_string() }]);
+        assert_eq!(a.effects, vec![Effect::GuardEnrol { guard: GUARD.into(), deposit: deposit.to_string(), strict: false }]);
         assert!(codes(&a).is_empty(), "no UNKNOWN_CALL, UNKNOWN_VALUE or ATTACHED_DEPOSIT: {:?}", codes(&a));
+        let written = serde_json::to_value(&a.effects[0]).unwrap();
+        assert_eq!(written, json!({ "type": "guard_enrol", "guard": GUARD, "deposit": deposit.to_string() }), "a default enrolment is written as before strict mode");
     }
+}
+
+#[test]
+fn the_strict_enrolment_the_template_writes_reads_as_guard_enrol_in_strict_mode() {
+    let args = enrolment::args(true);
+    assert_eq!(args, json!({ "veto_unreadable": true }));
+    let a = read(&call(GUARD, enrolment::METHOD, &args, enrolment::DEPOSIT_YOCTO), Some(GUARD));
+    assert_eq!(a.effects, vec![Effect::GuardEnrol { guard: GUARD.into(), deposit: enrolment::DEPOSIT_YOCTO.to_string(), strict: true }]);
+    assert!(codes(&a).is_empty(), "Kaap's own strict enrolment carries no finding: {:?}", codes(&a));
+    let written = serde_json::to_value(&a.effects[0]).unwrap();
+    assert_eq!(written["strict"], json!(true));
+    assert_eq!(serde_json::from_value::<Effect>(written).unwrap(), a.effects[0], "and reads back");
+    // The same call on another account, or with no guard named, is nobody's enrolment.
+    assert!(is_unknown(&read(&call("not-the-guard.testnet", enrolment::METHOD, &args, enrolment::DEPOSIT_YOCTO), Some(GUARD))));
+    assert!(is_unknown(&read(&call(GUARD, enrolment::METHOD, &args, enrolment::DEPOSIT_YOCTO), None)));
+    assert!(is_unknown(&read(&call(GUARD, enrolment::METHOD, &args, enrolment::DEPOSIT_YOCTO + 1), Some(GUARD))));
 }
 
 #[test]
@@ -88,8 +107,18 @@ fn a_deposit_over_the_cap_stays_unknown() {
 }
 
 #[test]
-fn arguments_other_than_none_stay_unknown() {
-    for args in [json!({ "dao": DAO }), json!([]), json!("x")] {
+fn arguments_other_than_the_templates_two_shapes_stay_unknown() {
+    for args in [
+        json!({ "dao": DAO }),
+        json!([]),
+        json!("x"),
+        json!({ "veto_unreadable": false }),
+        json!({ "veto_unreadable": null }),
+        json!({ "veto_unreadable": "true" }),
+        json!({ "veto_unreadable": 1 }),
+        json!({ "veto_unreadable": true, "dao": DAO }),
+        json!({ "Veto_unreadable": true }),
+    ] {
         let a = read(&call(GUARD, enrolment::METHOD, &args, enrolment::DEPOSIT_YOCTO), Some(GUARD));
         assert!(is_unknown(&a), "{args}: {:?}", a.effects);
     }

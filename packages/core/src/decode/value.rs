@@ -503,14 +503,23 @@ fn wrap(receiver: &str, method: &str, args: &Value, deposit: &BigUint, dao: &str
 
 /// Kaap's own enrolment call on the enrolled guard account (`enrolment`, C30). The attached NEAR
 /// pays the guard's storage for this DAO's entry and the guard refunds what is left, so it is this
-/// effect, not a payment. Only the template's exact shape is read: no arguments, and at most the
-/// template's deposit. Anything else on the guard is an unknown call (fail closed).
+/// effect, not a payment. Only the template's two exact shapes are read (`enrolment::args`): no
+/// arguments, or the one argument that chooses strict mode, and at most the template's deposit.
+/// Anything else on the guard is an unknown call (fail closed), `{"veto_unreadable":false}`
+/// included: the guard would take it, but the template never writes it.
 fn guard_enrol(guard: &str, args: &Value, deposit: &BigUint) -> Result<Decoded, Refusal> {
-    if !object(args)?.is_empty() || *deposit > BigUint::from(enrolment::DEPOSIT_YOCTO) {
+    let strict = if object(args)?.is_empty() {
+        false
+    } else if *args == enrolment::args(true) {
+        true
+    } else {
+        return Err(Refusal::Unreadable);
+    };
+    if *deposit > BigUint::from(enrolment::DEPOSIT_YOCTO) {
         return Err(Refusal::Unreadable);
     }
     let mut decoded = Decoded::default();
-    decoded.push(Effect::GuardEnrol { guard: guard.into(), deposit: deposit.to_string() }, None);
+    decoded.push(Effect::GuardEnrol { guard: guard.into(), deposit: deposit.to_string(), strict }, None);
     decoded.takes_deposit = true;
     Ok(decoded)
 }
