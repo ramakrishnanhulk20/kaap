@@ -390,12 +390,12 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 `npm test -w packages/cli` and `npm test -w packages/worker`, run in a fresh clone of this repository:
 
 ```
-ℹ tests 121
-ℹ pass 121
+ℹ tests 122
+ℹ pass 122
 ℹ fail 0
 
-ℹ tests 160
-ℹ pass 160
+ℹ tests 165
+ℹ pass 165
 ℹ fail 0
 ```
 
