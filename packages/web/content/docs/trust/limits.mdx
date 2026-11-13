@@ -18,12 +18,14 @@ A guard you cannot see the edges of is not worth trusting. These are Kaap's.
 - **A request it cannot read.** A request that shows only a hash is flagged to members as unreadable. It is not vetoed, unless a member supplies the words behind the hash and they turn out dangerous.
 - **A request that passes in one step.** The veto has to land before enough approvers sign. In the recorded proof that took 24 seconds. A treasury whose rules let a single signature execute a request leaves no time for any guard.
 - **A very large request.** A rule change of more than about 200 KB is too large for the guard to vote on in one transaction.
+- **A change that needs no request.** Kaap guards requests. A change to a treasury's own code that does not go through a request is outside what any veto can stop. Kaap notices it while a request is open: it judges the open requests again, and stops watching a treasury whose code is no longer a Sputnik DAO release, which shows on the watcher's status page. `kaap verify` shows a code change since a verdict. Members get no alert for the code change itself.
 - **The same request, filed again.** A rejected request is closed for good, but nothing stops a member from filing it again. Kaap reads the new one afresh, and rejects it again if it is the same theft.
 
 ## What you still have to trust
 
 - **Kaap's founder, for the guard's key.** The guard's code is locked, but its owner can replace the key it obeys, and on today's guard that takes effect at once. A dishonest owner could point the guard at a key of their own and reject requests. They still could not approve or move anything.
 - **OutLayer and Intel's sealed hardware.** A verdict is only as good as the promise that the reader ran unmodified.
+- **The watcher's key.** The account that runs the watcher also owns the sealed reader on OutLayer, and its key is on the watcher's host. Someone who stole that key could publish a different reader that signs with the same key, and make the guard reject honest requests. They still could not approve or pay, and `kaap verify` would show the verdict came from a build that is not in the repository. The two are not split yet.
 - **Two RPC providers.** Kaap reads the chain through two and refuses to judge when they disagree. If both were wrong in the same way, it would be wrong too.
 
 ## What has not been checked

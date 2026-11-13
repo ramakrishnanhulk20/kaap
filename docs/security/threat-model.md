@@ -193,6 +193,7 @@ Not upheld yet: the watcher's key is also the key to the sealed reader. Found in
    - prove the AI's judgement is right; the attestation proves which model ran in sealed hardware, and physical attacks on that hardware are out of scope;
    - model what an unknown receiver contract does, or what any contract does after the proposal executes;
    - stop a majority of the DAO's own approvers;
+   - stop a change to a DAO's own code that does not go through a proposal: a veto acts on proposals only. The watcher sees the DAO's code hash move while a proposal of that DAO is open, judges the open proposals again and lets go of a DAO whose code is no longer a Sputnik release (C4, C36), and `kaap verify` shows the change since a verdict; members get no alert for the code change itself;
    - secure members' wallets or front ends;
    - defend against both RPC providers colluding;
    - follow a cross-chain withdrawal past its quote;
