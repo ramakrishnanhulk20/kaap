@@ -40,7 +40,7 @@ Nothing on a screen is typed by hand.
 
 - `/check` and `/api/check` read the chain live, through the command line's own `check`. That code is in `engine/`: one bundled file, `kaap-core` as WebAssembly, and the deployment records. `npm run engine` rebuilds the folder from `packages/cli`, and `engine/BUILD.json` names the commit and the hashes.
 - `data/proof.json` is written by `npm run data:proof` from `deployments/testnet.json`, `deployments/demo-hash-text.json`, `PROOF.md` and `packages/sealed/AI-EVAL.md`.
-- `data/hash-proposal.json` is the demo treasury's request #7 as testnet returned it, written by `npm run data:proposal`.
+- `data/hash-proposal.json` is the demo treasury's request #8 as testnet returned it, written by `npm run data:proposal`.
 
 ## The film
 

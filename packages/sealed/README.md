@@ -478,8 +478,9 @@ else the job prints or stores, so it and the CLI show one object the same way:
 No OutLayer call returns a project's signing key. The route is the attestation of a run that
 printed it:
 
-1. Take a run transaction from `RUNS.md`, for example
-   `Edzq3KEDgXQBeLEEZ62mqRT97mAJMpVbZVcB3dxbh6sW`, and fetch
+1. Take a run of this project, for example the first verdict in `PROOF.md`,
+   `6Lm1adNQeQrm75QBoWcEmAaG1dskrajEUCQCisatU12L` (the runs in `RUNS.md` were made on the project
+   before it and name that project and its key), and fetch
    `https://testnet-api.outlayer.ai/attestations/by-tx/<tx>`.
 2. Check that it names `project_id` `kaap-sealed-owner-1113041743.testnet/kaap-sealed`,
    `caller_account_id` `kaap-worker-1029053612.testnet`, and `wasm_hash` equal to

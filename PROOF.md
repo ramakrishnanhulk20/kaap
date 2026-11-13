@@ -206,20 +206,31 @@ Until 13 Nov the account that runs the watcher also owned the sealed program on 
 `node scripts/attack-sealed-owner.mjs` tries, as the watcher, every call OutLayer gives a project's owner:
 
 ```
-Kaap sealed owner attack, 2026-11-13T05:09:43.842Z: project kaap-sealed-owner-1113041743.testnet/kaap-sealed on outlayer.testnet, attacked by its caller kaap-worker-1029053612.testnet
+Kaap sealed owner attack, 2026-11-13T06:08:31.731Z: project kaap-sealed-owner-1113041743.testnet/kaap-sealed on outlayer.testnet, attacked by its caller kaap-worker-1029053612.testnet
 1. OutLayer names kaap-sealed-owner-1113041743.testnet as the owner; active build d14e29279146e6b0998e687c8ab3cd4739ea4b16dbfe2ae0184ea97e0af131cf, 1 build(s), uuid p0000000000000171
    keys: kaap-sealed-owner-1113041743.testnet has 1, kaap-worker-1029053612.testnet has 1, in common 0
 2. kaap-worker-1029053612.testnet tries the owner's calls on kaap-sealed-owner-1113041743.testnet/kaap-sealed:
-   refused: publish a build and make it active (add_version): Project not found: https://testnet.nearblocks.io/txns/NR4mguWLrwmU81gKDXZTs9f76rB6WizC1Khie2R372z
-   refused: choose the active build (set_active_version): Project not found: https://testnet.nearblocks.io/txns/2d2PkGYFJBw2vKvjWs25udqj6Pz6ZNZ5e8UVWwKEbyNN
-   refused: remove a build (remove_version): Project not found: https://testnet.nearblocks.io/txns/21uzQt2ecnGz79ZftRpt4FmpSu69XZdz4gDWbfsv2uhC
-   refused: hand the project to itself (transfer_project): 'kaap-worker-1029053612.testnet' has not accepted project kaap-worker-1029053612.testnet/kaap-sealed-owner-1113041743.testnet/kaap-sealed: it calls accept_proje: https://testnet.nearblocks.io/txns/55Jkn5SSV8Za3rpMgqHvG7e7XBmzgReg7Wvf8CYPtyDo
-   refused: delete the project (delete_project): Project not found: https://testnet.nearblocks.io/txns/3wbNMeCbNmxAXkVn8kRj6KmJp7PBepHU59AFe4kH6LEu
+   refused: publish a build and make it active (add_version): Project not found: https://testnet.nearblocks.io/txns/Djvte6xoMaLyxiQA8NsYa6ZGLwinmT1X6NZp4xk1yKFi
+   refused: choose the active build (set_active_version): Project not found: https://testnet.nearblocks.io/txns/ERGAeDifMBbQXeWQhAjJECCVRwSRrc9cpd5sgVuBqpp3
+   refused: remove a build (remove_version): Project not found: https://testnet.nearblocks.io/txns/Erp16kYg8Q6HF1apSjss4znmhTq2362otNMKHtRYn69b
+   refused: hand the project to itself (transfer_project): 'kaap-worker-1029053612.testnet' has not accepted project kaap-worker-1029053612.testnet/kaap-sealed-owner-1113041743.testnet/kaap-sealed: it calls accept_proje: https://testnet.nearblocks.io/txns/88PUxe1N7bQmQd6766Z71AQMiC4otvK4xRXYEY2gvSGf
+   refused: delete the project (delete_project): Project not found: https://testnet.nearblocks.io/txns/6Mh3sVNWbhRDDGDYuxhiVUMqUZvr4qHdEBdKvA3UvWHA
 3. the project now: owner kaap-sealed-owner-1113041743.testnet, active build d14e29279146e6b0998e687c8ab3cd4739ea4b16dbfe2ae0184ea97e0af131cf, 1 build(s): unchanged
-RESULT: pass, 5 of 5 tries refused on chain and the project is unchanged
+4. a standing acceptance of kaap-sealed-owner-1113041743.testnet/kaap-sealed by kaap-worker-1029053612.testnet: none
+RESULT: pass, 5 of 5 tries refused on chain, the project is unchanged and no acceptance stands
 ```
 
-OutLayer looks a project up under the account that calls, so the watcher cannot even name the owner's project: four tries end in "Project not found", and the fifth, handing the project over, needs the owner to start it. The script never sends these calls with the project's short name, which under the watcher's account is its own first project from before the split.
+OutLayer looks a project up under the account that calls, so the watcher cannot reach the owner's project: four tries end in "Project not found", which is that rule and not an owner check, and the fifth, handing the project over, needs the owner to start it. A try that failed for any other reason would not count. The script never sends these calls with the project's short name, which under the watcher's account is its own first project from before the split. One call does name another account's project: anyone may say they would accept it. That moves nothing unless the owner then hands the project over, and step 4 reads that no such acceptance stands.
+
+OutLayer gives a project's keys to one caller. Another account asking the same project (`node scripts/sealed-keys.mjs --as kaap-member-1029064001.testnet`) gets keys of its own, which the guard does not obey:
+
+```
+Kaap sealed keys, 2026-11-13T06:06:46.540Z: kaap-member-1029064001.testnet asks kaap-sealed-owner-1113041743.testnet/kaap-sealed (build d14e29279146e6b0998e687c8ab3cd4739ea4b16dbfe2ae0184ea97e0af131cf) for its keys, 1 time(s)
+  run 1: https://testnet.nearblocks.io/txns/BQjRsspJJoEzGjgk3ht5jzsPuqaHFyjcSYvrkDrDhjTf: verdict key ed25519:2VNAZqH5FuwYL4tAFjnmwWWZ9BDECaMsyFfz8yht3ruK, text key 69ade561ac0c0092bc193ab21961d05ba27d155c4e4c3310da568c81c7229628
+  every run printed the same two keys: true; the verdict key signed the text key: true
+  the guard obeys ed25519:8eiUXYidw2x7WWfVVmYkDcewi3aBzxKomMefsPPhaecF; texts are sealed to 40cc00435ddbcdb638ac967f7f592e69d290712d578010e47f4b9d16fcd62757
+RESULT: pass, kaap-member-1029064001.testnet gets keys of its own on this project, not the watcher's
+```
 
 The watcher's keys on the new project, asked for twice:
 
@@ -323,14 +334,16 @@ RESULT: pass, unreadable and left alone without the words, read and rejected by 
 
 Requests #7 and #8 are the same kind of request, filed with `--leave-open` and never explained, so they stay open as examples of what a treasury sees. The site offers the words behind #8 on its check page (`deployments/demo-hash-text.json`). The words behind #7 were lost when the machine's temporary folder was emptied, which is why the script now keeps them in a durable folder; #7 stays open and unread.
 
-## No AI answer in these runs, and why the veto still stands
+## The AI's answer, and why no veto rests on it
 
-Every verdict above says `ai_status: unavailable`. `scripts/prove.mjs` names no NEAR AI key, and the watcher's runs that morning found none stored for the new project. The verdicts are critical on a critical plain-code floor (`DESC_CONTRADICTS`, `HASH_TEXT_DANGEROUS`), which the guard's rule accepts with no AI answer at all: no veto here rests on a model. How the AI part performs is in `packages/sealed/AI-EVAL.md`.
+Every verdict in the runs above says `ai_status: unavailable`. `scripts/prove.mjs` names no NEAR AI key, and the watcher's runs that morning found none stored for the new project. Those verdicts are critical on a critical plain-code floor (`DESC_CONTRADICTS`, `HASH_TEXT_DANGEROUS`), which the guard's rule accepts with no AI answer at all: no veto here rests on a model.
+
+Later the same morning the key was stored for the new project, locked to the watcher's account and to build `d14e2927`. The next press of the site's try-it button filed request #10. The watcher had it judged ([run](https://testnet.nearblocks.io/txns/E8H9iJBkehBvenEKEZ9WfEViDXeGTNs9JNNqaH8RrvE4)), this time with the model's answer checked inside the sealed program (`ai_status: verified`, model `z-ai/glm-5.3-flash`), sent the guard's vote ([veto](https://testnet.nearblocks.io/txns/5vQh794Xu7qvKxZd1WSsfCM7hnSJ6gT9bp7Vh3ppGF3j)) and recorded the verdict ([record](https://testnet.nearblocks.io/txns/CWfaEA25KRvoEchtVvFfahLi7Skmb1ry5evgbTL4djkg)). The vote landed 53.4 seconds after the filing block, and `kaap verify kaap-dao-1113045321.testnet 10` passes all 24 checks. How the AI part performs on the labelled set is in `packages/sealed/AI-EVAL.md`.
 
 ## What this does not cover
 
 - Strict mode on testnet. The guard has it and the demo treasury has not turned it on, so no request was vetoed for being unreadable. The guard's sandbox tests against the real Sputnik DAO binary and the watcher's tests cover it.
 - A key change. No change of the guard's key was announced, so the 24-hour wait and the watcher's alert are shown by tests only.
 - A race against approvers. The treasury needs two approvals, and nobody approved anything while Kaap worked. A treasury where one approval executes a request can pay before any veto lands, and `kaap arming` says so for such a policy.
-- OutLayer's pace. A verdict needs OutLayer to answer, and that morning one run in three took over a minute and a half. Nothing in Kaap can speed that up.
+- OutLayer's pace. A verdict needs OutLayer to answer. That morning every run that named a key not yet stored took over a minute and a half, and one was never answered and had to be asked again. Nothing in Kaap can speed that up.
 - Mainnet. Everything here is NEAR testnet.

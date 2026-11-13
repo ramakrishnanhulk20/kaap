@@ -10,7 +10,7 @@ A guard you cannot see the edges of is not worth trusting. These are Kaap's.
 - **Mainnet.** The guard and the registry are on NEAR testnet only. Kaap reads mainnet treasuries, and that is all it does there.
 - **The always-on watcher.** <WatcherStatus />
 - **Strict mode on testnet.** The guard has strict mode and the 24-hour delay on key changes since 13 Nov 2026. No treasury on testnet has turned strict mode on and no key change was announced, so both are proven by tests against the real Sputnik DAO binary, not by a live run.
-- **The newest sealed reader.** The reader on testnet is the build of 11 Nov 2026. Fixes made since then are in the code and wait for a new build. Until then, the check on this site, which runs today's rules, can rate a few requests differently from the reader on testnet.
+- **One build of the reader at a time.** The reader on testnet is the build of 13 Nov 2026, made from the same rules as the check on this site. When the rules change, the site's check runs them at once and the reader only after a new build is published, so in between the two can rate a few requests differently.
 
 ## What Kaap does not catch
 

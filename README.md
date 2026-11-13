@@ -67,7 +67,7 @@ No wallet, no key and no test tokens are needed for any step here.
 ### On the site
 
 1. Open the site and press **Check a treasury**.
-2. Press **Read the demo treasury's hash-only request**. You see request #7, "Authenticate DAO for confidential intents", one finding, `HASH_UNVERIFIED`, and the line "The guard will not veto this. Members decide." Kaap cannot read a bare hash and says so.
+2. Press **Read the demo treasury's hash-only request**. You see request #8, "Authenticate DAO for confidential intents", one finding, `HASH_UNVERIFIED`, and the line "The guard will not veto this. Members decide." Kaap cannot read a bare hash and says so.
 3. Press **Use the words saved for this demo request**. Kaap checks that the words hash to the request's 64 characters, then reads them. You see a second effect, an intents key change that adds a key, the findings `HASH_TEXT_DANGEROUS` (critical) and `INTENTS_KEY_CHANGE` (high), and "Kaap's guard must veto this."
 4. Go back to the home page and press **Watch a theft get stopped**. You see request #1: it says "Monthly salary payment to alice...", it pays `a1ice...`, and under it are the four transactions of the run that rejected it, each a link to the explorer.
 5. Under the check, press **File the fake theft**. This files a real request on the demo treasury, and the page shows each step as it lands: read in sealed hardware, verdict, the guard's reject, the record, each with its transaction. It needs Kaap's watcher to be running; where it is not, the page says so.
@@ -278,12 +278,12 @@ flowchart TB
 - One sentence on what a request will really do, for all of Sputnik's proposal kinds: payments, contract calls, rule changes, upgrades, sign requests.
 - A check of the description against the effects. "Pays alice" on a request that pays `a1ice` is a contradiction.
 - A reading of hash-only requests once the words behind the hash are supplied, with proof that the words match the hash.
-- A sealed channel for those words: `kaap seal-text` encrypts them so only the sealed reader can open them. It goes through the watcher's `POST /texts`. On 13 Nov 2026 it ran end to end through the hosted watcher: a hash-only request was left alone, then rejected by the guard 63 seconds after its words were handed over sealed (`scripts/sealed-text-live.mjs`, output in PROOF.md).
+- A sealed channel for those words: `kaap seal-text` encrypts them so only the sealed reader can open them. It goes through the watcher's `POST /texts`. On 13 Nov 2026 it ran end to end through the hosted watcher: a hash-only request was left alone, then rejected by the guard once its words were handed over sealed (`scripts/sealed-text-live.mjs`, output in PROOF.md).
 
 **For the treasury**
 - A guard that can only reject. It holds no funds and cannot approve, pay or change a rule.
 - A veto rule that needs proof from plain code. An unreadable hash alerts members and is not vetoed.
-- Each verdict works once, expires within an hour at most, and is tied to one request by its hash.
+- Each verdict works once, expires within 15 minutes at most, and is tied to one request by its hash.
 - Locked contracts: no upgrade method and no access key. A new version is a new contract the treasury chooses to adopt.
 
 **For anyone checking Kaap**
@@ -311,7 +311,7 @@ Other libraries: Rust 1.93.0 with borsh, serde and ed25519-dalek; wasm-bindgen 0
 
 ## Testnet deployment
 
-Deployed 11 Nov 2026 from commit `413a74a`. Every id is also in [deployments/testnet.json](deployments/testnet.json).
+Deployed 13 Nov 2026 from commit `5f1cf75`. Every id is also in [deployments/testnet.json](deployments/testnet.json). The deployments of 29 Oct and 11 Nov are still on chain, with their records beside it.
 
 | | Account or id | Proof |
 |---|---|---|
@@ -325,11 +325,11 @@ NEAR has no contract verification service like Etherscan's, so `kaap verify` doe
 
 ## The full proof run
 
-[PROOF.md](PROOF.md) is the record of `node scripts/prove.mjs` on 11 Nov 2026: a member files a disguised payment, the sealed reader judges it, the verdict is recorded, the guard rejects it, a replay of the same verdict is refused, and an honest payment passes through untouched. It passed twice in a row on fresh requests.
+[PROOF.md](PROOF.md) is the record of `node scripts/prove.mjs` on 13 Nov 2026, on the deployment above: a member files a disguised payment, the sealed reader judges it, the verdict is recorded, the guard rejects it, a replay of the same verdict is refused, and an honest payment passes through untouched. It passed twice in a row on fresh requests.
 
-On 12 Nov 2026 the watcher itself ran against the same deployment and got four more fake thefts rejected with no script's help, two of them filed from the site's button. One of those votes was held for almost eight minutes because a free RPC provider stopped answering, and PROOF.md says exactly what happened. It also holds the output of `scripts/check-demo-filer.mjs`, which attacks the button's key five ways.
+The same file shows what else was done on this deployment that day. The watcher's own key tried every owner-only call on the sealed reader's project and was refused each time, and another account asking the reader got keys of its own, not the ones the guard obeys. The hosted watcher rejected a fake theft filed with the site's key, with no script's help, and once the NEAR AI key was stored it did so in 53 seconds with the model's answer verified. Its per-caller limit and its rule against accounts that are no treasury were attacked again and held. A request that showed only a hash was left alone, then rejected once its words were handed over sealed.
 
-Later that day the watcher moved to its host. There it rejected a fifth fake theft, filed from the site's button, in about 44 seconds. A live attack on its per-caller limit, `scripts/attack-caller-limit.mjs`, then found a real hole: the watcher believed an address header that the host's proxy does not vouch for. It was closed within the hour, and PROOF.md shows the attack's output before and after. A second attack, `scripts/attack-fake-enrolment.sh`, enrols an account that is no treasury in the guard, which anyone can do: the hosted watcher turned it away and spent nothing on it.
+[PROOF-2026-11-11.md](PROOF-2026-11-11.md) is the same record for the deployment before this one, kept whole. It includes a veto that was held for almost eight minutes because a free RPC provider stopped answering, and a live attack that found a real hole in the watcher's per-caller limit, with the output before and after the fix.
 
 Those scripts sign with Kaap's own testnet keys, so in another clone they stop with "no key". The commands in "Try it in two minutes" check what those runs left on chain, and need none.
 
@@ -358,7 +358,7 @@ sha256sum packages/cli/wasm/kaap_core_wasm_bg.wasm packages/web/engine/kaap_core
 
 ### Test results
 
-Run on 12 Nov 2026 on Ubuntu under WSL, with Rust 1.93.0 and Node 24.22.2.
+Run on 13 Nov 2026 on Ubuntu under WSL, with Rust 1.93.0 and Node 24.22.2.
 
 `cargo test --workspace`: **608 passed, 0 failed.**
 
@@ -390,12 +390,12 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 `npm test -w packages/cli` and `npm test -w packages/worker`, run in a fresh clone of this repository:
 
 ```
-ℹ tests 116
-ℹ pass 116
+ℹ tests 121
+ℹ pass 121
 ℹ fail 0
 
-ℹ tests 145
-ℹ pass 145
+ℹ tests 160
+ℹ pass 160
 ℹ fail 0
 ```
 

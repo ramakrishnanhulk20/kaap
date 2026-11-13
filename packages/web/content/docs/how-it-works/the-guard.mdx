@@ -1,6 +1,6 @@
 ---
 title: The guard
-description: The contract that votes, the eight checks before it does, and the one vote it can cast.
+description: The contract that votes, the ten checks before it does, and the one vote it can cast.
 ---
 
 The guard is a contract on NEAR. In an enrolled treasury it is the only member of one role, and that role can vote to reject and nothing else.
@@ -11,16 +11,16 @@ The only call the guard ever makes to another contract is a vote on the treasury
 
 Its role leaves out one kind of request: removing a member from a role. So the guard can never block its own removal.
 
-## The eight checks
+## The ten checks
 
-Anyone may hand the guard a verdict. The signature on it is what counts, not who carries it. Before it votes, the guard checks, in this order:
+Anyone may hand the guard a verdict. The signature on it is what counts, not who carries it. Before it votes, the guard checks two things about the call itself: that it carries enough gas for the vote to reach the treasury (900 Tgas), and that the request is no larger than one transaction can carry (217 KiB). Then eight about the verdict, in this order:
 
 1. The verdict is in the format it knows.
 2. The signature is valid for the one key it obeys, the sealed reader's.
 3. The verdict names this guard and this network.
 4. The treasury it names has enrolled.
 5. The veto rule below holds.
-6. The verdict has not expired. Kaap's watcher asks for verdicts that live ten minutes, and none can live longer than an hour.
+6. The verdict has not expired. Kaap's watcher asks for verdicts that live ten minutes, and the sealed reader signs none that lives longer than 15.
 7. The request it was handed is, byte for byte in meaning, the request the verdict judged.
 8. The verdict has never been used before.
 

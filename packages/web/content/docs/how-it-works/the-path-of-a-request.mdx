@@ -24,7 +24,7 @@ sequenceDiagram
   J->>A: asks a model for a second opinion and checks its attestation
   J-->>W: a signed verdict
   W->>G: hands the verdict to the guard
-  Note over G: eight checks. Only a fresh, critical verdict backed by a plain-code finding passes
+  Note over G: ten checks. Only a fresh, critical verdict backed by a plain-code finding passes
   G->>D: votes to reject
   W->>R: records the verdict for anyone to read
 ```
