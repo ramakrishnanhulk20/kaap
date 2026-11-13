@@ -1,12 +1,12 @@
 {
   "note": "Written by packages/web/scripts/bundle-engine.mjs. Do not edit by hand.",
-  "commit": "dcee3ffc559e459c8a565a44e2ad9321e33aad01",
+  "commit": "5bc9353979423ad5ab6bbfa90cd34a43833f3f92",
   "sources_committed": true,
   "wasm_sha256": "08d0f37ca4d713279bd2c3d97f91cd05e81e99001859dcb66f70208ea224460c",
-  "check_sha256": "a909fafdab1ddaec7fb5e17b11703e0a5700070bd55a49c25812f8e94ad455fa",
+  "check_sha256": "c05ea89150ba85d2c4658396dd7b7a349437bcda739dc95c51dc477590a3b6db",
   "records": [
-    "packages/sealed/testnet.json",
     "deployments/testnet.json",
+    "packages/sealed/testnet-2026-10-29.json",
     "deployments/testnet-2026-10-29.json"
   ]
 }

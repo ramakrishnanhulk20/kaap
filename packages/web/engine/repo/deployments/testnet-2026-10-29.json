@@ -27,6 +27,7 @@
   "sealed": {
     "project_id": "kaap-worker-1029053612.testnet/kaap-sealed",
     "worker_account": "kaap-worker-1029053612.testnet",
+    "builds": "packages/sealed/testnet-2026-10-29.json",
     "signing_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
     "attested_run_tx": "7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC",
     "attestation_url": "https://testnet-api.outlayer.ai/attestations/by-tx/7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC"
