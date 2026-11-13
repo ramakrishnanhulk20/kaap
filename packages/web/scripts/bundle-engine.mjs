@@ -61,6 +61,11 @@ for (const record of records) {
   copyFileSync(join(repo, record), join(out, 'repo', record));
 }
 
+// The wasm glue is a module in a .js file. A host ships this folder with the check route and not
+// this package's package.json, and may put one of its own above it that says commonjs, under
+// which the glue does not load. So the folder says what its files are.
+writeFileSync(join(out, 'package.json'), `${JSON.stringify({ type: 'module' }, null, 2)}\n`);
+
 const sha256 = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
 const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();
 const sources = ['packages/core', 'packages/core-wasm', 'packages/cli/src', 'packages/verdict'];
