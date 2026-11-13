@@ -24,7 +24,7 @@ A guard you cannot see the edges of is not worth trusting. These are Kaap's.
 ## What you still have to trust
 
 - **Kaap's founder, for the guard's key.** The guard's code is locked, but its owner can replace the key it obeys, and on today's guard that takes effect at once. A dishonest owner could point the guard at a key of their own and reject requests. They still could not approve or move anything.
-- **OutLayer and Intel's sealed hardware.** A verdict is only as good as the promise that the reader ran unmodified.
+- **OutLayer and Intel's sealed hardware.** A verdict is only as good as the promise that the reader ran unmodified. It also needs OutLayer to answer: when its testnet is busy a sealed run can go unanswered, and the watcher asks again for as long as the request is open. On 13 Nov 2026 one request waited about nine minutes for its first verdict.
 - **The watcher's key.** The account that runs the watcher also owns the sealed reader on OutLayer, and its key is on the watcher's host. Someone who stole that key could publish a different reader that signs with the same key, and make the guard reject honest requests. They still could not approve or pay, and `kaap verify` would show the verdict came from a build that is not in the repository. The two are not split yet.
 - **Two RPC providers.** Kaap reads the chain through two and refuses to judge when they disagree. If both were wrong in the same way, it would be wrong too.
 

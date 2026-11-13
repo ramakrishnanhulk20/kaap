@@ -489,3 +489,55 @@ RESULT: pass, the account was turned away as not_a_sputnik_dao, the watched trea
 The two transactions: [enrolled](https://testnet.nearblocks.io/txns/A2wwnfuMc51ZFS6jTJ3iUvNbsKgPfaxibLSaNvoy18Za), [unenrolled](https://testnet.nearblocks.io/txns/HG6oZza6Akct23yuAg8ZajRPgTKM9c79qa83fBAje5Z4). Just before it, with the same build of the watcher, a fake theft filed from the site's button (request #16) was rejected by the guard about 45 seconds after the press ([the guard's vote](https://testnet.nearblocks.io/txns/2L8H9vwSbgjarSfutEhqihxNFQmo6mXQ44uyDc9cEQ5M)), so the new rule did not cost the real treasury its protection.
 
 What this does not cover: an account that runs Sputnik's code and arms the guard is a treasury as far as the watcher can tell, and costs it up to its daily caps like any other; a contract with a made-up counter was run against the watcher's tests, not against the live one; and a Sputnik release newer than the watcher's list is turned away until the list gains it.
+
+## 13 Nov 2026: the words behind a hash, handed over sealed
+
+A request that shows only a hash cannot be read, so Kaap flags it and the guard does not vote. A member who knows the words behind the hash can hand them to Kaap with `kaap seal-text`: they are encrypted on the member's machine so that only the sealed reader can open them, and the watcher passes on ciphertext it cannot read. Until this run that path had been proven in two halves, the sealed reader's side live and the watcher's side in its tests. `node scripts/sealed-text-live.mjs` runs all of it through the hosted watcher:
+
+```
+Kaap sealed text, live, 2026-11-13T03:51:53.142Z: kaap-member-1029064001.testnet files a hash-only request on kaap-dao-1111072928.testnet; watcher https://watcher-production-2350aa2a.up.railway.app
+1. filed request #18: "Authenticate DAO for confidential intents", showing only the hash 8acefc9f7d9d7e918ae65bea1bdbe1674c233d0cd02f14ca1b08adc52090cf09: https://testnet.nearblocks.io/txns/G8L2vPcbqdBSCKjdP5K7nerWJ8fAHgG8sp8WKwLERn2P
+   the words behind the hash are saved in <a temporary file> (to take this up again: --resume 18 <a temporary file>)
+2. the watcher judged it with no words: risk high, findings HASH_UNVERIFIED, vote not_needed; the request is InProgress
+3. handing the words to the watcher, sealed: kaap seal-text --dao kaap-dao-1111072928.testnet --id 18 --file <text.json> --worker https://watcher-production-2350aa2a.up.railway.app
+   | kaap seal-text kaap-dao-1111072928.testnet #18 on testnet
+   | read at final block 277457740 (2026-11-13 03:53 UTC): the guard's key and the proposal, agreed by near-testnet.drpc.org and rpc.testnet.fastnear.com
+   | Kaap on testnet: deployment record deployments/testnet.json (the current one, deployed 2026-11-11T07:28:03Z): guard kaap-guard-1111072803.testnet, registry kaap-registry-1111072803.testnet
+   | contracts
+   |   pass  guard code: kaap-guard-1111072803.testnet runs the recorded build, sha256 bf09d7bb...3767 (two providers, block 277457740)
+   |   pass  guard keys: kaap-guard-1111072803.testnet has no access key, so no one can sign for it (two providers, block 277457740)
+   |   pass  registry code: kaap-registry-1111072803.testnet runs the recorded build, sha256 228c2136...b2c9 (two providers, block 277457740)
+   |   pass  registry keys: kaap-registry-1111072803.testnet has no access key, so no one can sign for it (two providers, block 277457740)
+   | text key: 09bc21bb1621d1d9a2ce1783375341a199038084e5239e120de823809a1b2f6a from run DWRwVAcwpoVo5yfMHVVmWRw4S9QGNNj9XVioMDjobXBW, signed by the guard's accepted key ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN (checked here with ed25519)
+   | text: NEP-413, hashes to 8acefc9f7d9d7e918ae65bea1bdbe1674c233d0cd02f14ca1b08adc52090cf09, the payload proposal 18 asks to sign
+   | sent to https://watcher-production-2350aa2a.up.railway.app/texts: 384 bytes of ciphertext only Kaap's sealed program can open, and a reply key made for this request
+   |
+   | what the worker at https://watcher-production-2350aa2a.up.railway.app reported, not yet checked against the chain
+   |   risk: critical
+   |   floor: critical
+   |   findings: HASH_TEXT_DANGEROUS, INTENTS_KEY_CHANGE
+   |   AI: verified, model z-ai/glm-5.3-flash
+   |   veto: started (the guard's vote to reject lands on chain on its own, after this answer)
+   |   sealed run: https://testnet.nearblocks.io/txns/9CqECdqiw5esxZXntGyv6mndxFdkwXP8vSRY5MqP4Zvd
+   |
+   | explanation in the worker's answer, opened here with the reply key made for this request
+   |   AI verified (Intel TCB: UpToDate). Signs an attacker-planted payload hash and adds a new intents key, handing control of DAO intents to the proposer.
+   |
+   | confirm it from the chain: kaap verify kaap-dao-1111072928.testnet 18 --network testnet
+   | The AI part of a verdict can differ between runs.
+4. request #18 is Rejected, seen 63.4 s after the words were sent and 112.7 s after the filing block; votes: {kaap-guard-1111072803.testnet: Reject}
+   the watcher now holds: risk critical, findings HASH_TEXT_DANGEROUS, INTENTS_KEY_CHANGE, vote cast, verdict 6d75292cdd53f31aa0f1a04b69e159ee3b2df0db4e85dbe4199b209f4ca140d5
+RESULT: pass, unreadable and left alone without the words, read and rejected by the guard alone with them
+```
+
+The transactions: [filed](https://testnet.nearblocks.io/txns/G8L2vPcbqdBSCKjdP5K7nerWJ8fAHgG8sp8WKwLERn2P), [judged with no words](https://testnet.nearblocks.io/txns/582hTKmCUi5K4moRjejGTAXEosakLnyjfosAz5qZhSGq), [judged with the sealed words](https://testnet.nearblocks.io/txns/9CqECdqiw5esxZXntGyv6mndxFdkwXP8vSRY5MqP4Zvd), [the guard's vote](https://testnet.nearblocks.io/txns/FmpjUa1fcx7zin6sgqjk4tPJz4ezfyqmCUEaVw8JHxsx), [the record](https://testnet.nearblocks.io/txns/88z5DHLRCDiPjAZDtVERJGM2uDgixofXTp3KMUTZ1JX2). `node packages/cli/dist/src/bin.js verify kaap-dao-1111072928.testnet 18` passes all 24 of its checks. The verdict's floor is critical from plain code: the words add a key with full control of the treasury's NEAR Intents balance. The AI's answer was verified and agreed; no veto rests on it.
+
+### The try before it, and a slow host
+
+The first try, ten minutes earlier, filed request #17 and did not finish. OutLayer's testnet did not answer the watcher's first three sealed runs for it: the watcher logged "the yield timed out: OutLayer never answered" each time, showed `run_no_answer` and then `run_without_verdict` on its status page, and asked again by itself. The fourth run answered, about nine minutes after the filing, with HASH_UNVERIFIED and no vote. OutLayer's public list showed one executor online for all of testnet at the time, two days before the hackathon's deadline.
+
+The script had stopped waiting after four minutes, and it had not yet saved the words for #17, so #17 stays open and unexplained, like #5, #6 and #7. The script now saves the words before it files anything and can take a request up again (`--resume`). The site's try-it panel now says so when the watcher is asking the sealed reader again, and waits twelve minutes before giving up, not three.
+
+### What this does not cover
+
+One request, with words that are no secret. Not shown here: a text that does not match the hash, a tampered ciphertext and a wrong reply key, which `scripts/text-roundtrip.mjs` attacks against the sealed reader; and a veto that has to race approvers while the sealed reader's host is slow, which nothing in Kaap can speed up.

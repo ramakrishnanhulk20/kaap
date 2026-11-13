@@ -61,6 +61,7 @@ The README's "NEAR tools used" table lists each NEAR tool with the files that us
 | A member that can only reject, built from Sputnik's own permissions with no new treasury contract | `packages/contracts/guard/src/lib.rs`, `packages/core/src/policy/arming.rs` | `node packages/cli/dist/src/bin.js arming kaap-dao-1111072928.testnet` |
 | The description is checked against the effect | `packages/core/src/describe/` | `check`: "contradicts: the named recipient is not paid" |
 | A hash-only request is read once its words are supplied, with proof they match the hash | `packages/core/src/hash/` | the site's `/check` on request #7; `cargo test -p kaap-core --test hash_vectors` |
+| The words can be handed over sealed, and the guard then acts | `packages/cli/src/sealtext.ts`, `packages/worker/src/worker.ts` (`judgeText`), `scripts/sealed-text-live.mjs` | `PROOF.md`, "the words behind a hash, handed over sealed": left alone without the words, rejected 63 seconds after them |
 | Verdicts are signed inside sealed hardware, and anyone can check the run | `packages/sealed/src/job.rs`, `packages/cli/src/verify.ts` | `verify` |
 
 ## Sustainability

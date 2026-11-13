@@ -277,7 +277,7 @@ flowchart TB
 - One sentence on what a request will really do, for all of Sputnik's proposal kinds: payments, contract calls, rule changes, upgrades, sign requests.
 - A check of the description against the effects. "Pays alice" on a request that pays `a1ice` is a contradiction.
 - A reading of hash-only requests once the words behind the hash are supplied, with proof that the words match the hash.
-- A sealed channel for those words: `kaap seal-text` encrypts them so only the sealed reader can open them. It goes through the watcher's `POST /texts`. The sealed reader's side of that channel has run live (`packages/sealed/RUNS.md`); the watcher's side is covered by its tests, and no text has been sent through the hosted watcher yet.
+- A sealed channel for those words: `kaap seal-text` encrypts them so only the sealed reader can open them. It goes through the watcher's `POST /texts`. On 13 Nov 2026 it ran end to end through the hosted watcher: a hash-only request was left alone, then rejected by the guard 63 seconds after its words were handed over sealed (`scripts/sealed-text-live.mjs`, output in PROOF.md).
 
 **For the treasury**
 - A guard that can only reject. It holds no funds and cannot approve, pay or change a rule.
@@ -511,6 +511,7 @@ What you still have to trust, and what Kaap does not do:
 
 - **The owner's key.** The guard's code is locked, but its owner, Kaap's founder, can replace the key it obeys, and on the guard deployed today that takes effect at once. A dishonest owner could make the guard reject requests. They still could not approve or move anything. The next guard version adds a 24-hour wait.
 - **OutLayer and Intel's sealed hardware.** A verdict is only as good as the promise that the reader ran unmodified. That promise says which program ran. It does not say the program is free of bugs.
+- **OutLayer's availability.** A verdict needs a sealed run, and a run needs OutLayer to answer. When its testnet is busy a run can go unanswered; the watcher asks again for as long as the request is open, and says so on its status page. On 13 Nov 2026 one request waited about nine minutes for its first verdict.
 - **NEAR AI's availability.** The AI's opinion is only there when NEAR AI's chat service answers. When it does not, the verdict is signed on the plain-code rules alone and says so.
 - **Two RPC providers.** If both were wrong in the same way, Kaap would be wrong too.
 - **Free RPC providers.** The watcher never acts on one provider alone, so when one stops answering, a vote waits. On 12 Nov 2026 one vote waited almost eight minutes for that reason.
