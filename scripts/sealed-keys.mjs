@@ -8,6 +8,9 @@
 //     Testnet, inside WSL. Signs as the caller named in packages/sealed/testnet.json, whose key is
 //     read from ~/.near-credentials/testnet and never printed. Each run costs about 0.002 testnet
 //     NEAR. Two runs by default, to show the keys do not move from run to run.
+//   node scripts/sealed-keys.mjs --as <another account>
+//     One run signed by another account, to show what a stranger gets: keys of their own, not the
+//     ones the guard obeys. Exit code 0 only when both keys differ from the recorded ones.
 //
 // Prints each run's transaction, then one JSON object: `signing_key` and `attested_run_tx` for the
 // `sealed` part of deployments/testnet.json, and its `text_key` object as the watcher serves it.
@@ -42,15 +45,20 @@ function base58(text) {
 }
 
 const record = JSON.parse(readFileSync(join(REPO, 'packages', 'sealed', 'testnet.json'), 'utf8'));
-const runs = Number(process.argv[2] ?? 2);
+const other = process.argv[2] === '--as' ? process.argv[3] : null;
+const runs = other ? 1 : Number(process.argv[2] ?? 2);
 if (record.network !== 'testnet' || typeof record.caller !== 'string' || !/^[0-9a-f]{64}$/.test(record.active_version ?? '') || !Number.isInteger(runs) || runs < 1 || runs > 5) {
-  console.error('usage: node scripts/sealed-keys.mjs [1 to 5 runs], with a published project in packages/sealed/testnet.json');
+  console.error('usage: node scripts/sealed-keys.mjs [1 to 5 runs] | --as <account>, with a published project in packages/sealed/testnet.json');
+  process.exit(2);
+}
+if (other !== null && (!/^[a-z0-9._-]{2,64}$/.test(other ?? '') || other === record.caller)) {
+  console.error('--as takes an account other than the caller in packages/sealed/testnet.json');
   process.exit(2);
 }
 
 async function main() {
-  console.log(`Kaap sealed keys, ${new Date().toISOString()}: ${record.caller} asks ${record.project_id} (build ${record.active_version}) for its keys, ${runs} time(s)`);
-  const caller = accountFor(record.caller);
+  console.log(`Kaap sealed keys, ${new Date().toISOString()}: ${other ?? record.caller} asks ${record.project_id} (build ${record.active_version}) for its keys, ${runs} time(s)`);
+  const caller = accountFor(other ?? record.caller);
   // All three limits written out: an empty resource_limits object is never picked up (OutLayer #31).
   const args = {
     source: { Project: { project_id: record.project_id, version_key: null } },
@@ -85,6 +93,13 @@ async function main() {
     signed = verify(null, Buffer.concat([Buffer.from(TEXT_KEY_DOMAIN), key]), publicKey, signature);
   }
   console.log(`  every run printed the same two keys: ${same}; the verdict key signed the text key: ${signed}`);
+  if (other) {
+    const deployed = JSON.parse(readFileSync(join(REPO, 'deployments', 'testnet.json'), 'utf8'));
+    const apart = shaped && signed && first.public_key !== deployed.accepted_key && first.text_key !== deployed.text_key?.key;
+    console.log(`  the guard obeys ${deployed.accepted_key}; texts are sealed to ${deployed.text_key?.key}`);
+    console.log(apart ? `RESULT: pass, ${other} gets keys of its own on this project, not the watcher's` : 'RESULT: FAIL, another caller got a key the guard obeys or texts are sealed to');
+    process.exit(apart ? 0 : 1);
+  }
   if (!shaped || !same || !signed) {
     console.log('RESULT: FAIL');
     process.exit(1);

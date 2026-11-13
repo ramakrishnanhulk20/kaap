@@ -15,11 +15,21 @@
 //      active, choose the active build, remove a build, hand the project to itself, delete it.
 //      OutLayer looks a project up under the account that calls, so the only way to name the
 //      owner's project is by its full id, and that is what each try does;
-//   3. reads the project again: same owner, same active build, same number of builds.
-// Exit code 0 only when every try was refused on chain and nothing changed.
+//   3. reads the project again: same owner, same active build, same number of builds;
+//   4. reads whether the caller has a standing acceptance of the project. OutLayer lets any
+//      account say it would accept a project (`accept_project_transfer`); that moves nothing until
+//      the owner hands the project over, but none must be standing.
+// Exit code 0 only when every try was refused on chain for the reason expected, nothing changed
+// and no acceptance stands. A try that fails for another reason, such as a paused contract, is not
+// counted as a refusal. Four of the five refusals are "Project not found": they show that the
+// caller cannot reach the owner's project at all, so OutLayer's own owner check is never the
+// thing that stops it.
 //
 // Never sent: the same calls with the project's short name. Under the caller's account that name
 // is the caller's own first project, from before the split, and the calls would act on it.
+//
+// Never sent either: `accept_project_transfer`, which would leave an acceptance standing if it
+// went through.
 //
 // Not covered: what the caller's key can still do, which is run the program and pay for it, so a
 // thief of that key gets real verdicts on real requests and an empty account. Nor OutLayer's own
@@ -69,26 +79,31 @@ async function main() {
   const attacker = accountFor(caller);
   const build = before.active;
   const source = { WasmUrl: { url: record.versions.find((v) => v.sha256 === build)?.url ?? 'https://example.org/kaap-sealed.wasm', hash: build, build_target: 'wasm32-wasip2' } };
+  const notFound = /^Project not found/;
   const tries = [
-    ['publish a build and make it active', 'add_version', { project_name: project, source, set_active: true }, 50n * MILLI_NEAR],
-    ['choose the active build', 'set_active_version', { project_name: project, version_key: build }, 0n],
-    ['remove a build', 'remove_version', { project_name: project, version_key: build }, 0n],
-    ['hand the project to itself', 'transfer_project', { project_name: project, new_owner: caller }, 0n],
-    ['delete the project', 'delete_project', { project_name: project }, 0n],
+    ['publish a build and make it active', 'add_version', { project_name: project, source, set_active: true }, 50n * MILLI_NEAR, notFound],
+    ['choose the active build', 'set_active_version', { project_name: project, version_key: build }, 0n, notFound],
+    ['remove a build', 'remove_version', { project_name: project, version_key: build }, 0n, notFound],
+    ['hand the project to itself', 'transfer_project', { project_name: project, new_owner: caller }, 0n, /has not accepted project|Project not found|Only project owner/],
+    ['delete the project', 'delete_project', { project_name: project }, 0n, notFound],
   ];
   console.log(`2. ${caller} tries the owner's calls on ${project}:`);
   let refused = 0;
-  for (const [what, method, args, deposit] of tries) {
+  for (const [what, method, args, deposit, expected] of tries) {
     const sent = await call(attacker, contract, method, args, 100n * TGAS, deposit);
-    if (sent.failure) refused += 1;
-    console.log(`   ${sent.failure ? 'refused' : 'WENT THROUGH'}: ${what} (${method}): ${sent.failure ? why(sent.failure) : 'no failure'}: ${txLink(sent.hash)}`);
+    const reason = sent.failure ? why(sent.failure) : 'no failure';
+    const asExpected = sent.failure !== null && expected.test(reason);
+    if (asExpected) refused += 1;
+    console.log(`   ${asExpected ? 'refused' : sent.failure ? 'FAILED FOR ANOTHER REASON' : 'WENT THROUGH'}: ${what} (${method}): ${reason}: ${txLink(sent.hash)}`);
   }
 
   const after = await projectNow();
   const unchanged = after !== null && after.owner === before.owner && after.active === before.active && after.builds === before.builds && after.uuid === before.uuid;
   console.log(`3. the project now: owner ${after?.owner}, active build ${after?.active}, ${after?.builds} build(s): ${unchanged ? 'unchanged' : 'CHANGED'}`);
-  const ok = refused === tries.length && unchanged;
-  console.log(ok ? `RESULT: pass, ${refused} of ${tries.length} tries refused on chain and the project is unchanged` : `RESULT: FAIL (${refused} of ${tries.length} refused, project ${unchanged ? 'unchanged' : 'changed'})`);
+  const acceptance = await viewFinal(contract, 'get_project_transfer_acceptance', { new_owner: caller, from: owner, name });
+  console.log(`4. a standing acceptance of ${project} by ${caller}: ${acceptance === null ? 'none' : `ONE STANDS (${JSON.stringify(acceptance)})`}`);
+  const ok = refused === tries.length && unchanged && acceptance === null;
+  console.log(ok ? `RESULT: pass, ${refused} of ${tries.length} tries refused on chain, the project is unchanged and no acceptance stands` : `RESULT: FAIL (${refused} of ${tries.length} refused as expected, project ${unchanged ? 'unchanged' : 'changed'}, acceptance ${acceptance === null ? 'none' : 'standing'})`);
   process.exit(ok ? 0 : 1);
 }
 

@@ -418,7 +418,7 @@ async function live(o, records) {
   const worstNear = (raw) => (RUN_GAS + BigInt(Buffer.byteLength('request_execution') + Buffer.byteLength(JSON.stringify(args(raw)))) * ARG_BYTE_GAS) * price + RUN_DEPOSIT;
 
   console.log(`Kaap AI evaluation run, ${new Date().toISOString()}, OutLayer testnet`);
-  console.log(`project ${builds.project_id}, active build ${builds.active_version}, caller ${builds.account}, secret near-ai of ${owner}`);
+  console.log(`project ${builds.project_id}, active build ${builds.active_version}, caller ${builds.caller ?? builds.account}, secret near-ai of ${owner}`);
   console.log(`set ${o.sets.map(shown).join(', ')} (${records.length} records); results ${shown(o.out)}; journal ${shown(pendingFile)}`);
   console.log(`caps ${o.maxUsd} USD and ${o.maxNear} NEAR; ${MODEL_ID} at ${prices.input} and ${prices.output} nano-USD per input and output token; gas price ${price}`);
   console.log(`thinking budget ${o.budget} tokens${o.thinkingBudget === null ? " (the job's own, not sent)" : ' (sent with every input)'}`);
