@@ -33,7 +33,8 @@ export type Signal =
   | 'guard_not_armed'
   | 'proposals_skipped'
   | 'counter_implausible'
-  | 'watch_limit_reached';
+  | 'watch_limit_reached'
+  | 'enrolled_unread';
 
 export type Notice = 'counter_gap' | 'veto_lost';
 
@@ -98,6 +99,7 @@ export const SAYS: Record<Signal, string> = {
   guard_not_armed: "This treasury's rules give Kaap's guard no deciding reject vote, so the guard cannot stop any request here. Kaap judges none of its requests until the guard is armed again.",
   proposals_skipped: 'More requests were new at once than Kaap takes up in one pass. It took the newest and skipped the older ones, which members must check themselves.',
   counter_implausible: "This account's request counter gave a number no treasury could reach, so Kaap took up nothing from it on that pass.",
+  enrolled_unread: "Kaap could not read the guard's list of enrolled treasuries from both RPC providers. It keeps watching the treasuries it already watches and takes up no new one until the list reads again.",
   watch_limit_reached: 'Kaap is watching as many treasuries as it is set to watch, and at least one more enrolled treasury is waiting for room.',
 };
 

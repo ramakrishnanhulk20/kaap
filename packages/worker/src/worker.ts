@@ -378,6 +378,10 @@ export class Worker {
     const { both, either, problems } = await this.#d.reads.enrolled(this.#s.guard);
     for (const p of problems) log.warn('enrolled_unread', { problem: p });
     const complete = problems.length === 0;
+    // Said on the status page: a worker that watches nothing because it cannot read the list is
+    // not a healthy worker with nothing to watch.
+    if (complete) health.clear('enrolled_unread', ALL);
+    else health.raise('enrolled_unread', ALL, { problems: problems.length });
     if (complete) {
       for (const dao of [...this.#watchers.keys()]) if (!either.includes(dao)) this.#unwatch(dao, 'dao_unenrolled');
       for (const dao of [...this.#notWatched.keys()]) if (!both.includes(dao)) this.#notWatched.delete(dao);

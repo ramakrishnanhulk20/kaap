@@ -202,3 +202,18 @@ test('600 new proposals with a backfill of 50 judge the newest 50, the open one 
   s.worker.sweep();
   assert.equal(s.health.has('proposals_skipped', DAO), false);
 });
+
+test("a worker that cannot read the guard's list of enrolled treasuries says so, and is not shown as healthy with nothing to watch", async (t) => {
+  const s = await started(t);
+  assert.equal(s.report().status, 'healthy');
+  s.b.failing.add('enrolled_daos');
+  await s.worker.refreshEnrolled();
+  assert.deepEqual(s.worker.watching(), [DAO], 'what is watched stays watched');
+  assert.equal(s.health.has('enrolled_unread', ALL), true);
+  assert.equal(s.report().status, 'degraded');
+  assert.ok(s.report().everywhere.some((e) => e.signal === 'enrolled_unread'));
+  s.b.failing.delete('enrolled_daos');
+  await s.worker.refreshEnrolled();
+  assert.equal(s.health.has('enrolled_unread', ALL), false);
+  assert.equal(s.report().status, 'healthy');
+});
