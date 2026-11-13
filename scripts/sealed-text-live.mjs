@@ -18,13 +18,20 @@
 //     Testnet, inside WSL, after `npm run build:ts -w packages/cli`. Signs one transaction as the
 //     demo member, whose key is read from ~/.near-credentials/testnet and never printed. Without an
 //     address it uses the watcher named in deployments/testnet.json.
+//   node scripts/sealed-text-live.mjs --leave-open
+//     Files the hash-only request, waits for the watcher to judge it with no words, and stops
+//     there: the words are never handed over, so the request stays open and unread, as a
+//     standing example of what a treasury in the default mode sees. Exit code 0 when the watcher
+//     left it alone.
 //   node scripts/sealed-text-live.mjs --resume <request id> <text.json>
 //     Takes up a request this script filed earlier, from the words it saved, and files nothing.
 //     For when the sealed reader's host was too slow the first time: a sealed run that OutLayer
 //     does not answer inside its window is asked again by the watcher, which can take minutes.
 //
 // The words are made up here: a new key that nobody holds. They are no secret, and they are
-// written to a temporary folder, never into the repository. The watcher pays for two sealed runs.
+// written to ~/kaap-texts (or KAAP_TEXTS_DIR), never into the repository and not to the system's
+// temporary folder, which can be emptied before a slow run is taken up again. The watcher pays for
+// two sealed runs.
 // It takes three texts an hour from one address and five text runs a day for one treasury.
 //
 // Not covered: a text that does not match the hash, a tampered ciphertext and a wrong reply key,
@@ -33,8 +40,8 @@
 
 import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { REPO, TGAS, accountFor, baseEncode, blockAt, call, loadState, refusal, returned, sleep, txLink, viewFinal } from './setup-demo-dao.mjs';
@@ -54,6 +61,7 @@ const flag = (name) => {
 };
 const watcher = flag('--watcher')?.[0] ?? state.watcher?.url;
 const resume = flag('--resume');
+const leaveOpen = flag('--leave-open') !== undefined;
 if (typeof watcher !== 'string' || !/^https:\/\/[a-z0-9.-]+$/i.test(watcher)) {
   console.error("give the watcher's address, such as https://watcher.example.org");
   process.exit(2);
@@ -119,7 +127,9 @@ async function main() {
     const recipient = 'intents.near';
     const payload = nep413Hash(message, nonce, recipient);
     // Saved before anything is filed, so a run that stops half way can be taken up again.
-    file = join(mkdtempSync(join(tmpdir(), 'kaap-text-')), 'text.json');
+    const kept = process.env.KAAP_TEXTS_DIR || join(homedir(), 'kaap-texts');
+    mkdirSync(kept, { recursive: true });
+    file = join(mkdtempSync(join(kept, 'text-')), 'text.json');
     writeFileSync(file, JSON.stringify({ message, nonce: nonce.toString('base64'), recipient, standard: 'nep413' }));
 
     const args = { request: { path: dao, payload_v2: { Eddsa: payload }, domain_id: 1 } };
@@ -140,6 +150,10 @@ async function main() {
   const open = (await viewFinal(dao, 'get_proposal', { id })).status;
   console.log(`2. the watcher judged it with no words: risk ${blind.risk}, findings ${blind.findings.join(', ')}, vote ${blind.veto}; the request is ${open}`);
   const leftAlone = blind.findings.includes('HASH_UNVERIFIED') && blind.veto === 'not_needed' && open === 'InProgress';
+  if (leaveOpen) {
+    console.log(leftAlone ? `RESULT: pass, request #${id} is unreadable, was left alone, and stays open: its words were handed to nobody` : `RESULT: FAIL (request #${id} was not left alone)`);
+    process.exit(leftAlone ? 0 : 1);
+  }
 
   console.log(`3. handing the words to the watcher, sealed: kaap seal-text --dao ${dao} --id ${id} --file <text.json> --worker ${watcher}`);
   const sentAt = Date.now();
