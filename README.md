@@ -4,7 +4,7 @@ Kaap comes from the Tamil word kaappu (காப்பு), protection: what it 
 
 It only works on NEAR. Sputnik DAO lets a role hold the reject vote and nothing else, OutLayer signs each verdict inside sealed hardware, NEAR AI's models prove which model answered, and Chain Signatures' sign-a-hash requests are where treasuries sign blind today.
 
-[Proof on testnet](PROOF.md) · [Architecture](ARCHITECTURE.md) · [Threat model](docs/security/threat-model.md) · [Evaluation](packages/sealed/AI-EVAL.md) · [Docs](packages/web/content/docs/index.mdx)
+[Live site](https://kaap-snowy.vercel.app) · [Proof on testnet](PROOF.md) · [Architecture](ARCHITECTURE.md) · [Threat model](docs/security/threat-model.md) · [Evaluation](packages/sealed/AI-EVAL.md) · [Docs](packages/web/content/docs/index.mdx)
 
 Built at NEAR HACKATHON, November 2026. Lead track: social (Social Money). Kaap is something a treasury does with its own Sputnik DAO, not a new multisig: the members vote in one more member whose role can only reject, and can vote it out again. Also entered in: security, privacy, open.
 
@@ -54,7 +54,7 @@ A treasury adopts Kaap with two of its own requests: one adds a role named `guar
 | Demo treasury | [`kaap-dao-1113045321.testnet`](https://testnet.nearblocks.io/address/kaap-dao-1113045321.testnet) | Sputnik DAO 3.2 with the role setup of a NEAR Business treasury, enrolled, no access keys |
 | Sealed reader | OutLayer project `kaap-sealed-owner-1113041743.testnet/kaap-sealed` | Live on testnet, running inside Intel TDX. Published by an owner account whose key is offline; the watcher only calls it |
 | A theft stopped | Request #1 of the demo treasury | [filed](https://testnet.nearblocks.io/txns/583jbKshP4USdjmBRnX9wrRjFYg9NvTURdBuWqAo1q5a), [read in sealed hardware](https://testnet.nearblocks.io/txns/6Lm1adNQeQrm75QBoWcEmAaG1dskrajEUCQCisatU12L), [recorded](https://testnet.nearblocks.io/txns/CNqvoFb8Ly3txbrYMuXyRWwPM6Enp1PYr6oGUcVjcS83), [rejected by the guard](https://testnet.nearblocks.io/txns/66WDukXKMVFbeyZ6aAbsTMgZDwCAwXFNSSagM9MkQagz) |
-| The check, the site and the docs | `packages/web`, `packages/cli` | Built. The check reads any Sputnik DAO on mainnet or testnet with no key |
+| The check, the site and the docs | [kaap-snowy.vercel.app](https://kaap-snowy.vercel.app), from `packages/web` and `packages/cli` | Live. The check reads any Sputnik DAO on mainnet or testnet with no key, and the try-it button files a real request on the demo treasury |
 | Always-on watcher | `packages/worker` | Live since 12 Nov 2026 as one container on Railway, watching the demo treasury: [its status page](https://watcher-production-2350aa2a.up.railway.app/status). It runs on free RPC providers |
 | Strict mode | In the guard above | Live, and no treasury on testnet has turned it on yet. It is proven by the guard's tests against the real Sputnik DAO binary and by the watcher's tests, not by a veto on testnet |
 | Earlier deployments | The guards of 29 Oct and 11 Nov 2026 | Still on chain with their own registries and treasuries. `kaap verify` and `kaap check` read their requests against their own records in `deployments/` |
@@ -66,7 +66,7 @@ No wallet, no key and no test tokens are needed for any step here.
 
 ### On the site
 
-1. Open the site and press **Check a treasury**.
+1. Open https://kaap-snowy.vercel.app and press **Check a treasury**.
 2. Press **Read the demo treasury's hash-only request**. You see request #8, "Authenticate DAO for confidential intents", one finding, `HASH_UNVERIFIED`, and the line "The guard will not veto this. Members decide." Kaap cannot read a bare hash and says so.
 3. Press **Use the words saved for this demo request**. Kaap checks that the words hash to the request's 64 characters, then reads them. You see a second effect, an intents key change that adds a key, the findings `HASH_TEXT_DANGEROUS` (critical) and `INTENTS_KEY_CHANGE` (high), and "Kaap's guard must veto this."
 4. Go back to the home page and press **Watch a theft get stopped**. You see request #1: it says "Monthly salary payment to alice...", it pays `a1ice...`, and under it are the four transactions of the run that rejected it, each a link to the explorer.
@@ -408,7 +408,7 @@ Not covered: the site has four tests, of the try-it button's limits (`npm test` 
 The site's check is one route. It reads the chain and sends nothing.
 
 ```bash
-curl "http://localhost:3000/api/check?dao=kaap-dao-1113045321.testnet&network=testnet&id=8"
+curl "https://kaap-snowy.vercel.app/api/check?dao=kaap-dao-1113045321.testnet&network=testnet&id=8"
 ```
 
 ```json
