@@ -1,6 +1,6 @@
 {
   "note": "Written by packages/web/scripts/bundle-engine.mjs. Do not edit by hand.",
-  "commit": "dfad2d7207fd91f94d83fd9dda19f05124529b2b",
+  "commit": "be10cd3fe6d888247a274a1929230ea3e2bf818c",
   "sources_committed": true,
   "wasm_sha256": "08d0f37ca4d713279bd2c3d97f91cd05e81e99001859dcb66f70208ea224460c",
   "check_sha256": "c05ea89150ba85d2c4658396dd7b7a349437bcda739dc95c51dc477590a3b6db",
