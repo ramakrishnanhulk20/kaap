@@ -4,5 +4,17 @@
   "caller": "kaap-worker-1029053612.testnet",
   "project_id": "kaap-sealed-owner-1113041743.testnet/kaap-sealed",
   "contract": "outlayer.testnet",
-  "versions": []
+  "versions": [
+    {
+      "sha256": "d14e29279146e6b0998e687c8ab3cd4739ea4b16dbfe2ae0184ea97e0af131cf",
+      "bytes": 1687400,
+      "url": "https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/e4276e949a9a65414884c1d592cd56f488bba5d5/kaap-sealed-d14e2927.wasm",
+      "registered_by": "create_project",
+      "tx": "E1Za5hoQtyMqgufqQwgjoWvsNF8B2pijKSB8WYqGUHe3",
+      "at": "2026-11-13T04:48:26Z",
+      "retired": false
+    }
+  ],
+  "uuid": "p0000000000000171",
+  "active_version": "d14e29279146e6b0998e687c8ab3cd4739ea4b16dbfe2ae0184ea97e0af131cf"
 }

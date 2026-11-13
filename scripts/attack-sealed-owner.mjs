@@ -48,7 +48,8 @@ const projectNow = async () => {
 /** The contract's own words for a refusal, without the code location that follows them. */
 const why = (failure) => {
   const text = JSON.stringify(failure ?? null);
-  return (text.match(/Smart contract panicked: ([^"\\]{1,160})/)?.[1] ?? text.match(/"(MethodNotFound|MethodResolveError)[^}]{0,60}/)?.[0] ?? text.slice(0, 200)).trim();
+  // A Rust panic reads "panicked at <file>:<line>:<column>:" and then its message on the next line.
+  return (text.match(/Smart contract panicked: (?:panicked at [^"\\]+\\n)?([^"\\]{1,160})/)?.[1] ?? text.match(/"(MethodNotFound|MethodResolveError)[^}]{0,60}/)?.[0] ?? text.slice(0, 200)).trim();
 };
 
 async function main() {

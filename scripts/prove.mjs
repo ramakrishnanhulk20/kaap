@@ -168,7 +168,9 @@ async function record(worker, job) {
 }
 
 async function veto(worker, job, kindJson) {
-  const { hash, outcome, failure } = await call(worker, guard, 'veto', { verdict: job.output.verdict, signature: job.output.signature, kind_json: kindJson }, 300n * TGAS);
+  // The guard refuses a veto that attaches under 900 Tgas, and one transaction carries at most
+  // 1,000, so the whole 1,000 goes along; what is not burnt comes back.
+  const { hash, outcome, failure } = await call(worker, guard, 'veto', { verdict: job.output.verdict, signature: job.output.signature, kind_json: kindJson }, 1_000n * TGAS);
   tally(outcome);
   return { hash, outcome, failure };
 }
