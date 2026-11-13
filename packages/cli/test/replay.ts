@@ -29,6 +29,11 @@ export interface Fixture {
 
 export const FIXTURES = fileURLToPath(new URL('../../test/fixtures/', import.meta.url));
 export const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
+/** The deployment records as they were when the fixtures here were recorded: the 11 Nov 2026
+ *  deployment as the current one, and the 29 Oct one before it. A replay holds the chain's answers
+ *  for those guards and registries, so every command that replays reads these records, not the
+ *  clone's own, which move with each redeploy. */
+export const RECORDED_ROOT = `${FIXTURES}repo/`;
 
 export function load(name: string): Fixture {
   return JSON.parse(readFileSync(`${FIXTURES}${name}`, 'utf8')) as Fixture;

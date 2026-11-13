@@ -1,29 +1,29 @@
 {
   "network": "testnet",
-  "deployed_at": "2026-11-11T07:28:03Z",
+  "deployed_at": "2026-11-13T04:51:47Z",
   "deployed_by": "scripts/deploy-contracts-testnet.sh",
-  "previous": "deployments/testnet-2026-10-29.json",
+  "previous": "deployments/testnet-2026-11-11.json",
   "built_from": {
-    "commit": "413a74aa91256a8c8603d1f84df33fde64abbcd3",
+    "commit": "5f1cf75e96361da27a6bffcfdebe4a0e85b8cb4f",
     "build": "cargo near build non-reproducible-wasm --locked, as scripts/deploy-contracts-testnet.sh runs it (cargo-near 0.22.0, Rust 1.93.0)",
-    "rebuilt": "built twice, in ~/kaap-target and in a second target folder; both builds gave the code_sha256 recorded for each contract"
+    "rebuilt": "built twice, in ~/kaap-target and in an empty second target folder; both builds gave the code_sha256 recorded for each contract"
   },
-  "accepted_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
+  "accepted_key": "ed25519:8eiUXYidw2x7WWfVVmYkDcewi3aBzxKomMefsPPhaecF",
   "guard": {
-    "account_id": "kaap-guard-1111072803.testnet",
-    "code_hash": "DrjaN1zVz4cxvvxbxhM6rVZsqy8SrBunmMbyeqbsr4R4",
-    "code_sha256": "bf09d7bbb48f312eb4043bd7b585f3b02bbe9d8b7d5bc0bf31fec9319c663767",
+    "account_id": "kaap-guard-1113045147.testnet",
+    "code_hash": "BfYf34n3cN85SpkSWRAJYqDghRHxLJkR4SgYaeXbWBt6",
+    "code_sha256": "9e74bbbadcfa6820390e21cb415ae83542f5de6257da4ad651caf950801c5d23",
     "owner": "kaap-owner-1029061211.testnet",
-    "deploy_and_init_tx": "DEta1bNNm4gRYLqhZJ2HfwDnVtz294dgyEyLfiQVzsK1",
-    "full_access_key_deleted_tx": "6qEFvNiz5Guw1w2XaA6cS36kkRVhAJbPTtijgPEcTssM",
+    "deploy_and_init_tx": "6zSjJ4FnExBBWx9eR1hcfErbRM83e1x1ob9QwzApTHvT",
+    "full_access_key_deleted_tx": "DeCTsm76k8RH6HES5uqh4p4SrzZksKF7uQNL7gYPLxtV",
     "access_keys_left": 0
   },
   "registry": {
-    "account_id": "kaap-registry-1111072803.testnet",
+    "account_id": "kaap-registry-1113045147.testnet",
     "code_hash": "3Kro1EgWDYAawFx8RHUwVGTKmJvp9bAUeRL65cwGAoZz",
     "code_sha256": "228c21366ffdaf58f31a6e3550fd9898bc9ae65d1182f7a9e84d2df3c07fb2c9",
-    "deploy_and_init_tx": "53xJksmZUhokY6rVNzXNcnadxAUEaN1RWPkdhJwMwiT7",
-    "full_access_key_deleted_tx": "GxMNoCaecyMRfF5k1dqtsxB4uCydKz8fUpzBkMm9gUF1",
+    "deploy_and_init_tx": "J38sabffhH3HGd9SvFL18rnkMjZeHh2UrMjAFe1oxMyJ",
+    "full_access_key_deleted_tx": "6T53QkSLhsN1HnbZgPGdHEzpgwCKg1vB3bFBJNcgLaxv",
     "access_keys_left": 0
   },
   "owner": {
@@ -31,12 +31,13 @@
     "held_by": "Kaap's founder; the key is only in ~/.near-credentials/testnet/kaap-owner-1029061211.testnet.json inside WSL on the founder's machine"
   },
   "sealed": {
-    "project_id": "kaap-worker-1029053612.testnet/kaap-sealed",
+    "project_id": "kaap-sealed-owner-1113041743.testnet/kaap-sealed",
+    "owner_account": "kaap-sealed-owner-1113041743.testnet",
+    "owner_held_by": "Kaap's founder; the key is only in ~/.near-credentials/testnet/kaap-sealed-owner-1113041743.testnet.json inside WSL on the founder's machine, and on no host",
     "worker_account": "kaap-worker-1029053612.testnet",
-    "builds": "packages/sealed/testnet-2026-10-29.json",
-    "signing_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
-    "attested_run_tx": "7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC",
-    "attestation_url": "https://testnet-api.outlayer.ai/attestations/by-tx/7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC"
+    "signing_key": "ed25519:8eiUXYidw2x7WWfVVmYkDcewi3aBzxKomMefsPPhaecF",
+    "attested_run_tx": "6Lm1adNQeQrm75QBoWcEmAaG1dskrajEUCQCisatU12L",
+    "attestation_url": "https://testnet-api.outlayer.ai/attestations/by-tx/6Lm1adNQeQrm75QBoWcEmAaG1dskrajEUCQCisatU12L"
   },
   "dao": {
     "set_up_by": "scripts/setup-demo-dao.mjs",
@@ -44,8 +45,8 @@
       "account_id": "kaap-member-1029064001.testnet",
       "held_by": "Kaap's founder; the key is only in ~/.near-credentials/testnet/kaap-member-1029064001.testnet.json inside WSL on the founder's machine"
     },
-    "account_id": "kaap-dao-1111072928.testnet",
-    "deploy_and_init_tx": "GJDgwXkEEFqrRR4p24ruZrjdvtcM3Hrp9r1RboWx3ePz",
+    "account_id": "kaap-dao-1113045321.testnet",
+    "deploy_and_init_tx": "CiRhao89G9q6Lc7fTBc1Ds7jErck6c7hFVmskAJAJ1v7",
     "code_hash": "DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF",
     "code_sha256": "bf6f951ee5e45968e3367fa857bebf8bc80badec183998c2239c487237e0d7f6",
     "purpose": "Kaap demo treasury",
@@ -67,44 +68,40 @@
         "kaap-member-1029064001.testnet"
       ],
       "guard": [
-        "kaap-guard-1111072803.testnet"
+        "kaap-guard-1113045147.testnet"
       ]
     },
     "approver_vote": "transfer and call need 2 of 2 Approvers, so one approval never executes a proposal",
-    "guard_role": "guard: [kaap-guard-1111072803.testnet], VoteReject on 16 labels (all but remove_member_from_role), threshold 1",
+    "guard_role": "guard: [kaap-guard-1113045147.testnet], VoteReject on 16 labels (all but remove_member_from_role), threshold 1",
     "enrolment": {
       "proposal_id": 0,
-      "add_proposal_tx": "FW7cfYjbeZiv66SDV7teXkmGMRDxqi8HXnczrS4ZNhLF",
+      "add_proposal_tx": "G676id7GgsyzPiQ66HXDbNwEietppbVqkF7dEisddop7",
       "vote_txs": [
-        "Gj6Ne1u5hcKTvyqsTV68M5bVFKKWkoR8gS4UHqi4nh4P",
-        "3rYQZ6qqtWaXUrk64yd8Jkp5rRB7xspwmCzXPV9Tdd2x"
+        "HuJZk6TWWBhGNd8ZEDujynnd3htUMDKDxie1kkFbXYo3",
+        "AYwDyFQr69g1342aKUQhByY3cy8SwFTUVyCV7YbqDmgZ"
       ],
       "status": "Approved",
       "enrolled": true
     },
-    "full_access_key_deleted_tx": "GWAwWeDcpid7d2snZx2xY1t1qXvrFerztKgaZ7gJY2hZ",
+    "full_access_key_deleted_tx": "94xyNPcEhRvuNdAcMfrA9g66yDt1TCTZwVhtZpXQg8FK",
     "access_keys_left": 0,
-    "checked_at": "2026-11-11T07:29:59.741Z"
+    "checked_at": "2026-11-13T04:53:53.682Z"
   },
   "text_key": {
-    "key": "09bc21bb1621d1d9a2ce1783375341a199038084e5239e120de823809a1b2f6a",
-    "signature": "FKzWgOvxNLgnJhj/qOOFGPCZJHcDuYLpKegGQ9RJTQ1EdGqRwkgX33Tg53yvR5dhxPd7kZcHHiH9JCSEBJa6AA==",
-    "public_key": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
-    "run_tx": "DWRwVAcwpoVo5yfMHVVmWRw4S9QGNNj9XVioMDjobXBW",
-    "build": "bf7bb4f86fe7b1531946d8e5b5b7bab39d3e98a3a97ecab00dd9f0e4c4d34f58"
+    "key": "40cc00435ddbcdb638ac967f7f592e69d290712d578010e47f4b9d16fcd62757",
+    "signature": "XmtL3LWyUNYPjvuY473XXw74C7WpZM1OlygidJwJs9nCgD2rqIBlBSzMCZz5aj+iqDBkiJPmzq8XToKwO2t+Cg==",
+    "public_key": "ed25519:8eiUXYidw2x7WWfVVmYkDcewi3aBzxKomMefsPPhaecF",
+    "run_tx": "GauQQEjVA7YVDk3pMZbAEUvaKBTuWMGQHPDxySL7KRUA",
+    "build": "d14e29279146e6b0998e687c8ab3cd4739ea4b16dbfe2ae0184ea97e0af131cf"
   },
   "demo_filer": {
     "set_up_by": "scripts/setup-demo-filer.mjs",
-    "payees_root_tx": "5Nb4vFpw7mut9Qe3qwxp4MRg4WJihCcXbiCUCjpgpaRQ",
-    "payee_txs": {
-      "a1ice.tryit.kaap-member-1029064001.testnet": "24bM66gETr56frVKFrwNCwEK1BF71J3PZNmkzSNxyW5s",
-      "alice.tryit.kaap-member-1029064001.testnet": "ErY5uymvEWjXXPthGRh57PEiELpUMam1vLw25Toge9B6"
-    },
-    "add_key_tx": "24uPirozvafA72gHjXtmzp6PrgwaAKmVhEYywjgbrm9H",
+    "payee_txs": {},
+    "add_key_tx": "5jkfNA1EW8SD1JzMozHWYqTXMmwt86qGvNym9aby4Q3u",
     "account_id": "kaap-member-1029064001.testnet",
-    "public_key": "ed25519:9q7PNx97fjXi1wBbXtvgNdPwy4WtcixW6rfSAFc96X51",
+    "public_key": "ed25519:6bCYiH3unY424THRo1qqruVVqNEuwYWteQv5zS8zE5xz",
     "can_call": {
-      "contract": "kaap-dao-1111072928.testnet",
+      "contract": "kaap-dao-1113045321.testnet",
       "methods": [
         "add_proposal"
       ],
@@ -121,12 +118,5 @@
         "msg": null
       }
     }
-  },
-  "watcher": {
-    "url": "https://watcher-production-2350aa2a.up.railway.app",
-    "host": "Railway",
-    "since": "12 Nov 2026",
-    "account": "kaap-worker-1029053612.testnet",
-    "checked_with": "scripts/attack-caller-limit.mjs"
   }
 }

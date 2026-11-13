@@ -27,7 +27,7 @@ import { type HttpRequest, type HttpResponse, NetError, type Transport } from '.
 import { NETWORKS } from '../src/rpc.js';
 import { cryptoFresh, explanationContext, type Fresh, openSealed, OVERHEAD, rawPublicKey, SEALED_PREFIX, sealTo, textContext, type X25519Pair } from '../src/sealing.js';
 import { carriesHostile } from './hostile.js';
-import { fakeClock, REPO_ROOT } from './replay.js';
+import { fakeClock, RECORDED_ROOT, REPO_ROOT } from './replay.js';
 
 const DAO = 'kaap-dao-1029064008.testnet';
 const GUARD = 'kaap-guard-1029061211.testnet';
@@ -210,11 +210,11 @@ function repoWith(textKey: object | null): string {
   const root = mkdtempSync(join(tmpdir(), 'kaap-seal-text-'));
   mkdirSync(join(root, 'deployments'));
   mkdirSync(join(root, 'packages', 'sealed'), { recursive: true });
-  copyFileSync(join(REPO_ROOT, 'deployments', 'testnet.json'), join(root, 'deployments', 'testnet.json'));
-  const { text_key: _recorded, ...record } = JSON.parse(readFileSync(join(REPO_ROOT, 'deployments', 'testnet-2026-10-29.json'), 'utf8')) as Record<string, unknown>;
+  copyFileSync(join(RECORDED_ROOT, 'deployments', 'testnet.json'), join(root, 'deployments', 'testnet.json'));
+  const { text_key: _recorded, ...record } = JSON.parse(readFileSync(join(RECORDED_ROOT, 'deployments', 'testnet-2026-10-29.json'), 'utf8')) as Record<string, unknown>;
   writeFileSync(join(root, 'deployments', 'testnet-2026-10-29.json'), JSON.stringify(textKey === null ? record : { ...record, text_key: textKey }));
-  for (const list of readdirSync(join(REPO_ROOT, 'packages', 'sealed')).filter((f) => /^testnet.*\.json$/.test(f))) {
-    copyFileSync(join(REPO_ROOT, 'packages', 'sealed', list), join(root, 'packages', 'sealed', list));
+  for (const list of readdirSync(join(RECORDED_ROOT, 'packages', 'sealed'))) {
+    copyFileSync(join(RECORDED_ROOT, 'packages', 'sealed', list), join(root, 'packages', 'sealed', list));
   }
   return root;
 }

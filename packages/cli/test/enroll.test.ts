@@ -18,7 +18,7 @@ import { Core } from '../src/core.js';
 import { main } from '../src/main.js';
 import type { HttpRequest } from '../src/net.js';
 import { NETWORKS } from '../src/rpc.js';
-import { answering, fakeClock, load, replay, REPO_ROOT, UNKNOWN_TODAY } from './replay.js';
+import { answering, fakeClock, load, RECORDED_ROOT, replay, REPO_ROOT, UNKNOWN_TODAY } from './replay.js';
 
 const GUARD = 'kaap-guard-1029061211.testnet';
 /** Today's guard, which a DAO enrolled with no Kaap guard is drafted into. */
@@ -31,7 +31,7 @@ async function run(fixture: string, edit?: (r: HttpRequest, text: string) => str
   const log: HttpRequest[] = [];
   const out: string[] = [];
   const err: string[] = [];
-  const code = await main(fx.argv, { transport: answering(replay(fx, log, edit), fx, UNKNOWN_TODAY), clock: fakeClock(), loadCore: () => Core.load(), repoRoot: REPO_ROOT }, { out: (t) => out.push(t), err: (t) => err.push(t) });
+  const code = await main(fx.argv, { transport: answering(replay(fx, log, edit), fx, UNKNOWN_TODAY), clock: fakeClock(), loadCore: () => Core.load(), repoRoot: RECORDED_ROOT }, { out: (t) => out.push(t), err: (t) => err.push(t) });
   return { code, out: out.join('\n'), err: err.join('\n'), log };
 }
 

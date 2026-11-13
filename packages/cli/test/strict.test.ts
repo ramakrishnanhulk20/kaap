@@ -16,7 +16,7 @@ import { Core } from '../src/core.js';
 import { main } from '../src/main.js';
 import type { HttpRequest } from '../src/net.js';
 import { NETWORKS } from '../src/rpc.js';
-import { answering, fakeClock, load, type MissingView, NO_SUCH_METHOD, replay, REPO_ROOT, UNKNOWN_TODAY } from './replay.js';
+import { answering, fakeClock, load, type MissingView, NO_SUCH_METHOD, RECORDED_ROOT, replay, REPO_ROOT, UNKNOWN_TODAY } from './replay.js';
 
 const GUARD_1029 = 'kaap-guard-1029061211.testnet';
 const GUARD = 'kaap-guard-1111072803.testnet';
@@ -32,7 +32,7 @@ async function run(fixture: string, extra: string[] = [], views: MissingView[] =
   const fx = load(`${fixture}.json`);
   const out: string[] = [];
   const err: string[] = [];
-  const code = await main([...fx.argv, ...extra], { transport: answering(replay(fx, [], edit), fx, [...views, ...UNKNOWN_TODAY]), clock: fakeClock(), loadCore: () => Core.load(), repoRoot: REPO_ROOT }, { out: (t) => out.push(t), err: (t) => err.push(t) });
+  const code = await main([...fx.argv, ...extra], { transport: answering(replay(fx, [], edit), fx, [...views, ...UNKNOWN_TODAY]), clock: fakeClock(), loadCore: () => Core.load(), repoRoot: RECORDED_ROOT }, { out: (t) => out.push(t), err: (t) => err.push(t) });
   return { code, out: out.join('\n'), err: err.join('\n') };
 }
 

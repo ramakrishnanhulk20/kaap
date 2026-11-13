@@ -16,17 +16,18 @@ import { test } from 'node:test';
 
 import { MAX_DEPLOYMENT_RECORDS } from '../src/caps.js';
 import { deploymentChain, describeSealed, loadDeployment, loadTextKey, NoDeployment } from '../src/deployment.js';
-import { REPO_ROOT } from './replay.js';
+import { RECORDED_ROOT, REPO_ROOT } from './replay.js';
 
-const TODAY = JSON.parse(readFileSync(join(REPO_ROOT, 'deployments', 'testnet.json'), 'utf8')) as Record<string, unknown>;
+/** The 11 Nov 2026 record, kept with the fixtures: the record the tests below build theirs from. */
+const TODAY = JSON.parse(readFileSync(join(RECORDED_ROOT, 'deployments', 'testnet.json'), 'utf8')) as Record<string, unknown>;
 
 /** An empty clone with this one's lists of sealed builds. */
 function clone(): string {
   const root = mkdtempSync(join(tmpdir(), 'kaap-chain-'));
   mkdirSync(join(root, 'deployments'));
   mkdirSync(join(root, 'packages', 'sealed'), { recursive: true });
-  for (const list of readdirSync(join(REPO_ROOT, 'packages', 'sealed')).filter((f) => /^testnet.*\.json$/.test(f))) {
-    copyFileSync(join(REPO_ROOT, 'packages', 'sealed', list), join(root, 'packages', 'sealed', list));
+  for (const list of readdirSync(join(RECORDED_ROOT, 'packages', 'sealed'))) {
+    copyFileSync(join(RECORDED_ROOT, 'packages', 'sealed', list), join(root, 'packages', 'sealed', list));
   }
   return root;
 }
@@ -41,8 +42,25 @@ function record(root: string, path: string, n: number, previous?: string): void 
 
 const registries = (root: string) => [...deploymentChain(root, 'testnet')].map((d) => d.registry);
 
-test('this clone\'s chain is today\'s record, then the 29 Oct one it names, and ends there', () => {
+test('this clone\'s own chain is the 13 Nov record, then the 11 Nov and the 29 Oct ones, and its sealed program has an owner that is not its caller', () => {
   const chain = [...deploymentChain(REPO_ROOT, 'testnet')];
+  assert.deepEqual(
+    chain.map((d) => [d.record, d.current, d.guard, d.registry, d.project, d.buildsRecord]),
+    [
+      ['deployments/testnet.json', true, 'kaap-guard-1113045147.testnet', 'kaap-registry-1113045147.testnet', 'kaap-sealed-owner-1113041743.testnet/kaap-sealed', 'packages/sealed/testnet.json'],
+      ['deployments/testnet-2026-11-11.json', false, 'kaap-guard-1111072803.testnet', 'kaap-registry-1111072803.testnet', 'kaap-worker-1029053612.testnet/kaap-sealed', 'packages/sealed/testnet-2026-10-29.json'],
+      ['deployments/testnet-2026-10-29.json', false, 'kaap-guard-1029061211.testnet', 'kaap-registry-1029061211.testnet', 'kaap-worker-1029053612.testnet/kaap-sealed', 'packages/sealed/testnet-2026-10-29.json'],
+    ],
+  );
+  const [now, before] = chain;
+  assert.deepEqual([now!.owner, now!.worker, now!.uuid], ['kaap-sealed-owner-1113041743.testnet', 'kaap-worker-1029053612.testnet', 'p0000000000000171']);
+  assert.notEqual(now!.owner, now!.worker);
+  assert.equal(before!.owner, before!.worker, 'before the split one account did both');
+  assert.equal(loadTextKey(REPO_ROOT, now!).publicKey, now!.recordedKey);
+});
+
+test('the chain the fixtures were recorded against is the 11 Nov record, then the 29 Oct one it names, and ends there', () => {
+  const chain = [...deploymentChain(RECORDED_ROOT, 'testnet')];
   assert.deepEqual(
     chain.map((d) => [d.record, d.current, d.deployedAt, d.guard, d.registry]),
     [
@@ -138,7 +156,7 @@ test('a list of builds that names its owner and its caller apart is read, and th
 });
 
 test('a list written before the split, where one account did both, still reads and is described as such', () => {
-  const first = JSON.parse(readFileSync(join(REPO_ROOT, FIRST_LIST), 'utf8')) as Record<string, unknown>;
+  const first = JSON.parse(readFileSync(join(RECORDED_ROOT, FIRST_LIST), 'utf8')) as Record<string, unknown>;
   assert.equal(first['account'], WATCHER);
   const root = clone();
   const { previous: _today, ...base } = TODAY;

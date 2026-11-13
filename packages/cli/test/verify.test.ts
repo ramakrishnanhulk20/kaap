@@ -45,7 +45,7 @@ import { isTxHash, NETWORKS } from '../src/rpc.js';
 import { base58, BadVerdict, decodeVerdict, ed25519Valid, edKeyBytes, sha256Hex, signedBytes } from '../src/verdict.js';
 import { calledAccounts, decoderCheck, render, verify } from '../src/verify.js';
 import { carriesHostile, forgedCounts, hostileStrings, taint } from './hostile.js';
-import { answering, fakeClock, load, replay, REPO_ROOT, UNKNOWN_TODAY, withoutAllowedReads } from './replay.js';
+import { answering, fakeClock, load, RECORDED_ROOT, replay, REPO_ROOT, UNKNOWN_TODAY, withoutAllowedReads } from './replay.js';
 
 const GUARD_KEY = 'ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN';
 const [ARCHIVE = '', SECOND_ARCHIVE = ''] = NETWORKS.testnet.archives;
@@ -98,7 +98,7 @@ async function run(edit?: (r: HttpRequest, text: string) => string, wrap: (t: Tr
   const err: string[] = [];
   const code = await main(
     fx.argv,
-    { transport: wrap(pruned(answering(wholeWindow(replay(fx, log, edit)), fx, UNKNOWN_TODAY))), clock: fakeClock(), loadCore: () => Core.load(), repoRoot: env.root ?? REPO_ROOT, ...(env.vars ? { vars: env.vars } : {}) },
+    { transport: wrap(pruned(answering(wholeWindow(replay(fx, log, edit)), fx, UNKNOWN_TODAY))), clock: fakeClock(), loadCore: () => Core.load(), repoRoot: env.root ?? RECORDED_ROOT, ...(env.vars ? { vars: env.vars } : {}) },
     { out: (t) => out.push(t), err: (t) => err.push(t) },
   );
   return { code, out: out.join('\n'), err: err.join('\n'), log };
@@ -527,7 +527,7 @@ test('every line of a verify report, with each of 300 hostile strings added, pri
   const fx = load('verify-1029-2.json');
   const clock = fakeClock();
   const report = await verify(
-    { core: await Core.load(), transport: pruned(answering(wholeWindow(replay(fx)), fx, UNKNOWN_TODAY)), limiter: new RateLimiter(1_000, clock), clock, repoRoot: REPO_ROOT },
+    { core: await Core.load(), transport: pruned(answering(wholeWindow(replay(fx)), fx, UNKNOWN_TODAY)), limiter: new RateLimiter(1_000, clock), clock, repoRoot: RECORDED_ROOT },
     { dao: 'kaap-dao-1029064008.testnet', id: 2, network: 'testnet' },
   );
   const baseline = render(taint(report, 'q'));

@@ -24,7 +24,7 @@ import { PRICE_LIST_URL, readPrices } from '../src/prices.js';
 import { NETWORKS } from '../src/rpc.js';
 import { shown } from '../src/text.js';
 import { carriesHostile, forgedCounts, hostileStrings, taint } from './hostile.js';
-import { answering, fakeClock, load, type MissingView, replay, REPO_ROOT, UNKNOWN_TODAY, withoutAllowedReads } from './replay.js';
+import { answering, fakeClock, load, type MissingView, RECORDED_ROOT, replay, REPO_ROOT, UNKNOWN_TODAY, withoutAllowedReads } from './replay.js';
 
 const ADVISORY = "advisory: plain-code check only; the AI and the guard run in Kaap's sealed program";
 
@@ -43,7 +43,7 @@ async function run(fixture: string, extra: string[] = [], wrap: (t: Transport) =
   const log: HttpRequest[] = [];
   const out: string[] = [];
   const err: string[] = [];
-  const code = await main([...fx.argv, ...extra], { transport: wrap(answering(replay(fx, log, edit), fx, ENROLMENTS)), clock: fakeClock(), loadCore: () => Core.load(), repoRoot: REPO_ROOT }, { out: (t) => out.push(t), err: (t) => err.push(t) });
+  const code = await main([...fx.argv, ...extra], { transport: wrap(answering(replay(fx, log, edit), fx, ENROLMENTS)), clock: fakeClock(), loadCore: () => Core.load(), repoRoot: RECORDED_ROOT }, { out: (t) => out.push(t), err: (t) => err.push(t) });
   return { code, out: out.join('\n'), err: err.join('\n'), log };
 }
 
@@ -163,7 +163,7 @@ test('an invalid account id or a missing account is not a recognised DAO', async
       if (r.body?.includes('"view_account"')) return { status: 200, text: JSON.stringify({ jsonrpc: '2.0', id: 'kaap', error: { name: 'HANDLER_ERROR', cause: { name: 'UNKNOWN_ACCOUNT' } } }) };
       return replay(fx)(r);
     };
-    const code = await main(['check', dao, '1'], { transport: missing, clock: fakeClock(), loadCore: () => Core.load(), repoRoot: REPO_ROOT }, { out: () => {}, err: (t) => err.push(t) });
+    const code = await main(['check', dao, '1'], { transport: missing, clock: fakeClock(), loadCore: () => Core.load(), repoRoot: RECORDED_ROOT }, { out: () => {}, err: (t) => err.push(t) });
     assert.equal(code, 3, dao);
     assert.match(err.join(''), why);
   }
@@ -257,7 +257,7 @@ test('every string of a check report, set to each of 300 hostile strings, prints
   const fx = load('check-survival-132.json');
   const clock = fakeClock();
   const { report, decimals } = await check(
-    { core: await Core.load(), transport: answering(replay(fx), fx, ENROLMENTS), limiter: new RateLimiter(1_000, clock), clock, repoRoot: REPO_ROOT },
+    { core: await Core.load(), transport: answering(replay(fx), fx, ENROLMENTS), limiter: new RateLimiter(1_000, clock), clock, repoRoot: RECORDED_ROOT },
     { dao: 'survival-is-near.sputnik-dao.near', id: 132, network: 'mainnet' },
   );
   // The block time is read through a digits-only check before it reaches the report.
