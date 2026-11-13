@@ -87,6 +87,8 @@ export class Worker {
   readonly #letGo = new Set<string>();
   /** Watched treasuries whose strict setting both providers last read as on (C8). */
   readonly #strict = new Set<string>();
+  /** Strict treasuries whose open requests have not yet been looked through for an owed veto. */
+  readonly #owed = new Set<string>();
   /** The pending key change last seen in the guard, as `key@time`, so one announcement is one alert. */
   #pendingKey: string | null = null;
   /** How long each treasury's policy lets a proposal stay open, from the policy that armed it. */
@@ -237,6 +239,7 @@ export class Worker {
     this.#letGo.add(dao);
     this.#d.health.clear('watcher_lag', dao);
     this.#d.health.clear('provider_silent', dao);
+    this.#d.health.clear('guard_mode_unread', dao);
     this.#d.log.warn(event, { dao });
   }
 
@@ -321,8 +324,15 @@ export class Worker {
     return new Promise((resolve) => this.#idle.push(resolve));
   }
 
-  /** The guard's accepted key, read on both providers; used only when they agree (C22). */
+  /** What the guard says about its own key: the accepted one, and a change its owner has
+   *  announced. Each is read by itself, so one failing read never hides the other. */
   async refreshGuard(): Promise<void> {
+    await this.#refreshAcceptedKey();
+    await this.#refreshPendingKey();
+  }
+
+  /** The guard's accepted key, read on both providers; used only when they agree (C22). */
+  async #refreshAcceptedKey(): Promise<void> {
     const read = async (p: Reads['primary']) => JSON.parse((await p.callFunction(this.#s.guard, 'accepted_key', {}, { finality: 'final' })).text) as unknown;
     const [a, b] = await Promise.allSettled([read(this.#d.reads.primary), read(this.#d.reads.secondary)]);
     if (a.status !== 'fulfilled' || b.status !== 'fulfilled' || typeof a.value !== 'string' || a.value !== b.value) {
@@ -338,7 +348,6 @@ export class Worker {
     }
     if (before === null) this.#d.log.info('guard_key', { guard: this.#s.guard, accepted_key: a.value });
     this.#d.acceptedKey.value = a.value;
-    await this.#refreshPendingKey();
   }
 
   /** A change of the guard's key that its owner has announced: members of every treasury hear
@@ -348,6 +357,12 @@ export class Worker {
   async #refreshPendingKey(): Promise<void> {
     const { health, log, reads } = this.#d;
     const pending = await reads.pendingKey(this.#s.guard);
+    if (pending !== null && pending !== 'absent' && 'kind' in pending) {
+      log.warn('pending_key_unread', { problem: pending });
+      health.raise('pending_key_unread', ALL, { problem: pending.kind });
+      return;
+    }
+    health.clear('pending_key_unread', ALL);
     if (pending === 'absent') return;
     if (pending === null) {
       if (this.#pendingKey !== null) log.info('pending_key_gone', { guard: this.#s.guard });
@@ -355,13 +370,11 @@ export class Worker {
       health.clear('accepted_key_change_pending', ALL);
       return;
     }
-    if ('kind' in pending) {
-      log.warn('pending_key_unread', { problem: pending });
-      return;
-    }
     const seen = `${pending.key}@${pending.effectiveAtMs}`;
     if (seen === this.#pendingKey) return;
-    if (this.#pendingKey !== null) health.clear('accepted_key_change_pending', ALL);
+    // One announcement replacing another is news, not a recovery: the earlier one is retired, so
+    // no "no longer true" message follows it while a change is still pending.
+    if (this.#pendingKey !== null) health.retire('accepted_key_change_pending', ALL, 'announced again');
     this.#pendingKey = seen;
     log.error('accepted_key_change_pending', { guard: this.#s.guard, new_key: pending.key, effective_at_ms: pending.effectiveAtMs, effective_at: new Date(pending.effectiveAtMs).toISOString() });
     health.raise('accepted_key_change_pending', ALL, { guard: this.#s.guard, new_key: pending.key, effective_at_ms: pending.effectiveAtMs });
@@ -419,19 +432,32 @@ export class Worker {
     await this.#refreshModes();
   }
 
+  /** Where the store keeps the strict setting both providers last agreed on for `dao`. */
+  #strictKey(dao: string): string {
+    return `strict:${this.#s.network}:${this.#s.guard}:${dao}`;
+  }
+
   /** Reads each watched treasury's strict setting from the guard (C8). Only a plain yes or no
    *  from both providers changes what the worker goes by; a failed or differing read keeps the
    *  last agreed setting and says so, and never turns the setting on. The guard reads its own
    *  copy when a veto arrives, so going by a stale yes costs one refused call, while dropping a
-   *  real yes on a bad read would let an unreadable request through. */
+   *  real yes on a bad read would let an unreadable request through. The agreed setting is kept
+   *  in the store, so a restart during a bad read starts from it and not from "default". */
   async #refreshModes(): Promise<void> {
-    const { health, log, reads } = this.#d;
-    for (const dao of [...this.#strict]) if (!this.#watchers.has(dao)) this.#strict.delete(dao);
+    const { health, log, reads, store } = this.#d;
+    for (const dao of [...this.#strict]) {
+      if (this.#watchers.has(dao)) continue;
+      this.#strict.delete(dao);
+      this.#owed.delete(dao);
+      store.setSetting(this.#strictKey(dao), '0');
+    }
     for (const dao of [...this.#watchers.keys()]) {
       const mode = await reads.strictMode(this.#s.guard, dao);
       // A guard built before the setting existed has no strict treasury at all.
       if (mode === 'absent') {
+        for (const strict of this.#strict) store.setSetting(this.#strictKey(strict), '0');
         this.#strict.clear();
+        this.#owed.clear();
         return;
       }
       if (typeof mode !== 'boolean') {
@@ -442,34 +468,53 @@ export class Worker {
       health.clear('guard_mode_unread', dao);
       if (mode === this.#strict.has(dao)) continue;
       log.info('guard_mode', { dao, veto_unreadable: mode });
+      store.setSetting(this.#strictKey(dao), mode ? '1' : '0');
       if (!mode) {
         this.#strict.delete(dao);
+        this.#owed.delete(dao);
         continue;
       }
       this.#strict.add(dao);
-      this.#owedSinceStrict(dao);
+      this.#owed.add(dao);
     }
+    for (const dao of [...this.#owed]) if (await this.#owedSinceStrict(dao)) this.#owed.delete(dao);
   }
 
-  /** A treasury that just turned the strict setting on is owed a veto on every open request whose
-   *  kept verdict says Kaap could not read it. Each is marked held, so the next pass sends it down
-   *  the same veto path as any held veto, with the live state checked again first. */
-  #owedSinceStrict(dao: string): void {
-    const { store, log } = this.#d;
+  /** A treasury that just turned the strict setting on is owed a veto on every request whose kept
+   *  verdict says Kaap could not read it and that both providers still show open. Each is marked
+   *  held, so the next pass sends it down the same veto path as any held veto. A request that
+   *  closed before the treasury chose strict mode was owed nothing, so it is never marked: a held
+   *  veto on a request that passed is reported to members as a veto lost. False when the open
+   *  requests could not be read, and the caller asks again on its next refresh. */
+  async #owedSinceStrict(dao: string): Promise<boolean> {
+    const { store, log, reads } = this.#d;
     const net = this.#s.network;
-    for (const row of store.open(net, dao)) {
-      if (row.state !== 'judged' || row.veto_state !== 'not_needed' || !row.verdict_b64 || !row.signature_b64) continue;
+    const candidates = store.open(net, dao).filter((row) => {
+      if (row.state !== 'judged' || row.veto_state !== 'not_needed' || !row.verdict_b64 || !row.signature_b64) return false;
       const kept = this.#stored(row);
-      if (!kept || kept.verdict.vetoable || !kept.verdict.vetoable_strict) continue;
+      return kept !== null && !kept.verdict.vetoable && kept.verdict.vetoable_strict;
+    });
+    if (candidates.length === 0) return true;
+    const live = await reads.watchState(dao, candidates.map((row) => row.proposal_id));
+    if (live.kind !== 'live') {
+      log.warn('veto_owed_unread', { dao, problem: live });
+      return false;
+    }
+    for (const row of candidates) {
+      if (live.proposals.find((p) => p.id === row.proposal_id)?.status !== 'InProgress') continue;
       store.setVetoable(net, dao, row.proposal_id);
       store.setVetoState(net, dao, row.proposal_id, 'held');
       log.info('veto_owed', { dao, proposal_id: row.proposal_id, why: 'the treasury now has unreadable requests rejected' });
     }
+    return true;
   }
 
   async #addDao(dao: string): Promise<void> {
     const { store, reads, log } = this.#d;
     const pending: number[] = [];
+    // The strict setting both providers agreed on before a restart is in force until it is read
+    // again, so nothing this treasury is owed is decided as if it were in the default mode.
+    if (store.setting(this.#strictKey(dao)) === '1') this.#strict.add(dao);
     if (!store.dao(this.#s.network, dao)) {
       const { a, b, implausible } = await reads.finalCounters(dao);
       if (a === null || b === null || implausible) {

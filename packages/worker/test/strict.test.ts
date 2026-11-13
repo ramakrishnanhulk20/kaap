@@ -112,16 +112,19 @@ interface Options {
   refuseVeto?: string | null;
   /** A guard built before strict mode and the key delay: it has neither view. */
   olderGuard?: boolean;
+  /** The providers, clock and store of a worker that ran before: this one is its restart. */
+  after?: { a: ReturnType<typeof twoProviders>[0]; b: ReturnType<typeof twoProviders>[1]; c: ReturnType<typeof clock>; store: ReturnType<typeof memoryStore>; key: ReturnType<typeof testKey> };
 }
 
 /** A started worker watching the fake DAO, whose sealed job says of every proposal that it shows
  *  only a hash Kaap could not read. Proposal 2 is open unless `open` says otherwise. */
 async function started(t: TestContext, o: Options = {}) {
-  const [a, b] = twoProviders();
-  const key = testKey();
+  const [a, b] = o.after ? [o.after.a, o.after.b] : twoProviders();
+  // The sealed program keeps its key across a restart of the worker.
+  const key = o.after?.key ?? testKey();
   const counter = o.counter ?? 3;
   const open = new Set(o.open ?? [2]);
-  bothSet([a, b], (p) => {
+  if (!o.after) bothSet([a, b], (p) => {
     p.acceptedKey = key.getPublicKey().toString();
     p.enrolled = [DAO];
     p.policy = POLICY;
@@ -129,8 +132,10 @@ async function started(t: TestContext, o: Options = {}) {
     p.final = counter;
     for (let id = 0; id < counter; id++) p.proposals.set(id, proposalText(id, { status: open.has(id) ? 'InProgress' : 'Approved' }));
   });
-  a.strict.set(DAO, o.strict?.[0] ?? false);
-  b.strict.set(DAO, o.strict?.[1] ?? false);
+  if (!o.after) {
+    a.strict.set(DAO, o.strict?.[0] ?? false);
+    b.strict.set(DAO, o.strict?.[1] ?? false);
+  }
   if (o.olderGuard) {
     for (const p of [a, b]) {
       const view = p.callFunction.bind(p);
@@ -140,15 +145,15 @@ async function started(t: TestContext, o: Options = {}) {
       };
     }
   }
-  const c = clock();
-  const store = memoryStore(c.now);
+  const c = o.after?.c ?? clock();
+  const store = o.after?.store ?? memoryStore(c.now);
   const { log, lines } = memoryLog();
   const health = new Health(log, c.now);
   const telegram = new FakeTelegram();
   const alerts = new Alerts({ store, telegram, log, now: c.now, sleep: noSleep }, { network: NETWORK, siteUrl: null, batchMs: 60_000, capPerHour: 30 });
   health.on((e) => alerts.health(e));
   const subs = new Subscriptions(store, NETWORK, log);
-  subs.redeem(subs.issue(DAO).token, CHAT);
+  if (!o.after) subs.redeem(subs.issue(DAO).token, CHAT);
   const chain = new FakeChain();
   chain.respond = (call) => {
     if (call.method === 'request_execution') {
@@ -197,7 +202,7 @@ async function started(t: TestContext, o: Options = {}) {
     await worker.idle();
     await alerts.flush();
   };
-  return { a, b, c, store, health, alerts, telegram, chain, worker, vetoes, row, raised, tick, file, lines };
+  return { a, b, c, store, key, health, alerts, telegram, chain, worker, vetoes, row, raised, tick, file, lines };
 }
 
 test('a treasury in the default mode gets no veto on a request Kaap cannot read', async (t) => {
@@ -293,6 +298,10 @@ test('a key change the guard has pending is told to members at once, once, and a
   await s.worker.refreshGuard();
   await s.alerts.flush();
   assert.equal(told(), 2);
+  // And never a recovery: once the batch window has passed, no message says the change is over.
+  s.c.advance(60_001);
+  await s.alerts.flush();
+  assert.ok(!s.telegram.to(CHAT).some((m) => m.includes(`Recovered, no longer true: ${SAYS.accepted_key_change_pending}`)), s.telegram.to(CHAT).join('\n---\n'));
   // Cancelled or applied: the signal goes.
   bothSet([s.a, s.b], (p) => (p.pendingKey = null));
   await s.worker.refreshGuard();
@@ -328,4 +337,76 @@ test('a veto the guard refuses for too little gas is a refused veto, said on the
   assert.equal(s.raised('veto_refused').length, 1);
   await s.tick();
   assert.equal(s.vetoes().length, 1);
+});
+
+test('a restart during a bad read keeps the strict setting both providers had agreed on', async (t) => {
+  const first = await started(t, { strict: [true, true], open: [] });
+  await first.worker.stop();
+  first.a.failing.add('veto_unreadable');
+  const s = await started(t, { open: [], after: first });
+  assert.equal(s.raised('guard_mode_unread').length, 1);
+  await s.file(3);
+  assert.equal(s.vetoes().length, 1, 'still strict after the restart');
+  assert.equal(s.row(3).veto_state, 'cast');
+});
+
+test('a key change that cannot be read on both providers is said, and the accepted key failing to read does not hide a pending one', async (t) => {
+  const s = await started(t);
+  bothSet([s.a, s.b], (p) => (p.pendingKey = { key: NEW_KEY, effective_at_ms: T0 + 86_400_000 }));
+  s.a.failing.add('pending_key');
+  await s.worker.refreshGuard();
+  assert.deepEqual([s.raised('pending_key_unread').length, s.raised('accepted_key_change_pending').length], [1, 0]);
+  s.a.failing.delete('pending_key');
+  s.a.failing.add('accepted_key');
+  await s.worker.refreshGuard();
+  assert.deepEqual([s.raised('pending_key_unread').length, s.raised('accepted_key_change_pending').length], [0, 1]);
+});
+
+test('a request that closed before the treasury chose strict mode is owed nothing, and is never reported as a lost veto', async (t) => {
+  const s = await started(t);
+  await s.tick();
+  assert.equal(s.row(2).veto_state, 'not_needed');
+  // Members approve it; the worker has not seen that yet when the treasury turns strict mode on.
+  bothSet([s.a, s.b], (p) => {
+    p.proposals.set(2, proposalText(2, { status: 'Approved' }));
+    p.strict.set(DAO, true);
+  });
+  await s.worker.refreshEnrolled();
+  assert.equal(s.row(2).veto_state, 'not_needed');
+  await s.tick();
+  await s.tick();
+  assert.equal(s.vetoes().length, 0);
+  assert.ok(!s.telegram.to(CHAT).some((m) => /lost|could not veto/i.test(m)), s.telegram.to(CHAT).join('\n---\n'));
+});
+
+test('an owed veto waits for a read of the open requests, and is marked once they can be read', async (t) => {
+  const s = await started(t);
+  await s.tick();
+  bothSet([s.a, s.b], (p) => p.strict.set(DAO, true));
+  s.b.failing.add('get_proposals');
+  await s.worker.refreshEnrolled();
+  assert.equal(s.row(2).veto_state, 'not_needed', 'nothing is marked on a read that failed');
+  s.b.failing.delete('get_proposals');
+  await s.worker.refreshEnrolled();
+  assert.equal(s.row(2).veto_state, 'held');
+  await s.tick();
+  assert.equal(s.vetoes().length, 1);
+});
+
+test("a guard's list of enrolled accounts longer than the worker reads is a list not read", async () => {
+  const [a, b] = twoProviders();
+  for (const p of [a, b]) {
+    const view = p.callFunction.bind(p);
+    p.callFunction = async (account, method, args, at) => {
+      if (method !== 'enrolled_daos') return view(account, method, args, at);
+      const { from_index: from, limit } = args as { from_index: number; limit: number };
+      p.enrolled = Array.from({ length: limit }, (_, i) => `dao-${from + i}.testnet`);
+      const page = await view(account, method, { from_index: 0, limit }, at);
+      return page;
+    };
+  }
+  const reads = new Reads(a, b, bridge, 0, noSleep);
+  const cut = await reads.enrolled(GUARD, 2, 2);
+  assert.deepEqual([cut.both, cut.problems.length], [[], 2]);
+  assert.match(cut.problems[0]!.kind === 'failed' ? cut.problems[0]!.detail : '', /more than 4 enrolled accounts/);
 });

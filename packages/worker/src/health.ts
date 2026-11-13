@@ -26,6 +26,7 @@ export type Signal =
   | 'accepted_key_changed'
   | 'accepted_key_change_pending'
   | 'guard_mode_unread'
+  | 'pending_key_unread'
   | 'worker_balance_low'
   | 'guard_balance_low'
   | 'alerts_failing'
@@ -92,6 +93,7 @@ export const SAYS: Record<Signal, string> = {
   accepted_key_changed: "The guard's accepted signing key changed. Until a verdict signed with the new key checks out, Kaap cannot confirm the guard still accepts its verdicts.",
   accepted_key_change_pending: "The guard's owner announced a change of the key the guard trusts. It takes effect 24 hours after it was announced unless the owner cancels it. Until then verdicts are still checked against the current key. The commands kaap verify and kaap arming show the new key and the time.",
   guard_mode_unread: 'Kaap could not read from both RPC providers whether this treasury wants requests Kaap cannot read rejected. It goes by the last setting both agreed on until they agree again.',
+  pending_key_unread: "Kaap could not read from both RPC providers whether the guard's owner has announced a change of the key the guard trusts. If one was announced meanwhile, Kaap has not seen it yet.",
   worker_balance_low: "Kaap's worker account holds less NEAR than it needs to judge, record and veto 20 more attacks.",
   guard_balance_low: 'The guard contract holds less NEAR than the storage for 20 more vetoes.',
   alerts_failing: 'Kaap cannot deliver Telegram alerts right now.',

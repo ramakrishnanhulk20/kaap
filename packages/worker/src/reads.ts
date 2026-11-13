@@ -335,6 +335,9 @@ export class Reads {
           if (!Array.isArray(list) || !list.every((d) => typeof d === 'string')) throw new Error('enrolled_daos is not a list of account ids');
           daos.push(...(list as string[]));
           if (list.length < pageSize) break;
+          // A list longer than this read covers is a list not read: what lies past the last
+          // page would otherwise be left out without a word.
+          if (page === maxPages - 1) throw new Error(`more than ${maxPages * pageSize} enrolled accounts, which is more than is read`);
         }
         lists.push(daos);
       } catch (e) {
