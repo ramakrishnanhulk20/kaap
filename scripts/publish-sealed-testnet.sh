@@ -1,10 +1,15 @@
 #!/bin/bash
-# Publishes the sealed job on OutLayer testnet as project `kaap-sealed`, owned by Kaap's testnet
-# worker account, in one repeatable run:
-#   1. builds the wasm (packages/sealed/build.sh: pinned toolchain, local paths remapped);
-#   2. creates the worker account from the testnet faucet if packages/sealed/testnet.json names
-#      none yet (its key stays in ~/.near-credentials/testnet, legacy keychain, never in the repo);
-#   3. hosts the wasm: `fastfs` uploads it to testnet FastFS from the worker account; any https URL
+# Publishes the sealed job on OutLayer testnet as project `kaap-sealed`, in one repeatable run.
+# The project belongs to an owner account that does nothing else: OutLayer lets only a project's
+# owner publish a build of it or choose the active one. The watcher's account only calls the
+# project, so the key on the watcher's host cannot replace the program.
+#   1. creates the owner account from the testnet faucet if packages/sealed/testnet.json names
+#      none yet (its key stays in ~/.near-credentials/testnet, legacy keychain, never in the repo
+#      and never on the watcher's host), and writes down the caller: KAAP_SEALED_CALLER, or the
+#      worker account of deployments/testnet.json. The build reads the caller's name from that
+#      file, since the caller's own runs are free, so the file comes before the build;
+#   2. builds the wasm (packages/sealed/build.sh: pinned toolchain, local paths remapped);
+#   3. hosts the wasm: `fastfs` uploads it to testnet FastFS from the owner account; any https URL
 #      means the file is already served there (a host the operator approved);
 #   4. downloads the URL and stops unless the served bytes have the build's sha256, because a run
 #      whose wasm cannot be fetched is not refused, it hangs about 200 blocks (seen 24 Oct 2026);
@@ -13,11 +18,15 @@
 #      chain names it active. A read that fails stops the run; it never counts as "no project".
 # Runs inside WSL with near-cli-rs 0.30.1. Testnet only.
 #
-# Usage: bash scripts/publish-sealed-testnet.sh fastfs
+# Usage: bash scripts/publish-sealed-testnet.sh prepare     steps 1 and 2 only: nothing is hosted
+#                                                           or registered, and the build's file and
+#                                                           sha256 are printed, to host it by hand
+#        bash scripts/publish-sealed-testnet.sh fastfs
 #        bash scripts/publish-sealed-testnet.sh https://<host>/<path>/<file>.wasm
 set -euo pipefail
 
-HOST_ARG=${1:?usage: publish-sealed-testnet.sh fastfs | https://...}
+HOST_ARG=${1:?usage: publish-sealed-testnet.sh prepare | fastfs | https://...}
+[[ "$HOST_ARG" == prepare || "$HOST_ARG" == fastfs || "$HOST_ARG" == https://* ]] || { echo "the argument must be prepare, fastfs or an https URL" >&2; exit 2; }
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 STATE="$REPO/packages/sealed/testnet.json"
 WORK=${KAAP_SEALED_WORK:-$HOME/kaap-sealed-testnet}
@@ -29,19 +38,14 @@ command -v jq >/dev/null || { echo "jq is not on PATH" >&2; exit 1; }
 # shellcheck source=scripts/lib/sealed-project.sh
 . "$REPO/scripts/lib/sealed-project.sh"
 
-echo "== 1. build"
-bash "$REPO/packages/sealed/build.sh" release "$WORK/kaap-sealed.wasm" | grep -E '^(size_bytes|sha256|manifest sections|local paths)'
-SHA=$(sha256sum "$WORK/kaap-sealed.wasm" | cut -d' ' -f1)
-WASM="$WORK/kaap-sealed-$SHA.wasm"
-cp "$WORK/kaap-sealed.wasm" "$WASM"
-echo "build: $WASM"
-
-echo "== 2. worker account"
+echo "== 1. owner account"
 if [[ -f "$STATE" ]]; then
-  ACCOUNT=$(jq -r .account "$STATE")
+  ACCOUNT=$(jq -r '.owner // .account' "$STATE")
   echo "reusing $ACCOUNT from packages/sealed/testnet.json"
 else
-  ACCOUNT="kaap-worker-$(date -u +%m%d%H%M%S).testnet"
+  CALLER=${KAAP_SEALED_CALLER:-$(jq -r .sealed.worker_account "$REPO/deployments/testnet.json")}
+  [[ "$CALLER" =~ ^[a-z0-9._-]{2,64}$ ]] || { echo "no caller: set KAAP_SEALED_CALLER to the watcher's account" >&2; exit 1; }
+  ACCOUNT="kaap-sealed-owner-$(date -u +%m%d%H%M%S).testnet"
   near account create-account sponsor-by-faucet-service "$ACCOUNT" autogenerate-new-keypair \
     save-to-legacy-keychain network-config testnet create > "$WORK/create-account.log" 2>&1 \
     || { tail -n 20 "$WORK/create-account.log" >&2; exit 1; }
@@ -49,8 +53,21 @@ else
 fi
 [[ -f "$HOME/.near-credentials/testnet/$ACCOUNT.json" ]] || { echo "no key for $ACCOUNT in ~/.near-credentials/testnet" >&2; exit 1; }
 if [[ ! -f "$STATE" ]]; then
-  jq -n --arg a "$ACCOUNT" --arg p "$ACCOUNT/$PROJECT_NAME" \
-    '{network:"testnet", account:$a, project_id:$p, contract:"outlayer.testnet", versions:[]}' > "$STATE"
+  [[ "$CALLER" != "$ACCOUNT" ]] || { echo "the caller must not be the owner" >&2; exit 1; }
+  jq -n --arg o "$ACCOUNT" --arg c "$CALLER" --arg p "$ACCOUNT/$PROJECT_NAME" \
+    '{network:"testnet", owner:$o, caller:$c, project_id:$p, contract:"outlayer.testnet", versions:[]}' > "$STATE"
+fi
+echo "caller: $(jq -r '.caller // .account' "$STATE")"
+
+echo "== 2. build"
+bash "$REPO/packages/sealed/build.sh" release "$WORK/kaap-sealed.wasm" | grep -E '^(size_bytes|sha256|manifest sections|local paths)'
+SHA=$(sha256sum "$WORK/kaap-sealed.wasm" | cut -d' ' -f1)
+WASM="$WORK/kaap-sealed-$SHA.wasm"
+cp "$WORK/kaap-sealed.wasm" "$WASM"
+echo "build: $WASM"
+if [[ "$HOST_ARG" == prepare ]]; then
+  echo "prepared: nothing hosted, nothing registered. Host $WASM at an https URL, then run this script with that URL."
+  exit 0
 fi
 
 echo "== 3. host"
@@ -70,11 +87,8 @@ PY
     prepaid-gas '1 Ggas' attached-deposit '0 NEAR' sign-as "$ACCOUNT" network-config testnet \
     sign-with-legacy-keychain send > "$WORK/fastfs-upload.log" 2>&1 || true
   echo "uploaded to FastFS; waiting for $URL"
-elif [[ "$HOST_ARG" == https://* ]]; then
-  URL="$HOST_ARG"
 else
-  echo "the host must be fastfs or an https URL" >&2
-  exit 2
+  URL="$HOST_ARG"
 fi
 
 echo "== 4. served sha256"

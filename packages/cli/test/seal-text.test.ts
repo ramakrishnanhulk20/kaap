@@ -13,7 +13,7 @@
 
 import assert from 'node:assert/strict';
 import { createCipheriv, createDecipheriv, createPrivateKey, createPublicKey, diffieHellman, hkdfSync, sign } from 'node:crypto';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -213,7 +213,9 @@ function repoWith(textKey: object | null): string {
   copyFileSync(join(REPO_ROOT, 'deployments', 'testnet.json'), join(root, 'deployments', 'testnet.json'));
   const { text_key: _recorded, ...record } = JSON.parse(readFileSync(join(REPO_ROOT, 'deployments', 'testnet-2026-10-29.json'), 'utf8')) as Record<string, unknown>;
   writeFileSync(join(root, 'deployments', 'testnet-2026-10-29.json'), JSON.stringify(textKey === null ? record : { ...record, text_key: textKey }));
-  copyFileSync(join(REPO_ROOT, 'packages', 'sealed', 'testnet.json'), join(root, 'packages', 'sealed', 'testnet.json'));
+  for (const list of readdirSync(join(REPO_ROOT, 'packages', 'sealed')).filter((f) => /^testnet.*\.json$/.test(f))) {
+    copyFileSync(join(REPO_ROOT, 'packages', 'sealed', list), join(root, 'packages', 'sealed', list));
+  }
   return root;
 }
 

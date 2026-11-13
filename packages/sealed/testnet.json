@@ -1,64 +1,8 @@
 {
   "network": "testnet",
-  "account": "kaap-worker-1029053612.testnet",
-  "project_id": "kaap-worker-1029053612.testnet/kaap-sealed",
+  "owner": "kaap-sealed-owner-1113041743.testnet",
+  "caller": "kaap-worker-1029053612.testnet",
+  "project_id": "kaap-sealed-owner-1113041743.testnet/kaap-sealed",
   "contract": "outlayer.testnet",
-  "versions": [
-    {
-      "sha256": "0099d7b75f5f509ee0c84a7b819058c67ba2e9f9099e4dbf51e413a343d6ff49",
-      "bytes": 380792,
-      "url": "https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/0ecb03ebcbd8714164965d2df18edbae7d95875e/kaap-sealed-0099d7b7.wasm",
-      "registered_by": "create_project",
-      "tx": "FHy3utGUWWwPtPMGz8ALXh9NLR5G4Mo2h1QTsEDGtuMu",
-      "at": "2026-10-29T05:36:22Z",
-      "retired": true
-    },
-    {
-      "sha256": "73409203d24cbda98e98511bb97d1a2065b72702140138f85a198bff347cae87",
-      "bytes": 1510502,
-      "url": "https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/efd72eb5307df22d2abb370ee6ac1fa4df175dcf/kaap-sealed-73409203.wasm",
-      "registered_by": "add_version",
-      "tx": "4eofkn7BjiAdsp55KRnSQqdAcS6nFDgWgxzTWAMqDvDJ",
-      "at": "2026-11-03T05:06:55Z",
-      "retired": true
-    },
-    {
-      "sha256": "e1192b2806dd088541a87794808949fbe35ee5b3422405f07c224f4c02130527",
-      "bytes": 1582424,
-      "url": "https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/a1e3f057d44cde12a278b24e8068d0b11c36a4b9/kaap-sealed-e1192b28.wasm",
-      "registered_by": "add_version",
-      "tx": "A6SXB84XCupvTXWLecteauyHqQzBYZTNC4cG5H7kGR9K",
-      "at": "2026-11-06T04:06:51Z",
-      "retired": true
-    },
-    {
-      "sha256": "bf7bb4f86fe7b1531946d8e5b5b7bab39d3e98a3a97ecab00dd9f0e4c4d34f58",
-      "bytes": 1583153,
-      "url": "https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/9f0c5cc287a9605fa7f7ba55a50eea8ef86d9cda/kaap-sealed-bf7bb4f8.wasm",
-      "registered_by": "add_version",
-      "tx": "8CdP5kjLhvxDSwWJFiWPzUgiiuzEDvud8rXMg7xSGrr3",
-      "at": "2026-11-11T06:25:14Z",
-      "retired": true
-    },
-    {
-      "sha256": "da2c285350551e2367594121856e29cdfe6bc134f56f7c3ce4372584c7a4c666",
-      "bytes": 1675100,
-      "url": "https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/320a36d3ae941b60731a83a77ffa2b1b474d90c2/kaap-sealed-da2c2853.wasm",
-      "registered_by": "add_version",
-      "tx": "Cvo1WSGy3T4RPProXexUee5budUS5rvcB2d51A2SFKhg",
-      "at": "2026-11-11T09:28:26Z",
-      "retired": false
-    },
-    {
-      "sha256": "d8453d6e674d15b1c8acd7796e4219f9388e5704cd8996b7f6642370574e9083",
-      "bytes": 1679633,
-      "url": "https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/104605f82cf3014bb31304dc66002cc0afbfa3b5/kaap-sealed-d8453d6e.wasm",
-      "registered_by": "add_version",
-      "tx": "CroTVvwfKGFTVYFZpr7WQmFzK87477LoVnn4exUXqviV",
-      "at": "2026-11-11T11:43:15Z",
-      "retired": false
-    }
-  ],
-  "uuid": "p00000000000000a9",
-  "active_version": "d8453d6e674d15b1c8acd7796e4219f9388e5704cd8996b7f6642370574e9083"
+  "versions": []
 }

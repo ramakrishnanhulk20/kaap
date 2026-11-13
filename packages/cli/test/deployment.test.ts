@@ -2,27 +2,32 @@
 // record named outside deployments/, by `..`, by an absolute path or through a link, refused before
 // it is read, while the record that names it is still used; a chain longer than four followed no
 // further; a record named twice read once; run hashes of 42 characters read, while one of 33
-// bytes is refused; and an accepted key of 44 characters that spells 33 bytes refused. It does not
-// cover which record a command picks (the verify, check, enroll and seal-text tests do).
+// bytes is refused; an accepted key of 44 characters that spells 33 bytes refused; and the list of
+// sealed builds a record is read with: one that names the owner and the caller apart, one written
+// before the split, the mismatches that are refused, and a list named outside packages/sealed. It
+// does not cover which record a command picks (the verify, check, enroll and seal-text tests do),
+// nor who owns the sealed program on chain, which no command reads.
 
 import assert from 'node:assert/strict';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 
 import { MAX_DEPLOYMENT_RECORDS } from '../src/caps.js';
-import { deploymentChain, loadDeployment, loadTextKey, NoDeployment } from '../src/deployment.js';
+import { deploymentChain, describeSealed, loadDeployment, loadTextKey, NoDeployment } from '../src/deployment.js';
 import { REPO_ROOT } from './replay.js';
 
 const TODAY = JSON.parse(readFileSync(join(REPO_ROOT, 'deployments', 'testnet.json'), 'utf8')) as Record<string, unknown>;
 
-/** An empty clone with this one's list of sealed builds. */
+/** An empty clone with this one's lists of sealed builds. */
 function clone(): string {
   const root = mkdtempSync(join(tmpdir(), 'kaap-chain-'));
   mkdirSync(join(root, 'deployments'));
   mkdirSync(join(root, 'packages', 'sealed'), { recursive: true });
-  copyFileSync(join(REPO_ROOT, 'packages', 'sealed', 'testnet.json'), join(root, 'packages', 'sealed', 'testnet.json'));
+  for (const list of readdirSync(join(REPO_ROOT, 'packages', 'sealed')).filter((f) => /^testnet.*\.json$/.test(f))) {
+    copyFileSync(join(REPO_ROOT, 'packages', 'sealed', list), join(root, 'packages', 'sealed', list));
+  }
   return root;
 }
 
@@ -108,4 +113,77 @@ test('an accepted key of 44 base58 characters that spells 33 bytes is refused, a
   assert.equal(loadDeployment(root, 'testnet').recordedKey, TODAY['accepted_key']);
   write(`ed25519:${'z'.repeat(44)}`);
   assert.throws(() => loadDeployment(root, 'testnet'), NoDeployment);
+});
+
+const FIRST_LIST = 'packages/sealed/testnet-2026-10-29.json';
+const WATCHER = 'kaap-worker-1029053612.testnet';
+const OWNER = 'kaap-sealed-owner-1.testnet';
+const SPLIT_LIST = { network: 'testnet', owner: OWNER, caller: WATCHER, project_id: `${OWNER}/kaap-sealed`, contract: 'outlayer.testnet', uuid: 'p00000000000000ff', versions: [{ sha256: 'ab'.repeat(32) }] };
+
+/** A clone whose record names `sealed` over today's, read with `list` as packages/sealed/testnet.json. */
+function withList(list: object, sealed: Record<string, unknown>): string {
+  const root = clone();
+  const { previous: _today, ...base } = TODAY;
+  const { builds: _named, ...today } = TODAY['sealed'] as Record<string, unknown>;
+  writeFileSync(join(root, 'packages', 'sealed', 'testnet.json'), JSON.stringify(list));
+  writeFileSync(join(root, 'deployments', 'testnet.json'), JSON.stringify({ ...base, sealed: { ...today, ...sealed } }));
+  return root;
+}
+
+test('a list of builds that names its owner and its caller apart is read, and the two are told apart', () => {
+  const d = loadDeployment(withList(SPLIT_LIST, { project_id: SPLIT_LIST.project_id }), 'testnet');
+  assert.deepEqual([d.project, d.owner, d.worker, d.uuid, d.buildsRecord], [`${OWNER}/kaap-sealed`, OWNER, WATCHER, 'p00000000000000ff', 'packages/sealed/testnet.json']);
+  assert.deepEqual([...d.builds], ['ab'.repeat(32)]);
+  assert.equal(describeSealed(d), `sealed program ${OWNER}/kaap-sealed, its builds published by ${OWNER}, called by ${WATCHER}`);
+});
+
+test('a list written before the split, where one account did both, still reads and is described as such', () => {
+  const first = JSON.parse(readFileSync(join(REPO_ROOT, FIRST_LIST), 'utf8')) as Record<string, unknown>;
+  assert.equal(first['account'], WATCHER);
+  const root = clone();
+  const { previous: _today, ...base } = TODAY;
+  writeFileSync(join(root, 'deployments', 'testnet.json'), JSON.stringify({ ...base, sealed: { ...(TODAY['sealed'] as object), project_id: `${WATCHER}/kaap-sealed`, builds: FIRST_LIST } }));
+  const d = loadDeployment(root, 'testnet');
+  assert.deepEqual([d.owner, d.worker, d.buildsRecord], [WATCHER, WATCHER, FIRST_LIST]);
+  assert.equal(describeSealed(d), `sealed program ${WATCHER}/kaap-sealed, called by ${WATCHER}, the same account that publishes its builds`);
+});
+
+test('a list of builds that disagrees with the record on the program, its owner or its caller is refused', () => {
+  const sealed = { project_id: SPLIT_LIST.project_id };
+  const refused = (list: object, record: Record<string, unknown>, why: string) =>
+    assert.throws(() => loadDeployment(withList(list, record), 'testnet'), NoDeployment, why);
+  refused({ ...SPLIT_LIST, owner: 'someone-else.testnet' }, sealed, 'an owner that is not the first half of the project id');
+  refused({ ...SPLIT_LIST, owner: WATCHER }, sealed, 'the watcher written as the owner of a project it does not own');
+  refused({ ...SPLIT_LIST, caller: 'someone-else.testnet' }, sealed, 'a caller that is not the record\'s worker');
+  refused(SPLIT_LIST, { project_id: `${WATCHER}/kaap-sealed` }, 'a record that names another program');
+  refused({ ...SPLIT_LIST, account: WATCHER }, sealed, 'both spellings at once');
+  const { caller: _c, ...ownerOnly } = SPLIT_LIST;
+  refused(ownerOnly, sealed, 'an owner and no caller');
+  const { owner: _o, ...callerOnly } = SPLIT_LIST;
+  refused(callerOnly, sealed, 'a caller and no owner');
+  const { owner: _o2, caller: _c2, ...nobody } = SPLIT_LIST;
+  refused(nobody, sealed, 'neither spelling');
+  assert.match(
+    (() => {
+      try {
+        loadDeployment(withList({ ...SPLIT_LIST, owner: WATCHER }, sealed), 'testnet');
+        return '';
+      } catch (e) {
+        return (e as Error).message;
+      }
+    })(),
+    /^deployments\/testnet\.json and packages\/sealed\/testnet\.json name different sealed programs, owners or callers$/,
+  );
+});
+
+test('a list of builds named outside packages/sealed is refused before it is read', () => {
+  const root = clone();
+  const { previous: _today, ...base } = TODAY;
+  writeFileSync(join(root, 'outside.json'), JSON.stringify(SPLIT_LIST));
+  for (const builds of ['../outside.json', 'outside.json', 'packages/sealed/../../outside.json', 'deployments/testnet.json', join(root, 'outside.json'), 'packages/sealed']) {
+    writeFileSync(join(root, 'deployments', 'testnet.json'), JSON.stringify({ ...base, sealed: { ...(TODAY['sealed'] as object), builds } }));
+    assert.throws(() => loadDeployment(root, 'testnet'), (e) => e instanceof NoDeployment && /^deployments\/testnet\.json names a list of sealed builds, .*, outside packages\/sealed\/; it was not read$/.test(e.message), builds);
+  }
+  writeFileSync(join(root, 'deployments', 'testnet.json'), JSON.stringify({ ...base, sealed: { ...(TODAY['sealed'] as object), builds: 'packages/sealed/missing.json' } }));
+  assert.throws(() => loadDeployment(root, 'testnet'), /names a list of sealed builds, packages\/sealed\/missing\.json, that is not in this clone$/);
 });

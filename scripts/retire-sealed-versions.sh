@@ -16,7 +16,7 @@ set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 STATE="$REPO/packages/sealed/testnet.json"
 CONTRACT=$(jq -r .contract "$STATE")
-ACCOUNT=$(jq -r .account "$STATE")
+ACCOUNT=$(jq -r '.owner // .account' "$STATE")
 PROJECT=$(jq -r .project_id "$STATE")
 NAME=${PROJECT#*/}
 LOGS=${KAAP_SEALED_WORK:-$HOME/kaap-sealed-testnet}

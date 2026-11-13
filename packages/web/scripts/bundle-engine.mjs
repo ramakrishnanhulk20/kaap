@@ -28,12 +28,15 @@ for (const file of wasmFiles) {
 }
 
 // The records `check` follows to find Kaap's guard on a network. A record names the one before
-// it, so every record in the chain goes along.
-const records = ['packages/sealed/testnet.json'];
+// it and its own list of sealed builds, so every record in the chain goes along with its list.
+const records = [];
 for (let record = 'deployments/testnet.json'; record; ) {
   records.push(record);
-  const previous = JSON.parse(readFileSync(join(repo, record), 'utf8')).previous;
-  record = typeof previous === 'string' && !records.includes(previous) ? previous : null;
+  const read = JSON.parse(readFileSync(join(repo, record), 'utf8'));
+  const builds = typeof read.sealed?.builds === 'string' ? read.sealed.builds : 'packages/sealed/testnet.json';
+  if (!/^packages\/sealed\/[a-z0-9.-]+\.json$/.test(builds)) throw new Error(`${record} names a list of sealed builds outside packages/sealed: ${builds}`);
+  if (!records.includes(builds)) records.push(builds);
+  record = typeof read.previous === 'string' && !records.includes(read.previous) ? read.previous : null;
 }
 
 rmSync(out, { recursive: true, force: true });

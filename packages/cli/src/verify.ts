@@ -31,7 +31,7 @@ import { type Deps, readers } from './check.js';
 import { type ContractLine, contractsAsRecorded } from './contracts.js';
 import { type Core, CoreError } from './core.js';
 import { recognise } from './dao.js';
-import { type Deployment, deploymentChain, describeDeployment } from './deployment.js';
+import { type Deployment, deploymentChain, describeDeployment, describeSealed } from './deployment.js';
 import { pendingKeyLines } from './guard.js';
 import { type Attestation, type AttestationRead, findRun, readAttestation, readRun, type Run, type Search } from './outlayer.js';
 import { Archive, archiveHosts, type Block, NETWORKS, type Network, RpcError } from './rpc.js';
@@ -286,7 +286,7 @@ export async function verify(deps: Deps & { repoRoot: string }, request: VerifyR
   const facts = [
     `read at final block ${head.height} (${utc(head.timestampNs)}): agreed by ${reader.providers.join(' and ')}; the verdict's own block (the policy and the called contracts' code) and the sealed runs from one node per read, never compared: a live provider while it still holds them, else an archival node, named on each line`,
     `DAO: Sputnik ${dao.version} (code hash ${dao.codeHash})`,
-    `Kaap on ${request.network}: ${describeDeployment(d)}, sealed program ${d.project} called by ${d.worker}${without.length ? `; used because ${without.join(' and ')} ${without.length === 1 ? 'holds' : 'hold'} no verdict for this proposal` : ''}`,
+    `Kaap on ${request.network}: ${describeDeployment(d)}, ${describeSealed(d)}${without.length ? `; used because ${without.join(' and ')} ${without.length === 1 ? 'holds' : 'hold'} no verdict for this proposal` : ''}`,
     `verdict: record ${record.index} in ${d.registry}, recorded by ${oneLine(record.recorded_by, 80)} at block ${record.recorded_at_block}`,
   ];
   const checks: Check[] = contracts.map(contractCheck);

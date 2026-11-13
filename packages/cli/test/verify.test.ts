@@ -203,7 +203,7 @@ const BINDING = /^(pass|fail) {2}the run: OutLayer's record /;
 
 /** The line naming the record the 29 Oct DAO's verdicts are checked against, before the checks. */
 const OCT_29_RECORD =
-  /^Kaap on testnet: deployment record deployments\/testnet-2026-10-29\.json \(an earlier deployment, not the current deployments\/testnet\.json, deployed 2026-10-29T06:12:11Z\): guard kaap-guard-1029061211\.testnet, registry kaap-registry-1029061211\.testnet, sealed program kaap-worker-1029053612\.testnet\/kaap-sealed called by kaap-worker-1029053612\.testnet; used because kaap-registry-1111072803\.testnet holds no verdict for this proposal\n(?:.*\n)*checks\n/m;
+  /^Kaap on testnet: deployment record deployments\/testnet-2026-10-29\.json \(an earlier deployment, not the current deployments\/testnet\.json, deployed 2026-10-29T06:12:11Z\): guard kaap-guard-1029061211\.testnet, registry kaap-registry-1029061211\.testnet, sealed program kaap-worker-1029053612\.testnet\/kaap-sealed, called by kaap-worker-1029053612\.testnet, the same account that publishes its builds; used because kaap-registry-1111072803\.testnet holds no verdict for this proposal\n(?:.*\n)*checks\n/m;
 
 test('the 29 Oct attack verdict passes every check, down to the attested run that printed the guard key', async () => {
   const { code, out } = await run();
@@ -242,7 +242,7 @@ test('the 11 Nov demo verdict passes every check on today\'s record, reading its
   const { code, out, log } = await run(undefined, undefined, 'verify-1111-3.json');
   assert.equal(code, 0, out);
   assert.match(out, /^kaap verify kaap-dao-1111072928\.testnet #3 on testnet$/m);
-  assert.match(out, /^Kaap on testnet: deployment record deployments\/testnet\.json \(the current one, deployed 2026-11-11T07:28:03Z\): guard kaap-guard-1111072803\.testnet, registry kaap-registry-1111072803\.testnet, sealed program kaap-worker-1029053612\.testnet\/kaap-sealed called by kaap-worker-1029053612\.testnet$/m);
+  assert.match(out, /^Kaap on testnet: deployment record deployments\/testnet\.json \(the current one, deployed 2026-11-11T07:28:03Z\): guard kaap-guard-1111072803\.testnet, registry kaap-registry-1111072803\.testnet, sealed program kaap-worker-1029053612\.testnet\/kaap-sealed, called by kaap-worker-1029053612\.testnet, the same account that publishes its builds$/m);
   assert.match(out, /^ {2}pass {2}guard code: kaap-guard-1111072803\.testnet runs the recorded build, sha256 bf09d7bb\.\.\.3767 \(two providers, block 277188465\)$/m);
   assert.match(out, /^ {2}pass {2}registry keys: kaap-registry-1111072803\.testnet has no access key, so no one can sign for it \(two providers, block 277188465\)$/m);
   assert.match(out, /pass {2}policy hash: kaap-core recomputes .* at block 277184829 \(read from near-testnet\.drpc\.org, one node, not compared\)$/m);

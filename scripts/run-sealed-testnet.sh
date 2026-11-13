@@ -1,6 +1,7 @@
 #!/bin/bash
-# Runs Kaap's sealed job on OutLayer testnet against a real Sputnik proposal, from the worker
-# account in packages/sealed/testnet.json, and checks every answer the way a stranger would:
+# Runs Kaap's sealed job on OutLayer testnet against a real Sputnik proposal, from the caller
+# account in packages/sealed/testnet.json (the watcher's account, which is not the project's
+# owner), and checks every answer the way a stranger would:
 # the verdict decodes, its signature verifies under the printed key with Node's crypto, the
 # explanation hash matches, and every run printed the same key. Prints the block height the reads
 # were pinned to, and per-run timing and cost. Runs inside WSL with near-cli-rs 0.30.1.
@@ -33,7 +34,7 @@ REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 STATE="$REPO/packages/sealed/testnet.json"
 TOOLS="$REPO/packages/sealed/tools"
 [[ -f "$STATE" ]] || { echo "no packages/sealed/testnet.json: run scripts/publish-sealed-testnet.sh first" >&2; exit 1; }
-ACCOUNT=$(jq -r .account "$STATE")
+ACCOUNT=$(jq -r '.caller // .account' "$STATE")
 PROJECT=$(jq -r .project_id "$STATE")
 GUARD=${GUARD:-$ACCOUNT}
 LABEL=${LABEL:-run-$(date -u +%Y%m%dT%H%M%SZ)}

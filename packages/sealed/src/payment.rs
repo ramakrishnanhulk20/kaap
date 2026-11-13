@@ -12,10 +12,10 @@ pub const PRICE_MICRO_USD: u64 = 10_000;
 
 const TESTNET_RECORD: &[u8] = include_bytes!("../testnet.json");
 
-/// Where the string value of the first `"account"` member starts and ends. A compile error when
+/// Where the string value of the first `"caller"` member starts and ends. A compile error when
 /// the file names none, so a build can never ship without its free caller's name.
-const fn account_span(json: &[u8]) -> (usize, usize) {
-    let key = b"\"account\"";
+const fn caller_span(json: &[u8]) -> (usize, usize) {
+    let key = b"\"caller\"";
     let mut at = 0;
     while at + key.len() < json.len() {
         let mut same = 0;
@@ -35,7 +35,7 @@ const fn account_span(json: &[u8]) -> (usize, usize) {
         }
         at += 1;
     }
-    panic!("testnet.json names no account");
+    panic!("testnet.json names no caller");
 }
 
 const fn copied<const N: usize>(from: &[u8], start: usize) -> [u8; N] {
@@ -48,16 +48,17 @@ const fn copied<const N: usize>(from: &[u8], start: usize) -> [u8; N] {
     out
 }
 
-const ACCOUNT_SPAN: (usize, usize) = account_span(TESTNET_RECORD);
+const CALLER_SPAN: (usize, usize) = caller_span(TESTNET_RECORD);
 
 // Copied out on purpose. A slice of the record would keep the whole file in the wasm, and the file
 // gains a line on every publish, so no published hash could be rebuilt from the commit recording it.
-const WORKER_BYTES: [u8; ACCOUNT_SPAN.1 - ACCOUNT_SPAN.0] = copied(TESTNET_RECORD, ACCOUNT_SPAN.0);
+const WORKER_BYTES: [u8; CALLER_SPAN.1 - CALLER_SPAN.0] = copied(TESTNET_RECORD, CALLER_SPAN.0);
 
-/// Kaap's worker on testnet, the account `testnet.json` names and `kaap verify` checks as the caller.
+/// Kaap's worker on testnet, the caller `testnet.json` names and `kaap verify` checks. It is not the
+/// project's owner: it runs the program and cannot publish a build of it.
 pub const TESTNET_WORKER: &str = match core::str::from_utf8(&WORKER_BYTES) {
     Ok(account) => account,
-    Err(_) => panic!("the account in testnet.json is not text"),
+    Err(_) => panic!("the caller in testnet.json is not text"),
 };
 
 /// The account whose chain runs are Kaap's own on `network`. `None` where Kaap has no worker yet,
@@ -248,12 +249,14 @@ mod tests {
     }
 
     #[test]
-    fn the_compiled_worker_is_the_account_testnet_json_names() {
+    fn the_compiled_worker_is_the_caller_testnet_json_names_and_not_the_owner() {
         let record: serde_json::Value = serde_json::from_slice(TESTNET_RECORD).unwrap();
-        assert_eq!(record["account"], TESTNET_WORKER);
+        assert_eq!(record["caller"], TESTNET_WORKER);
         assert_eq!(worker_account(Network::Testnet), Some(TESTNET_WORKER));
         near_account_id::AccountIdRef::new(TESTNET_WORKER).unwrap();
-        assert_eq!(record["project_id"].as_str().unwrap().split('/').next(), Some(TESTNET_WORKER), "the project owner");
+        let owner = record["project_id"].as_str().unwrap().split('/').next();
+        assert_eq!(owner, record["owner"].as_str(), "the project's id starts with its owner");
+        assert_ne!(owner, Some(TESTNET_WORKER), "the caller must not be the account that publishes builds");
     }
 
     #[test]

@@ -33,7 +33,7 @@
 //
 // The live run: testnet only, inside WSL with Node 24 and near-api-js 7.4.0 at the repo root, where
 // the worker's key lives (~/.near-credentials/testnet, read into memory and never printed). It signs
-// as the worker named in packages/sealed/testnet.json, whose runs are free, and names the NEAR AI
+// as the caller named in packages/sealed/testnet.json, whose runs are free, and names the NEAR AI
 // secret through secrets_ref (profile near-ai, owner KAAP_AI_SECRETS_ACCOUNT in .env); the key itself
 // never reaches this machine. Each run sends one record first, which must come back as scores with
 // the AI key present, then at most --in-flight records run at once, one less after every send error or failed
@@ -390,7 +390,7 @@ async function live(o, records) {
   if (builds.network !== RUN_NETWORK) throw new Stop('packages/sealed/testnet.json is not a testnet record');
   const owner = process.env.KAAP_AI_SECRETS_ACCOUNT ?? '';
   if (!/^[a-z0-9._-]{2,64}$/.test(owner)) throw new Stop('KAAP_AI_SECRETS_ACCOUNT in .env is missing or is not an account id: an eval run needs the AI key');
-  const worker = chain.accountFor(builds.account);
+  const worker = chain.accountFor(builds.caller ?? builds.account);
   const prices = await tokenPrices();
   const current = BigInt((await chain.provider.viewGasPrice(null))?.gas_price ?? '0');
   const price = current > MIN_GAS_PRICE ? current : MIN_GAS_PRICE;
