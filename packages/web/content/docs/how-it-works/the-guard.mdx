@@ -41,8 +41,8 @@ Two things follow. The AI alone can never cause a veto: there must be a finding 
 
 Nobody can change the guard's code. The deploy script deleted the account's only access key right after setting it up, and the contract has no upgrade method. A new version is a new contract that a treasury chooses to adopt.
 
-One thing can change: the key the guard obeys. A new build of the sealed reader has a new key, so the guard's owner, an account held by Kaap's founder, can replace it. On the guard deployed today that change takes effect at once and the guard announces it in an event.
+One thing can change: the key the guard obeys. A new project of the sealed reader has a new key, so the guard's owner, an account held by Kaap's founder, can replace it. The change is announced on chain and takes effect 24 hours later at the earliest. The owner can cancel it in that time, the watcher tells every treasury's members at once, and `kaap arming` and `kaap verify` warn while one is pending.
 
-<Callout title="Built, not yet deployed">
-The next version of the guard is written and tested: a key change takes effect 24 hours after it is announced and can be cancelled, and a treasury can choose strict mode, where the guard also rejects any request whose hash Kaap could not read. It is not on testnet yet.
+<Callout title="Strict mode">
+A treasury can choose strict mode, where the guard also rejects any request whose hash Kaap could not read. It is one setting per treasury, chosen by the treasury's own vote, and turning it off reads as weakening the guard. The guard on testnet has it since 13 Nov 2026. The demo treasury is in the default mode, so on testnet strict mode is shown by tests, not yet by a live reject.
 </Callout>

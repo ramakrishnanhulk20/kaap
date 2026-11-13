@@ -47,10 +47,10 @@ The owner can do two things and nothing else:
 There is no upgrade method, and the deploy script deletes the account's only full-access key right after `new`. Anyone can check that the account has no keys and that its code hash matches this build:
 
 ```
-near account list-keys kaap-guard-1111072803.testnet network-config testnet now
+near account list-keys kaap-guard-1113045147.testnet network-config testnet now
 ```
 
-Anyone can run it with near-cli-rs 0.30.1, and it reads only. `near account view-account-summary kaap-guard-1111072803.testnet network-config testnet now` shows both facts at once: "Account is locked (no access keys)" and the code's sha256. To rebuild and compare, check out the commit the table below names and, with cargo-near 0.22.0 and the toolchain in `rust-toolchain.toml`, run `cargo near build non-reproducible-wasm --locked --out-dir <folder>` in `packages/contracts/guard`, then `sha256sum <folder>/kaap_guard.wasm`, and compare with the sha256 below. Two builds on one machine matched it; a build on another machine has not been tried. Neither signs.
+Anyone can run it with near-cli-rs 0.30.1, and it reads only. `near account view-account-summary kaap-guard-1113045147.testnet network-config testnet now` shows both facts at once: "Account is locked (no access keys)" and the code's sha256. To rebuild and compare, check out the commit the table below names and, with cargo-near 0.22.0 and the toolchain in `rust-toolchain.toml`, run `cargo near build non-reproducible-wasm --locked --out-dir <folder>` in `packages/contracts/guard`, then `sha256sum <folder>/kaap_guard.wasm`, and compare with the sha256 below. Two builds on one machine matched it; a build on another machine has not been tried. Neither signs.
 
 A new version is a new contract. A DAO moves to it with one ordinary proposal that changes its Guard role.
 
@@ -58,16 +58,16 @@ A new version is a new contract. A DAO moves to it with one ordinary proposal th
 
 | | |
 |---|---|
-| Account | `kaap-guard-1111072803.testnet`, deployed 11 Nov 2026 |
-| Code hash | `DrjaN1zVz4cxvvxbxhM6rVZsqy8SrBunmMbyeqbsr4R4` (sha256 `bf09d7bbb48f312eb4043bd7b585f3b02bbe9d8b7d5bc0bf31fec9319c663767`) |
-| Built from | commit `413a74aa91256a8c8603d1f84df33fde64abbcd3`, by the deploy script's `cargo near build non-reproducible-wasm --locked`; a second build in another target folder gave the same sha256 |
+| Account | `kaap-guard-1113045147.testnet`, deployed 13 Nov 2026 |
+| Code hash | `BfYf34n3cN85SpkSWRAJYqDghRHxLJkR4SgYaeXbWBt6` (sha256 `9e74bbbadcfa6820390e21cb415ae83542f5de6257da4ad651caf950801c5d23`) |
+| Built from | commit `5f1cf75`, by the deploy script's `cargo near build non-reproducible-wasm --locked`; a second build in an empty target folder gave the same sha256 |
 | Owner | `kaap-owner-1029061211.testnet` |
-| Accepted key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN`, the sealed program's key (project `kaap-worker-1029053612.testnet/kaap-sealed`; attested run https://testnet-api.outlayer.ai/attestations/by-tx/7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC) |
-| Deploy and init | https://testnet.nearblocks.io/txns/DEta1bNNm4gRYLqhZJ2HfwDnVtz294dgyEyLfiQVzsK1 |
-| Key deleted | https://testnet.nearblocks.io/txns/6qEFvNiz5Guw1w2XaA6cS36kkRVhAJbPTtijgPEcTssM, 0 access keys left |
-| Explorer | https://testnet.nearblocks.io/address/kaap-guard-1111072803.testnet |
+| Accepted key | `ed25519:8eiUXYidw2x7WWfVVmYkDcewi3aBzxKomMefsPPhaecF`, the key the watcher's account has on the sealed program (project `kaap-sealed-owner-1113041743.testnet/kaap-sealed`; attested run https://testnet-api.outlayer.ai/attestations/by-tx/6Lm1adNQeQrm75QBoWcEmAaG1dskrajEUCQCisatU12L) |
+| Deploy and init | https://testnet.nearblocks.io/txns/6zSjJ4FnExBBWx9eR1hcfErbRM83e1x1ob9QwzApTHvT |
+| Key deleted | https://testnet.nearblocks.io/txns/DeCTsm76k8RH6HES5uqh4p4SrzZksKF7uQNL7gYPLxtV, 0 access keys left |
+| Explorer | https://testnet.nearblocks.io/address/kaap-guard-1113045147.testnet |
 
-That guard was built before the gas and size checks, strict mode and the key delay described here; they reach testnet with the next deploy, as a new contract.
+This guard has the gas and size checks, strict mode and the key delay described here. The two guards before it, of 29 Oct and 11 Nov 2026, are still on chain and have none of them.
 
 Every id and hash is also in `deployments/testnet.json`. Deploy again with `KAAP_ACCEPTED_KEY=ed25519:<key> KAAP_GUARD_OWNER=<owner> bash scripts/deploy-contracts-testnet.sh`.
 

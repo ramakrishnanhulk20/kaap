@@ -21,8 +21,8 @@ const OUT = join(HERE, '..', 'data', 'hash-proposal.json');
 const TEXT_FILE = join('deployments', 'demo-hash-text.json');
 const RPC = 'https://rpc.testnet.fastnear.com';
 const NETWORK = 'testnet';
-const DAO = 'kaap-dao-1111072928.testnet';
-const REGISTRY = 'kaap-registry-1111072803.testnet';
+const DAO = 'kaap-dao-1113045321.testnet';
+const REGISTRY = 'kaap-registry-1113045147.testnet';
 const SIGNER = 'v1.signer-prod.testnet';
 
 core.initSync({ module: readFileSync(join(HERE, '..', '..', 'core-wasm', 'pkg', 'kaap_core_wasm_bg.wasm')) });

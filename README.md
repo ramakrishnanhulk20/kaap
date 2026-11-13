@@ -49,14 +49,15 @@ A treasury adopts Kaap with two of its own requests: one adds a role named `guar
 
 | Thing | Where | State |
 |---|---|---|
-| Guard contract | [`kaap-guard-1111072803.testnet`](https://testnet.nearblocks.io/address/kaap-guard-1111072803.testnet) | Live on testnet, no access keys |
-| Registry contract | [`kaap-registry-1111072803.testnet`](https://testnet.nearblocks.io/address/kaap-registry-1111072803.testnet) | Live on testnet, no access keys |
-| Demo treasury | [`kaap-dao-1111072928.testnet`](https://testnet.nearblocks.io/address/kaap-dao-1111072928.testnet) | Sputnik DAO 3.2 with the role setup of a NEAR Business treasury, enrolled, no access keys |
-| Sealed reader | OutLayer project `kaap-worker-1029053612.testnet/kaap-sealed` | Live on testnet, running inside Intel TDX |
-| A theft stopped | Request #1 of the demo treasury | [filed](https://testnet.nearblocks.io/txns/GaQuPteeaiPAqjow7ezLC7f2HqxbBHv53erE1N4C7g9A), [read in sealed hardware](https://testnet.nearblocks.io/txns/az5yNU7xixz2Qwrt8g4pNhygJTpceRqHJTK2zv7NF3J), [recorded](https://testnet.nearblocks.io/txns/2T8fbLoy9gkFkbLThTMPsbRCf4RckfZVMVBvwvfqePmy), [rejected by the guard](https://testnet.nearblocks.io/txns/AWWzynnmDdCYaKeSJA66Kr3h7DxW6ni9Sh6uHtH6v4M9) |
+| Guard contract | [`kaap-guard-1113045147.testnet`](https://testnet.nearblocks.io/address/kaap-guard-1113045147.testnet) | Live on testnet since 13 Nov 2026, no access keys. It has strict mode and a 24-hour wait on key changes |
+| Registry contract | [`kaap-registry-1113045147.testnet`](https://testnet.nearblocks.io/address/kaap-registry-1113045147.testnet) | Live on testnet, no access keys |
+| Demo treasury | [`kaap-dao-1113045321.testnet`](https://testnet.nearblocks.io/address/kaap-dao-1113045321.testnet) | Sputnik DAO 3.2 with the role setup of a NEAR Business treasury, enrolled, no access keys |
+| Sealed reader | OutLayer project `kaap-sealed-owner-1113041743.testnet/kaap-sealed` | Live on testnet, running inside Intel TDX. Published by an owner account whose key is offline; the watcher only calls it |
+| A theft stopped | Request #1 of the demo treasury | [filed](https://testnet.nearblocks.io/txns/583jbKshP4USdjmBRnX9wrRjFYg9NvTURdBuWqAo1q5a), [read in sealed hardware](https://testnet.nearblocks.io/txns/6Lm1adNQeQrm75QBoWcEmAaG1dskrajEUCQCisatU12L), [recorded](https://testnet.nearblocks.io/txns/CNqvoFb8Ly3txbrYMuXyRWwPM6Enp1PYr6oGUcVjcS83), [rejected by the guard](https://testnet.nearblocks.io/txns/66WDukXKMVFbeyZ6aAbsTMgZDwCAwXFNSSagM9MkQagz) |
 | The check, the site and the docs | `packages/web`, `packages/cli` | Built. The check reads any Sputnik DAO on mainnet or testnet with no key |
 | Always-on watcher | `packages/worker` | Live since 12 Nov 2026 as one container on Railway, watching the demo treasury: [its status page](https://watcher-production-2350aa2a.up.railway.app/status). It runs on free RPC providers |
-| Next guard version | `packages/contracts/guard` | Written and tested, not deployed. It adds a 24-hour wait on key changes and a strict mode |
+| Strict mode | In the guard above | Live, and no treasury on testnet has turned it on yet. It is proven by the guard's tests against the real Sputnik DAO binary and by the watcher's tests, not by a veto on testnet |
+| Earlier deployments | The guards of 29 Oct and 11 Nov 2026 | Still on chain with their own registries and treasuries. `kaap verify` and `kaap check` read their requests against their own records in `deployments/` |
 | Mainnet | | Not deployed. Kaap reads mainnet treasuries and does nothing else there |
 
 ## Try it in two minutes
@@ -91,18 +92,18 @@ git clone https://github.com/ramakrishnanhulk20/kaap.git
 cd kaap
 npm ci -w packages/cli
 npm run build:ts -w packages/cli
-node packages/cli/dist/src/bin.js check kaap-dao-1111072928.testnet 1
+node packages/cli/dist/src/bin.js check kaap-dao-1113045321.testnet 1
 ```
 
 You see what the rejected request really does, read live from testnet. The lines about how it was read are left out here:
 
 ```
-kaap check kaap-dao-1111072928.testnet #1 on testnet
+kaap check kaap-dao-1113045321.testnet #1 on testnet
 status: Rejected, proposer kaap-member-1029064001.testnet
-description: Monthly salary payment to alice.m1-1111073049.kaap-member-1029064001.testnet.
+description: Monthly salary payment to alice.pay-1113045402.kaap-member-1029064001.testnet.
 
 effects
-  transfer: amount 500000000000000000000000000 (500 NEAR), to a1ice.m1-1111073049.kaap-member-1029064001.testnet, token near
+  transfer: amount 500000000000000000000000000 (500 NEAR), to a1ice.pay-1113045402.kaap-member-1029064001.testnet, token near
 findings
   DESC_CONTRADICTS           critical
   UNKNOWN_VALUE              high
@@ -117,13 +118,13 @@ veto_allowed: true
 Then check the verdict the guard acted on, down to the sealed run that signed it:
 
 ```bash
-node packages/cli/dist/src/bin.js verify kaap-dao-1111072928.testnet 1
+node packages/cli/dist/src/bin.js verify kaap-dao-1113045321.testnet 1
 ```
 
 It prints 24 checks and ends with these lines, with a newer block number:
 
 ```
-proposal 1 is Rejected at block 277347795
+proposal 1 is Rejected at block 277465800
 AI evidence: none. This verdict carries no AI answer (AI unavailable), so there is nothing for https://cloud.near.ai/verify to check
 the guard voted to reject with this verdict, and the DAO took the vote
 
@@ -233,7 +234,7 @@ sequenceDiagram
   Note over W: key equals the guard's accepted_key, signature, names, expiry (standard 3)
   W->>M: Telegram, CRITICAL risk on proposal N, queued beside the veto and sent at once (C24, C27)
   Note over W: live state on both providers still matches the verdict's hashes (C4, C22)
-  W->>G: veto(verdict, signature, kind_json), 300 Tgas
+  W->>G: veto(verdict, signature, kind_json), 1,000 Tgas
   Note over G: version, signature, guard and network, enrolled DAO, veto rule, expiry, kind hash, not used before (C9, C19)
   G->>D: act_proposal({id, action: VoteReject, proposal: kind_json}) (C5, C15)
   D-->>G: vote counted, proposal Rejected
@@ -314,11 +315,11 @@ Deployed 11 Nov 2026 from commit `413a74a`. Every id is also in [deployments/tes
 
 | | Account or id | Proof |
 |---|---|---|
-| Guard | `kaap-guard-1111072803.testnet` | [deployed](https://testnet.nearblocks.io/txns/DEta1bNNm4gRYLqhZJ2HfwDnVtz294dgyEyLfiQVzsK1), [key deleted](https://testnet.nearblocks.io/txns/6qEFvNiz5Guw1w2XaA6cS36kkRVhAJbPTtijgPEcTssM), code sha256 `bf09d7bb...663767` |
-| Registry | `kaap-registry-1111072803.testnet` | [deployed](https://testnet.nearblocks.io/txns/53xJksmZUhokY6rVNzXNcnadxAUEaN1RWPkdhJwMwiT7), [key deleted](https://testnet.nearblocks.io/txns/GxMNoCaecyMRfF5k1dqtsxB4uCydKz8fUpzBkMm9gUF1), code sha256 `228c2136...7fb2c9` |
-| Demo treasury | `kaap-dao-1111072928.testnet` | [deployed](https://testnet.nearblocks.io/txns/GJDgwXkEEFqrRR4p24ruZrjdvtcM3Hrp9r1RboWx3ePz), [key deleted](https://testnet.nearblocks.io/txns/GWAwWeDcpid7d2snZx2xY1t1qXvrFerztKgaZ7gJY2hZ), enrolled by its own request #0 |
-| Sealed reader | `kaap-worker-1029053612.testnet/kaap-sealed` on `outlayer.testnet` | [the attested run that printed its key](https://testnet.nearblocks.io/txns/7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC) |
-| Verdict key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN` | the one key the guard and the registry accept |
+| Guard | `kaap-guard-1113045147.testnet` | [deployed](https://testnet.nearblocks.io/txns/6zSjJ4FnExBBWx9eR1hcfErbRM83e1x1ob9QwzApTHvT), [key deleted](https://testnet.nearblocks.io/txns/DeCTsm76k8RH6HES5uqh4p4SrzZksKF7uQNL7gYPLxtV), code sha256 `9e74bbba...1c5d23` |
+| Registry | `kaap-registry-1113045147.testnet` | [deployed](https://testnet.nearblocks.io/txns/J38sabffhH3HGd9SvFL18rnkMjZeHh2UrMjAFe1oxMyJ), [key deleted](https://testnet.nearblocks.io/txns/6T53QkSLhsN1HnbZgPGdHEzpgwCKg1vB3bFBJNcgLaxv), code sha256 `228c2136...7fb2c9` |
+| Demo treasury | `kaap-dao-1113045321.testnet` | [deployed](https://testnet.nearblocks.io/txns/CiRhao89G9q6Lc7fTBc1Ds7jErck6c7hFVmskAJAJ1v7), [key deleted](https://testnet.nearblocks.io/txns/94xyNPcEhRvuNdAcMfrA9g66yDt1TCTZwVhtZpXQg8FK), enrolled by its own request #0 |
+| Sealed reader | `kaap-sealed-owner-1113041743.testnet/kaap-sealed` on `outlayer.testnet`, owned by `kaap-sealed-owner-1113041743.testnet` and called by `kaap-worker-1029053612.testnet` | [published](https://testnet.nearblocks.io/txns/E1Za5hoQtyMqgufqQwgjoWvsNF8B2pijKSB8WYqGUHe3), [an attested run that printed its key](https://testnet.nearblocks.io/txns/6Lm1adNQeQrm75QBoWcEmAaG1dskrajEUCQCisatU12L) |
+| Verdict key | `ed25519:8eiUXYidw2x7WWfVVmYkDcewi3aBzxKomMefsPPhaecF` | the one key the guard and the registry accept: the watcher's key on that project, which OutLayer gives no other caller |
 
 NEAR has no contract verification service like Etherscan's, so `kaap verify` does the equivalent: it reads each contract's code hash from two providers and compares it with the build recorded in this repo, and confirms the account has no access key.
 
@@ -366,7 +367,7 @@ Run on 12 Nov 2026 on Ubuntu under WSL, with Rust 1.93.0 and Node 24.22.2.
 | kaap-core | 245 | The decoder, the Sputnik rule port, the hash checker and the description check: unit, property and golden tests, plus five suites that score the engine against the labelled set |
 | kaap-core-diff | 2 | The rule port and the real Sputnik DAO 3.2 binary, run on the same inputs in a sandbox. About 16 minutes |
 | kaap-core-wasm | 14 | The WebAssembly interface the command line and the site call |
-| kaap-guard | 98 | 66 unit tests, and 32 in a sandbox against the real Sputnik DAO 3.2 binary. These test the guard in this repo, the version not deployed yet |
+| kaap-guard | 98 | 66 unit tests, and 32 in a sandbox against the real Sputnik DAO 3.2 binary. These test the guard as deployed on 13 Nov 2026 |
 | kaap-registry | 24 | 17 unit tests and 7 in the sandbox |
 | kaap-sealed | 222 | The reader: two-provider reads, the AI answer, each attestation check, payment, sealed texts, signing |
 | kaap-verdict | 3 | The verdict's bytes and hash, pinned |
@@ -407,7 +408,7 @@ Not covered: the site has four tests, of the try-it button's limits (`npm test` 
 The site's check is one route. It reads the chain and sends nothing.
 
 ```bash
-curl "http://localhost:3000/api/check?dao=kaap-dao-1111072928.testnet&network=testnet&id=7"
+curl "http://localhost:3000/api/check?dao=kaap-dao-1113045321.testnet&network=testnet&id=8"
 ```
 
 ```json
@@ -415,13 +416,13 @@ curl "http://localhost:3000/api/check?dao=kaap-dao-1111072928.testnet&network=te
   "ok": true,
   "report": {
     "network": "testnet",
-    "dao": "kaap-dao-1111072928.testnet",
-    "proposal_id": 7,
+    "dao": "kaap-dao-1113045321.testnet",
+    "proposal_id": 8,
     "providers": ["near-testnet.drpc.org", "rpc.testnet.fastnear.com"],
     "status": "InProgress",
     "description": "Authenticate DAO for confidential intents",
     "analysis": {
-      "effects": [{ "type": "sign_request", "mpc": "v1.signer-prod.testnet", "payload_hash": "fcccd15e...d10c7f", "text_supplied": false }],
+      "effects": [{ "type": "sign_request", "mpc": "v1.signer-prod.testnet", "payload_hash": "a9f14510...bbd50f", "text_supplied": false }],
       "findings": [{ "code": "HASH_UNVERIFIED", "severity": "unknown" }],
       "risk_floor": "high",
       "description_check": "vague",
@@ -442,16 +443,19 @@ The command line gives the same report with `kaap check <dao> [id] --json`.
 
 | Method | Who can call | What it does |
 |---|---|---|
-| `enroll()` | A treasury, through its own approved request | Puts the caller under the guard. Takes 0.01 NEAR and sends back what storage did not need |
+| `enroll(veto_unreadable?)` | A treasury, through its own approved request | Puts the caller under the guard, in the default mode unless it asks for strict mode. Takes 0.01 NEAR and sends back what storage did not need |
+| `set_veto_unreadable(on)` | An enrolled treasury, for itself | Turns strict mode on or off: whether a request Kaap cannot read is rejected too |
 | `unenroll()` | An enrolled treasury | Removes it and refunds the storage |
-| `veto(verdict, signature, kind_json)` | Anyone | Runs eight checks, then calls the treasury's `act_proposal` with `VoteReject`. The only call the guard ever makes to another contract |
-| `set_accepted_key(key)` | The owner | Replaces the key the guard obeys, for a new build of the sealed reader |
+| `veto(verdict, signature, kind_json)` | Anyone | Runs ten checks, then calls the treasury's `act_proposal` with `VoteReject`. The only call the guard ever makes to another contract |
+| `set_accepted_key(key)` | The owner | Announces a new key for the guard to obey. It takes effect 24 hours later at the earliest |
+| `cancel_key_change()` | The owner | Withdraws an announced key |
+| `apply_key_change()` | Anyone, once the 24 hours have passed | Makes the announced key the accepted one |
 | `propose_owner`, `accept_owner` | The owner, then the new owner | Hands over ownership in two steps |
-| `accepted_key`, `network`, `owner`, `is_enrolled`, `enrolled_daos`, `was_used`, `veto_result` | Anyone | Views |
+| `accepted_key`, `pending_key`, `network`, `owner`, `is_enrolled`, `enrolled_daos`, `veto_unreadable`, `was_used`, `veto_result` | Anyone | Views |
 
-A `veto` is refused, with a named error, when the verdict is malformed, the signature is not the accepted key's, the verdict names another guard or network, the treasury is not enrolled, the veto rule does not hold, the verdict has expired, the request handed in is not the one judged, or the verdict was used before.
+A `veto` is refused, with a named error, when the verdict is malformed, the signature is not the accepted key's, the verdict names another guard or network, the treasury is not enrolled, the veto rule does not hold, the verdict has expired, the request handed in is not the one judged, the verdict was used before, the call attaches under 900 Tgas, or the request is larger than one transaction can carry (217 KiB).
 
-The version in this repo, not deployed yet, adds `cancel_key_change` and `apply_key_change` (a key change takes effect 24 hours after it is announced), `set_veto_unreadable` (strict mode, where a treasury chooses to have unreadable hash requests rejected too), a 900 Tgas minimum and a size limit on `veto`. [packages/contracts/guard/README.md](packages/contracts/guard/README.md) describes it.
+The two guards deployed before 13 Nov 2026 have no strict mode and no wait on a key change. [packages/contracts/guard/README.md](packages/contracts/guard/README.md) has every method, event and error.
 
 ### kaap-registry
 
@@ -509,7 +513,7 @@ The [threat model](docs/security/threat-model.md) was written before the code. I
 
 What you still have to trust, and what Kaap does not do:
 
-- **The owner's key.** The guard's code is locked, but its owner, Kaap's founder, can replace the key it obeys, and on the guard deployed today that takes effect at once. A dishonest owner could make the guard reject requests. They still could not approve or move anything. The next guard version adds a 24-hour wait.
+- **The owner's key.** The guard's code is locked, but its owner, Kaap's founder, can replace the key it obeys. A change is announced on chain and takes effect 24 hours later at the earliest; the watcher tells members at once, and `kaap arming` and `kaap verify` warn while one is pending. After that day a dishonest owner could make the guard reject requests. They still could not approve or move anything. The owner key is one key with no second signer.
 - **OutLayer and Intel's sealed hardware.** A verdict is only as good as the promise that the reader ran unmodified. That promise says which program ran. It does not say the program is free of bugs.
 - **OutLayer's availability.** A verdict needs a sealed run, and a run needs OutLayer to answer. When its testnet is busy a run can go unanswered; the watcher asks again for as long as the request is open, and says so on its status page. On 13 Nov 2026 one request waited about nine minutes for its first verdict.
 - **NEAR AI's availability.** The AI's opinion is only there when NEAR AI's chat service answers. When it does not, the verdict is signed on the plain-code rules alone and says so.
@@ -519,7 +523,7 @@ What you still have to trust, and what Kaap does not do:
 - **Unreadable requests.** A hash nobody explains is flagged, not vetoed.
 - **Changes that need no request.** Kaap guards requests. A change to a treasury's own code that does not go through a request is outside what any veto can stop. Kaap notices it while a request is open: it judges the open requests again, and stops watching a treasury whose code is no longer a Sputnik DAO release, which shows on the watcher's status page. `kaap verify` shows a code change since a verdict. Members get no alert for the code change itself.
 - **No independent audit** has been done.
-- **The watcher's key.** The account that runs the watcher also owns the sealed reader on OutLayer, and its key is on the watcher's host. Someone who stole that key could publish a different reader that signs with the same key, and make the guard reject honest requests. They still could not approve or pay, and `kaap verify` would show the verdict came from a build that is not in this repository. The two are not split yet.
+- **The watcher's key.** The key on the watcher's host can run the sealed reader and pay for it, and nothing else. The reader is published under a separate owner account whose key is offline, and OutLayer refused all five of the watcher's attempts to publish a build, choose the active one, remove one, take the project or delete it (`node scripts/attack-sealed-owner.mjs`, output in PROOF.md). Someone who stole the watcher's key could still spend its balance on real verdicts and on the vetoes the rules allow. The two deployments before 13 Nov 2026 obey a project the watcher's account still owns.
 - **One small host.** The watcher is one container on Railway, watching one treasury, the demo one. It has run there since 12 Nov 2026 only, nobody is on call for it, and no real treasury is enrolled.
 
 The limits page in the docs, [packages/web/content/docs/trust/limits.mdx](packages/web/content/docs/trust/limits.mdx), goes through each of these.

@@ -31,7 +31,7 @@ The engine in `wasm/` is committed, so this needs no Rust. `npm run build -w pac
 
 An account ending in `.testnet` is read on testnet and any other on mainnet, unless `--network` says otherwise.
 
-Strict mode and the announced key change belong to the next version of the guard, which is written and tested but not deployed. The guard on testnet today has neither, and the commands say so: `arming` prints "this guard has no strict mode", and `enroll --strict` stops.
+Strict mode and the announced key change are in the guard deployed on testnet since 13 Nov 2026. The two guards before it have neither, and the commands say so for a treasury enrolled with one of them: `arming` prints "this guard has no strict mode", and `enroll --strict` stops.
 
 ## Tests
 

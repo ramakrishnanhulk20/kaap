@@ -4,8 +4,8 @@ One page for a judge, human or machine. Each row names what to look at: a file, 
 
 Short names used below:
 
-- `check` is `node packages/cli/dist/src/bin.js check kaap-dao-1111072928.testnet 1`
-- `verify` is `node packages/cli/dist/src/bin.js verify kaap-dao-1111072928.testnet 1`
+- `check` is `node packages/cli/dist/src/bin.js check kaap-dao-1113045321.testnet 1`
+- `verify` is `node packages/cli/dist/src/bin.js verify kaap-dao-1113045321.testnet 1`
 - `eval` is `node packages/cli/dist/src/bin.js eval`
 
 ## Track fit and NEAR tools
@@ -15,7 +15,7 @@ Short names used below:
 | `social`, Social Money | Kaap is something a treasury does with Sputnik DAO, not a new multisig: a member of a reject-only role, added by the treasury's own vote | `packages/contracts/guard/src/lib.rs`, `packages/core/src/policy/sputnik.rs` | `cargo test -p kaap-guard --test guard_sandbox`, against the real Sputnik DAO 3.2 binary | [the guard's reject vote](https://testnet.nearblocks.io/txns/AWWzynnmDdCYaKeSJA66Kr3h7DxW6ni9Sh6uHtH6v4M9) |
 | `security`, AI Security and Defense | A policy engine that reads what a request does, and an AI that is given no key: it can raise a risk, and only plain code can justify a veto | `packages/core/src/floor.rs`, `packages/verdict/src/severity.rs`, `packages/sealed/src/verdict.rs` | `check`, and `cargo test -p kaap-core` | [the sealed run that judged request #1](https://testnet.nearblocks.io/txns/az5yNU7xixz2Qwrt8g4pNhygJTpceRqHJTK2zv7NF3J) |
 | `privacy`, Privacy and Private AI | The reader runs in Intel TDX on OutLayer, asks a model on NEAR AI Cloud and checks its attestation, and opens a member's sealed text that nobody else can read | `packages/sealed/src/attest/`, `packages/sealed/src/texts.rs` | `verify`, and `cargo test -p kaap-sealed` | [the attested run that printed the text key](https://testnet.nearblocks.io/txns/DWRwVAcwpoVo5yfMHVVmWRw4S9QGNNj9XVioMDjobXBW) |
-| `security`, again | The site's one write, the "try it yourself" button, uses a function-call access key that can file a request on the demo treasury and do nothing else | `scripts/setup-demo-filer.mjs`, `packages/web/lib/demo.ts` | `PROOF.md`, "The try-it key, attacked": five other uses, each refused by the network | [the key being added](https://testnet.nearblocks.io/txns/24uPirozvafA72gHjXtmzp6PrgwaAKmVhEYywjgbrm9H) |
+| `security`, again | The site's one write, the "try it yourself" button, uses a function-call access key that can file a request on the demo treasury and do nothing else | `scripts/setup-demo-filer.mjs`, `packages/web/lib/demo.ts` | `PROOF.md`, "The hosted watcher on this deployment": five other uses, each refused by the network | [the key being added](https://testnet.nearblocks.io/txns/5jkfNA1EW8SD1JzMozHWYqTXMmwt86qGvNym9aby4Q3u) |
 | `open`, Open Innovation | A guard that can stop a theft and cannot make one is a new shape for an AI with authority over money | `README.md`, "What Kaap does" | `verify` | the four transactions under "A theft stopped" in the README |
 
 The README's "NEAR tools used" table lists each NEAR tool with the files that use it.
@@ -29,10 +29,10 @@ The README's "NEAR tools used" table lists each NEAR tool with the files that us
 | The contracts are locked | `scripts/deploy-contracts-testnet.sh` | `verify`, lines "guard keys" and "registry keys" | [guard key deleted](https://testnet.nearblocks.io/txns/6qEFvNiz5Guw1w2XaA6cS36kkRVhAJbPTtijgPEcTssM), [registry key deleted](https://testnet.nearblocks.io/txns/GxMNoCaecyMRfF5k1dqtsxB4uCydKz8fUpzBkMm9gUF1) |
 | The rule port matches Sputnik's own code | `packages/core/src/policy/sputnik.rs` | `cargo test -p kaap-core-diff`, which runs both against the same inputs in a sandbox | |
 | The verdict's bytes cannot drift | `packages/verdict/src/verdict.rs` | `cargo test -p kaap-verdict --test pinned` | |
-| The watcher does it with no script's help | `packages/worker/src/worker.ts` | `PROOF.md`, "12 Nov 2026: the watcher by itself" and "the watcher on its host": five requests, one of them held and why | [a reject the hosted watcher sent](https://testnet.nearblocks.io/txns/35eKdZrh5ps18kGCHo5Fa9LZLaceYjZ8LpTFPFgjgAJY) |
-| An account that is no treasury cannot make the watcher work or pay | `refreshEnrolled` in `packages/worker/src/worker.ts`, `scripts/attack-fake-enrolment.sh` | `PROOF.md`, "an account that is no treasury, enrolled and turned away": the live output | [the fake enrolment](https://testnet.nearblocks.io/txns/A2wwnfuMc51ZFS6jTJ3iUvNbsKgPfaxibLSaNvoy18Za) |
-| An attack on our own live host found a hole, and shows it closed | `scripts/attack-caller-limit.mjs`, `clientAddress` in `packages/worker/src/status.ts` | `PROOF.md`, "The caller limit, attacked on the live host": the output before the fix and after | |
-| The whole path works on a live network | `scripts/prove.mjs` | `PROOF.md`, the record of two runs | [filed](https://testnet.nearblocks.io/txns/GaQuPteeaiPAqjow7ezLC7f2HqxbBHv53erE1N4C7g9A), [judged](https://testnet.nearblocks.io/txns/az5yNU7xixz2Qwrt8g4pNhygJTpceRqHJTK2zv7NF3J), [recorded](https://testnet.nearblocks.io/txns/2T8fbLoy9gkFkbLThTMPsbRCf4RckfZVMVBvwvfqePmy), [rejected](https://testnet.nearblocks.io/txns/AWWzynnmDdCYaKeSJA66Kr3h7DxW6ni9Sh6uHtH6v4M9) |
+| The watcher does it with no script's help | `packages/worker/src/worker.ts` | `PROOF.md`, "The hosted watcher on this deployment": request #5, filed with the try-it key and rejected with nobody running anything; the first five such requests, one of them held and why, are in `PROOF-2026-11-11.md` | [a reject the hosted watcher sent](https://testnet.nearblocks.io/txns/9wHZmJWuRhaD8mdLURqJeSABnsro4KXDDQRu1ySCJno7) |
+| An account that is no treasury cannot make the watcher work or pay | `refreshEnrolled` in `packages/worker/src/worker.ts`, `scripts/attack-fake-enrolment.sh` | `PROOF.md`, "The hosted watcher on this deployment": the live output | [the fake enrolment](https://testnet.nearblocks.io/txns/DwgeCJc1GoVxQXDR8oCwrW7F83CXbohwxSRssZo2rTo6) |
+| An attack on our own live host found a hole, and shows it closed | `scripts/attack-caller-limit.mjs`, `clientAddress` in `packages/worker/src/status.ts` | `PROOF-2026-11-11.md`, "The caller limit, attacked on the live host": the output before the fix and after; `PROOF.md` has the same attack passing on the redeployed watcher | |
+| The whole path works on a live network | `scripts/prove.mjs` | `PROOF.md`, the record of two runs | [filed](https://testnet.nearblocks.io/txns/583jbKshP4USdjmBRnX9wrRjFYg9NvTURdBuWqAo1q5a), [judged](https://testnet.nearblocks.io/txns/6Lm1adNQeQrm75QBoWcEmAaG1dskrajEUCQCisatU12L), [recorded](https://testnet.nearblocks.io/txns/CNqvoFb8Ly3txbrYMuXyRWwPM6Enp1PYr6oGUcVjcS83), [rejected](https://testnet.nearblocks.io/txns/66WDukXKMVFbeyZ6aAbsTMgZDwCAwXFNSSagM9MkQagz) |
 | Test counts | | README, "Test results" | |
 
 ## Design and user experience
@@ -58,10 +58,10 @@ The README's "NEAR tools used" table lists each NEAR tool with the files that us
 
 | What is new | File | Test or command |
 |---|---|---|
-| A member that can only reject, built from Sputnik's own permissions with no new treasury contract | `packages/contracts/guard/src/lib.rs`, `packages/core/src/policy/arming.rs` | `node packages/cli/dist/src/bin.js arming kaap-dao-1111072928.testnet` |
+| A member that can only reject, built from Sputnik's own permissions with no new treasury contract | `packages/contracts/guard/src/lib.rs`, `packages/core/src/policy/arming.rs` | `node packages/cli/dist/src/bin.js arming kaap-dao-1113045321.testnet` |
 | The description is checked against the effect | `packages/core/src/describe/` | `check`: "contradicts: the named recipient is not paid" |
 | A hash-only request is read once its words are supplied, with proof they match the hash | `packages/core/src/hash/` | the site's `/check` on request #7; `cargo test -p kaap-core --test hash_vectors` |
-| The words can be handed over sealed, and the guard then acts | `packages/cli/src/sealtext.ts`, `packages/worker/src/worker.ts` (`judgeText`), `scripts/sealed-text-live.mjs` | `PROOF.md`, "the words behind a hash, handed over sealed": left alone without the words, rejected 63 seconds after them |
+| The words can be handed over sealed, and the guard then acts | `packages/cli/src/sealtext.ts`, `packages/worker/src/worker.ts` (`judgeText`), `scripts/sealed-text-live.mjs` | `PROOF.md`, "The words behind a hash, handed over sealed": left alone without the words, rejected by the guard once they were handed over |
 | Verdicts are signed inside sealed hardware, and anyone can check the run | `packages/sealed/src/job.rs`, `packages/cli/src/verify.ts` | `verify` |
 
 ## Sustainability

@@ -1,11 +1,11 @@
 # Kaap architecture
 
-As built on 11 Nov 2026, with the status lines, the web app and the notes on the next guard version brought up to date on 12 Nov 2026. Every statement here was checked against the code in `packages/` or read from NEAR testnet. Security rules cited as C1 to C35 are in `docs/security/threat-model.md`, section C.
+As built on 13 Nov 2026, when the guard with strict mode and the key delay was deployed and the sealed program moved under its own owner account. Every statement here was checked against the code in `packages/` or read from NEAR testnet. Security rules cited as C1 to C37 are in `docs/security/threat-model.md`, section C.
 
-- Contracts: live on NEAR testnet. `kaap-guard-1111072803.testnet` and `kaap-registry-1111072803.testnet`, deployed 11 Nov 2026 from commit `413a74a`, with no access keys. Section 5 describes these two as they run on chain.
-- Next guard version: written and tested, not deployed. The code in `packages/contracts/guard` is one version ahead of the guard on chain. It adds a 24-hour wait on a change of the accepted key, a strict mode each DAO can choose, a 900 Tgas minimum and a size limit on `veto`. `packages/contracts/guard/README.md` and `packages/contracts/GAS.md` describe that version.
-- Sealed program: live on NEAR testnet, as OutLayer project `kaap-worker-1029053612.testnet/kaap-sealed`, active build `d8453d6e...9083` of 11 Nov 2026. The code in `packages/sealed` and `packages/core` has changed since that build, and a new build is not published yet.
-- Demo treasury: live on NEAR testnet. `kaap-dao-1111072928.testnet`, Sputnik DAO 3.2, enrolled in the guard, with no access keys.
+- Contracts: live on NEAR testnet. `kaap-guard-1113045147.testnet` and `kaap-registry-1113045147.testnet`, deployed 13 Nov 2026 from commit `5f1cf75`, with no access keys. Section 5 describes these two as they run on chain. The guards of 29 Oct and 11 Nov 2026 are still on chain with their own registries; their records are `deployments/testnet-2026-10-29.json` and `deployments/testnet-2026-11-11.json`.
+- Strict mode and the key delay: in the deployed guard. No treasury on testnet has turned strict mode on, so it is proven by the guard's sandbox tests against the real Sputnik DAO binary and by the watcher's tests. `packages/contracts/guard/README.md` and `packages/contracts/GAS.md` have every method and its measured gas.
+- Sealed program: live on NEAR testnet, as OutLayer project `kaap-sealed-owner-1113041743.testnet/kaap-sealed`, active build `d14e2927...31cf` of 13 Nov 2026, the build of the code in `packages/sealed` and `packages/core` today. The project is owned by `kaap-sealed-owner-1113041743.testnet`, whose key is offline, and called by the watcher's account, which cannot publish a build of it (C37). The first project, `kaap-worker-1029053612.testnet/kaap-sealed`, serves the two earlier deployments.
+- Demo treasury: live on NEAR testnet. `kaap-dao-1113045321.testnet`, Sputnik DAO 3.2, enrolled in the guard in the default mode, with no access keys.
 - Worker: live since 12 Nov 2026, as one container on Railway, watching the demo treasury. Its public address is `https://watcher-production-2350aa2a.up.railway.app` (`/status`). It reads the chain through two free RPC providers, so a vote can be held when one of them does not answer.
 - Web app: built, not hosted yet. `packages/web` holds the landing page, the check screen at `/check`, the docs at `/docs` and the route `/api/check`. It runs with `npm run dev` in that folder.
 
@@ -98,7 +98,7 @@ sequenceDiagram
   Note over W: key equals the guard's accepted_key, signature, names, expiry (standard 3)
   W->>M: Telegram, CRITICAL risk on proposal N, queued beside the veto and sent at once (C24, C27)
   Note over W: live state on both providers still matches the verdict's hashes (C4, C22)
-  W->>G: veto(verdict, signature, kind_json), 300 Tgas
+  W->>G: veto(verdict, signature, kind_json), 1,000 Tgas
   Note over G: version, signature, guard and network, enrolled DAO, veto rule, expiry, kind hash, not used before (C9, C19)
   G->>D: act_proposal({id, action: VoteReject, proposal: kind_json}) (C5, C15)
   D-->>G: vote counted, proposal Rejected
@@ -160,13 +160,13 @@ Both are Rust on near-sdk 5.29.1 and compile in `packages/verdict` and nothing e
 
 | | kaap-guard | kaap-registry |
 |---|---|---|
-| Testnet account | `kaap-guard-1111072803.testnet` | `kaap-registry-1111072803.testnet` |
+| Testnet account | `kaap-guard-1113045147.testnet` | `kaap-registry-1113045147.testnet` |
 | Code sha256 | `bf09d7bbb48f312eb4043bd7b585f3b02bbe9d8b7d5bc0bf31fec9319c663767` | `228c21366ffdaf58f31a6e3550fd9898bc9ae65d1182f7a9e84d2df3c07fb2c9` |
 | Code hash on chain (the same sha256 in base58) | `DrjaN1zVz4cxvvxbxhM6rVZsqy8SrBunmMbyeqbsr4R4` | `3Kro1EgWDYAawFx8RHUwVGTKmJvp9bAUeRL65cwGAoZz` |
 | Access keys, read with `view_access_key_list` on 11 Nov 2026 | 0 | 0 |
-| Accepted key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN`, the sealed program's key; the owner can replace it | the same key, fixed at `new` for good |
+| Accepted key | `ed25519:8eiUXYidw2x7WWfVVmYkDcewi3aBzxKomMefsPPhaecF`, the sealed program's key; the owner can replace it | the same key, fixed at `new` for good |
 | Owner | `kaap-owner-1029061211.testnet`, held by Kaap's founder | none |
-| Explorer | https://testnet.nearblocks.io/address/kaap-guard-1111072803.testnet | https://testnet.nearblocks.io/address/kaap-registry-1111072803.testnet |
+| Explorer | https://testnet.nearblocks.io/address/kaap-guard-1113045147.testnet | https://testnet.nearblocks.io/address/kaap-registry-1113045147.testnet |
 
 Gas below is from the live testnet proof of 11 Nov 2026 (`PROOF.md`) where it states one, otherwise from the sandbox measurements of 29 Oct 2026, made on that day's build, against the real Sputnik 3.2 binary (`packages/contracts/GAS.md`). 1 Tgas costs 0.0001 NEAR at the minimum gas price. The caller always pays the gas.
 
@@ -182,17 +182,21 @@ Events are NEP-297 logs, `EVENT_JSON:{"standard":"kaap-guard","version":"1.0.0",
   2. the signature is 64 bytes and `env::ed25519_verify` passes for the accepted key (`ERR_BAD_SIGNATURE`);
   3. `guard` is this contract and `network` is this guard's network (`ERR_WRONG_GUARD`);
   4. `dao` parses as an account id and is enrolled (`ERR_NOT_ENROLLED`);
-  5. the veto rule, `is_vetoable` (C9, `ERR_NOT_VETOABLE`): `risk` is critical; `floor` is high or critical; at least one finding other than `HASH_UNVERIFIED` is high or critical at its fixed lowest severity; and either `floor` is critical or `ai_status` is `verified`;
+  5. the veto rule, `is_vetoable` (C8, C9, `ERR_NOT_VETOABLE`): for a DAO in strict mode, the findings include `HASH_UNVERIFIED`; otherwise `risk` is critical; `floor` is high or critical; at least one finding other than `HASH_UNVERIFIED` is high or critical at its fixed lowest severity; and either `floor` is critical or `ai_status` is `verified`;
   6. the block time is before `expires_at_ms` (`ERR_EXPIRED`);
   7. the canonical hash of `kind_json` equals `kind_hash` (`ERR_WRONG_KIND_HASH`; `ERR_BAD_KIND` if it cannot be canonicalised), and `kind_json` parses as JSON (`ERR_BAD_KIND`);
   8. the verdict's hash was never used (`ERR_REPLAY`).
 
   Then it marks the hash used, emits `veto_sent {dao, proposal_id, verdict_hash}`, and calls `act_proposal` on `dao` with `{"id":<proposal_id>,"action":"VoteReject","proposal":<kind_json>}`, no deposit and at least 100 Tgas plus all unused gas, then its own `on_veto_result` with 10 Tgas (C5, C15, C19). The guard does not read the proposal's status: Sputnik refuses a vote on a proposal that is not InProgress (`ERR_PROPOSAL_NOT_READY_FOR_VOTE`) or whose kind differs (`ERR_WRONG_KIND`), and the callback records that refusal. Gas, live: 8.85 to 8.89 Tgas for a vote cast on a 145-byte Transfer, 2.32 Tgas for a replay refused, 2.17 Tgas for a verdict refused as not vetoable. Attach 300 Tgas; what is not burnt comes back. A kind over 256 KiB, or a policy kind over about 200 KB, cannot be vetoed (limits in `packages/contracts/guard/README.md`).
 - `on_veto_result(verdict_hash: String)`. Private: only the guard itself, as the callback `veto` attaches. Checks: the hash is 64 hex characters (`ERR_BAD_HASH`); exactly one promise result (`ERR_NOT_CALLBACK`). Records `Cast` or `Refused("Failed")` and emits `veto_cast {verdict_hash, result: "Ok"}` or `veto_refused {verdict_hash, result: "Failed"}`. A callback never sees the DAO's panic text, so the reason is only in the DAO's receipt. Gas: 1.61 to 1.62 Tgas (sandbox).
-- `set_accepted_key(key: String)`, payable. Checks: the caller is the owner (`ERR_NOT_OWNER`); exactly 1 yoctoNEAR is attached, which only a full-access key can do (`ERR_NEED_ONE_YOCTO`); the key spelling (`ERR_BAD_KEY`). Replaces the key at once and emits `key_changed {old_key, new_key}` (C18).
+- `set_accepted_key(key: String)`, payable. Checks: the caller is the owner (`ERR_NOT_OWNER`); exactly 1 yoctoNEAR is attached, which only a full-access key can do (`ERR_NEED_ONE_YOCTO`); the key spelling (`ERR_BAD_KEY`). It does not change the accepted key: it stores the key as pending with a time 24 hours ahead, replacing any earlier pending one, and emits `key_change_announced {old_key, new_key, effective_at_ms}` (C19).
+- `cancel_key_change()`, payable, owner only, 1 yoctoNEAR; `ERR_NO_PENDING_KEY` when there is none. Clears the pending key and emits `key_change_cancelled {key}`.
+- `apply_key_change()`. Anyone. `ERR_NO_PENDING_KEY` when there is none, `ERR_TOO_EARLY` before the pending time. Makes the pending key the accepted one and emits `key_changed {old_key, new_key}`. `veto` checks signatures against the accepted key only, never the pending one.
+- `set_veto_unreadable(on: bool)`. An enrolled DAO, for itself (`ERR_NOT_ENROLLED` otherwise). Turns strict mode on or off and emits `mode_changed {dao, veto_unreadable}`. `enroll` takes the same setting as an optional argument, `veto_unreadable`, false when absent.
+- Before its eight numbered checks, `veto` makes two on the call itself: at least 900 Tgas is attached (`ERR_NOT_ENOUGH_GAS`), and `kind_json` is at most 217 KiB (`ERR_KIND_TOO_LARGE`), the most one transaction can carry on to the DAO.
 - `propose_owner(new_owner: AccountId)`, payable. Checks: owner (`ERR_NOT_OWNER`), 1 yoctoNEAR (`ERR_NEED_ONE_YOCTO`). Sets the pending owner and emits `owner_proposed {owner, proposed_owner}`.
 - `accept_owner()`, payable. Checks: 1 yoctoNEAR (`ERR_NEED_ONE_YOCTO`), then the caller is the pending owner (`ERR_NOT_PENDING_OWNER`). Makes the caller the owner and emits `owner_accepted {old_owner, new_owner}`.
-- Views: `accepted_key()`, `network()`, `owner()`, `is_enrolled(dao)`, `enrolled_daos(from_index, limit)` (at most 100 a page), `was_used(verdict_hash_hex)` and `veto_result(verdict_hash_hex)` (`"Ok"`, `"Failed"` or null; both panic with `ERR_BAD_HASH` on a bad hash). Shapes are in section 6 (a).
+- Views: `accepted_key()`, `pending_key()` (`{key, effective_at_ms}` or null), `veto_unreadable(dao)`, `network()`, `owner()`, `is_enrolled(dao)`, `enrolled_daos(from_index, limit)` (at most 100 a page), `was_used(verdict_hash_hex)` and `veto_result(verdict_hash_hex)` (`"Ok"`, `"Failed"` or null; both panic with `ERR_BAD_HASH` on a bad hash). Shapes are in section 6 (a).
 
 The guard pays for one thing itself: 74 bytes of storage per used verdict, 84 when the DAO refused the vote. Only a verdict the accepted key signed can create one.
 
@@ -245,37 +249,37 @@ Every example below was read from NEAR testnet on 11 Nov 2026 with read-only vie
 
 ### (a) Chain reads
 
-kaap-guard, `kaap-guard-1111072803.testnet`:
+kaap-guard, `kaap-guard-1113045147.testnet`:
 
 | View | Arguments | Returns | Live example |
 |---|---|---|---|
-| `accepted_key` | `{}` | `"ed25519:<base58>"` | `"ed25519:4gaYx4kP...uonuN"` |
+| `accepted_key` | `{}` | `"ed25519:<base58>"` | `"ed25519:8eiUXYid...haecF"` |
 | `network` | `{}` | `"mainnet"`, `"testnet"` or `"sandbox"` | `"testnet"` |
 | `owner` | `{}` | account id | `"kaap-owner-1029061211.testnet"` |
-| `is_enrolled` | `{"dao"}` | bool | `{"dao":"kaap-dao-1111072928.testnet"}` gives `true` |
-| `enrolled_daos` | `{"from_index", "limit"}`, at most 100 a page | account ids in storage order, which changes when a DAO unenrols | `{"from_index":0,"limit":100}` gives `["kaap-dao-1111072928.testnet"]` |
-| `was_used` | `{"verdict_hash_hex"}`, 64 hex | bool; panics with `ERR_BAD_HASH` on anything but 64 hex | the hash of proposal #1's verdict, `59fbf0cf...1ac2b3`, gives `true` |
+| `is_enrolled` | `{"dao"}` | bool | `{"dao":"kaap-dao-1113045321.testnet"}` gives `true` |
+| `enrolled_daos` | `{"from_index", "limit"}`, at most 100 a page | account ids in storage order, which changes when a DAO unenrols | `{"from_index":0,"limit":100}` gives `["kaap-dao-1113045321.testnet"]` |
+| `was_used` | `{"verdict_hash_hex"}`, 64 hex | bool; panics with `ERR_BAD_HASH` on anything but 64 hex | the hash of proposal #1's verdict, `ca26d724...0e22`, gives `true` |
 | `veto_result` | `{"verdict_hash_hex"}` | `"Ok"`, `"Failed"` or `null` (pending, or never used); `ERR_BAD_HASH` as above | the same hash gives `"Ok"` |
 
-kaap-registry, `kaap-registry-1111072803.testnet`:
+kaap-registry, `kaap-registry-1113045147.testnet`:
 
 | View | Arguments | Returns | Live example |
 |---|---|---|---|
-| `latest` | `{"network", "dao", "proposal_id"}` | one record, or `null` | `{"network":"testnet","dao":"kaap-dao-1111072928.testnet","proposal_id":1}` gives `{"index":0,"supersedes":null,"verdict_hash":"59fbf0cf...","verdict":"AR0AAABr...","signature":"...","guard":"kaap-guard-1111072803.testnet","risk":"critical","floor":"critical","findings":["DESC_CONTRADICTS","UNKNOWN_VALUE"],"ai_status":"unavailable","model_id":"","decoder_version":"0.1.0","block_height":277184673,"expires_at_ms":1794382877194,"recorded_by":"kaap-worker-1029053612.testnet","recorded_at_block":277184692,"recorded_at_ms":1794382287753}` |
+| `latest` | `{"network", "dao", "proposal_id"}` | one record, or `null` | `{"network":"testnet","dao":"kaap-dao-1113045321.testnet","proposal_id":1}` gives `{"index":0,"supersedes":null,"verdict_hash":"ca26d724...","verdict":"AR0AAABr...","signature":"...","guard":"kaap-guard-1113045147.testnet","risk":"critical","floor":"critical","findings":["DESC_CONTRADICTS","UNKNOWN_VALUE"],"ai_status":"unavailable","model_id":"","decoder_version":"0.1.0","block_height":277184673,"expires_at_ms":1794382877194,"recorded_by":"kaap-worker-1029053612.testnet","recorded_at_block":277184692,"recorded_at_ms":1794382287753}` |
 | `history` | `{"network", "dao", "proposal_id", "from", "limit"}`, at most 50 a page | records, oldest first | the same, with `"from":0,"limit":50`, gives that one record, index 0 |
-| `accepted_key` | `{}` | `"ed25519:<base58>"` | `"ed25519:4gaYx4kP...uonuN"`, the guard's key |
+| `accepted_key` | `{}` | `"ed25519:<base58>"` | `"ed25519:8eiUXYid...haecF"`, the guard's key |
 | `network` | `{}` | network name | `"testnet"` |
 
 A record is `{index, supersedes, verdict_hash, verdict, signature, guard, risk, floor, findings, ai_status, model_id, decoder_version, block_height, expires_at_ms, recorded_by, recorded_at_block, recorded_at_ms}`. `verdict` is the base64 borsh without the domain prefix and `signature` the base64 signature, so a page can check the signature against `accepted_key()` itself and decode every field with the layout in section 5. `verdict_hash` is the hex id that `was_used`, `veto_result` and the evidence record all use. `supersedes` is null for a record that replaced no earlier latest one.
 
-Sputnik DAO 3.2, the demo treasury `kaap-dao-1111072928.testnet`:
+Sputnik DAO 3.2, the demo treasury `kaap-dao-1113045321.testnet`:
 
 | View | Arguments | Returns | Live example |
 |---|---|---|---|
 | `get_last_proposal_id` | `{}` | the number of proposals filed, which is the next id | `7` |
-| `get_proposal` | `{"id"}` | `{id, proposer, description, kind, status, vote_counts, votes, submission_time, last_actions_log}` | `{"id":1}` gives `{"id":1,"proposer":"kaap-member-1029064001.testnet","description":"Monthly salary payment to alice....","kind":{"Transfer":{"token_id":"","receiver_id":"a1ice.m1-...testnet","amount":"500000000000000000000000000","msg":null}},"status":"Rejected","vote_counts":{"guard":["0","1","0"]},"votes":{"kaap-guard-1111072803.testnet":"Reject"},"submission_time":"1794382269251235278",...}` |
+| `get_proposal` | `{"id"}` | `{id, proposer, description, kind, status, vote_counts, votes, submission_time, last_actions_log}` | `{"id":1}` gives `{"id":1,"proposer":"kaap-member-1029064001.testnet","description":"Monthly salary payment to alice....","kind":{"Transfer":{"token_id":"","receiver_id":"a1ice.pay-...testnet","amount":"500000000000000000000000000","msg":null}},"status":"Rejected","vote_counts":{"guard":["0","1","0"]},"votes":{"kaap-guard-1113045147.testnet":"Reject"},"submission_time":"1794382269251235278",...}` |
 | `get_proposals` | `{"from_index", "limit"}` | a list of the same | `{"from_index":0,"limit":3}` gives #0 `Approved` (the enrolment), #1 `Rejected`, #2 `InProgress` |
-| `get_policy` | `{}` | `{roles, default_vote_policy, proposal_bond, proposal_period, bounty_bond, bounty_forgiveness_period}` | roles `Requestor`, `Admin`, `Approver` and `guard` (`{"Group":["kaap-guard-1111072803.testnet"]}`, 16 permissions), `"proposal_bond":"0"`, `"proposal_period":"604800000000000"` |
+| `get_policy` | `{}` | `{roles, default_vote_policy, proposal_bond, proposal_period, bounty_bond, bounty_forgiveness_period}` | roles `Requestor`, `Admin`, `Approver` and `guard` (`{"Group":["kaap-guard-1113045147.testnet"]}`, 16 permissions), `"proposal_bond":"0"`, `"proposal_period":"604800000000000"` |
 
 Sputnik may list a role's members, its permissions and its vote policies in another order on the next read with no edit in between, so a page compares kinds and policies only through `canonicalKind`, `kindHash`, `canonicalPolicy` and `policyHash` in (d), never as raw text.
 
@@ -305,18 +309,18 @@ The client address is the connecting address, or, for a connection from loopback
 | `POST /api/demo/attack` with the header `x-kaap-demo: 1` | Files the prepared fake theft on the demo treasury with the filing-only key, or names the filing already in flight: `{ok, id, tx, already}` (C32, C33) | 2 presses in 10 minutes and 6 in a day per caller, one filing in flight in each server process, a 25-second deadline on the filing, 40 filings in 24 hours counted from the chain. Callers are told apart only where `KAAP_SITE_PROXY=x-real-ip` is set; without it they share one count |
 | `GET /api/demo/status?id=<n>` | Where one demo filing stands, from the treasury, the registry and the watcher's `GET /proposal`: status, verdict summary, whether the guard rejected it, the run, veto and record transaction ids | 90 asks a minute per caller, each answer kept 1.5 s |
 
-The filing-only key is an access key of the demo member, `ed25519:9q7PNx97fjXi1wBbXtvgNdPwy4WtcixW6rfSAFc96X51`, added in [24uPiroz...](https://testnet.nearblocks.io/txns/24uPirozvafA72gHjXtmzp6PrgwaAKmVhEYywjgbrm9H). NEAR itself limits it to `add_proposal` on `kaap-dao-1111072928.testnet`, with no deposit. `scripts/check-demo-filer.mjs` tries five other uses and each is refused by the network.
+The filing-only key is an access key of the demo member, `ed25519:6bCYiH3unY424THRo1qqruVVqNEuwYWteQv5zS8zE5xz`, added in [5jkfNA1E...](https://testnet.nearblocks.io/txns/5jkfNA1EW8SD1JzMozHWYqTXMmwt86qGvNym9aby4Q3u). NEAR itself limits it to `add_proposal` on `kaap-dao-1113045321.testnet`, with no deposit. `scripts/check-demo-filer.mjs` tries five other uses and each is refused by the network.
 
 ### (c) OutLayer
 
 | | |
 |---|---|
-| Project | `kaap-worker-1029053612.testnet/kaap-sealed` on `outlayer.testnet`, uuid `p00000000000000a9` |
-| Active version | `d8453d6e674d15b1c8acd7796e4219f9388e5704cd8996b7f6642370574e9083`, read with `get_project({"project_id": ...})` on `outlayer.testnet`; `list_versions` lists `da2c2853...` and `d8453d6e...` |
-| Verdict key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN`, bound to the project's uuid and to the caller `kaap-worker-1029053612.testnet`; any other caller gets another key |
-| Text key | X25519 `09bc21bb1621d1d9a2ce1783375341a199038084e5239e120de823809a1b2f6a`, printed by one `{"v":1,"op":"pubkey"}` run the worker signed ([DWRwVAcw...](https://testnet.nearblocks.io/txns/DWRwVAcwpoVo5yfMHVVmWRw4S9QGNNj9XVioMDjobXBW)) and signed by the verdict key over `kaap-text-key-v1\n` followed by the 32 key bytes. It is the same in every version for this caller. Check the signature against the guard's `accepted_key` before sealing anything to it |
+| Project | `kaap-sealed-owner-1113041743.testnet/kaap-sealed` on `outlayer.testnet`, uuid `p0000000000000171`, owner `kaap-sealed-owner-1113041743.testnet` as `get_project` returns it. OutLayer looks a project up under the account that calls `add_version`, `set_active_version`, `remove_version`, `transfer_project` or `delete_project`, so only the owner can reach it (C37) |
+| Active version | `d14e29279146e6b0998e687c8ab3cd4739ea4b16dbfe2ae0184ea97e0af131cf`, read with `get_project({"project_id": ...})` on `outlayer.testnet`; it is the only build the project holds |
+| Verdict key | `ed25519:8eiUXYidw2x7WWfVVmYkDcewi3aBzxKomMefsPPhaecF`, bound to the project's uuid and to the caller `kaap-worker-1029053612.testnet`; any other caller gets another key |
+| Text key | X25519 `40cc00435ddbcdb638ac967f7f592e69d290712d578010e47f4b9d16fcd62757`, printed by one `{"v":1,"op":"pubkey"}` run the worker signed ([GauQQEjV...](https://testnet.nearblocks.io/txns/GauQQEjVA7YVDk3pMZbAEUvaKBTuWMGQHPDxySL7KRUA)) and signed by the verdict key; `node scripts/sealed-keys.mjs` asks again and checks the signature |
 
-A verdict's evidence record is at `GET https://testnet-api.outlayer.ai/public/storage/get?project=kaap-worker-1029053612.testnet/kaap-sealed&key=ai-evidence:<verdict_hash>`, with `verdict_hash` as the registry returns it. The answer is `{exists, value}`, where `value` is the base64 of a JSON record with sorted keys: `v`, `verdict_hash`, `ai_status`, and where they apply `reason`, `model_id`, `nonce`, `clock_unix`, `model_quotes`, `gateway`, `completion`, `signature` and `verify_link`. It holds ids, hashes, quotes and check results, never prompt or answer text. A page must check that the record's `verdict_hash` equals the one it asked for. Live, for the vetoed proposal #1: `{"exists":true,"value":...}`, whose value decodes to `{"ai_status":"unavailable","reason":"ai_key_missing","v":1,"verdict_hash":"59fbf0cf...1ac2b3"}`, because no NEAR AI key reached that run.
+A verdict's evidence record is at `GET https://testnet-api.outlayer.ai/public/storage/get?project=kaap-sealed-owner-1113041743.testnet/kaap-sealed&key=ai-evidence:<verdict_hash>`, with `verdict_hash` as the registry returns it. The answer is `{exists, value}`, where `value` is the base64 of a JSON record with sorted keys: `v`, `verdict_hash`, `ai_status`, and where they apply `reason`, `model_id`, `nonce`, `clock_unix`, `model_quotes`, `gateway`, `completion`, `signature` and `verify_link`. It holds ids, hashes, quotes and check results, never prompt or answer text. A page must check that the record's `verdict_hash` equals the one it asked for. Live, for the vetoed proposal #1: `{"exists":true,"value":...}`, whose value decodes to `{"ai_status":"unavailable","reason":"ai_key_missing","v":1,"verdict_hash":"ca26d724...0e22"}`, because no NEAR AI key reached that run.
 
 ### (d) Code a browser can run
 
@@ -347,9 +351,9 @@ Three more exports score the public answer key and are not for pages: `evalScore
 
 Kaap holds no key a page uses. Everything below is signed in the member's own wallet, except the sealed text, which Kaap's worker carries, and a paid check over HTTPS, which uses an OutLayer payment key.
 
-- Enrolment, as `kaap enroll <dao>` drafts it: two `add_proposal` calls on the DAO, each with the DAO's `proposal_bond` attached and 30 Tgas, then the DAO's own approvals. The first is `{"proposal": {"description": ..., "kind": {"ChangePolicyAddOrUpdateRole": {"role": {"name": "guard", "kind": {"Group": ["kaap-guard-1111072803.testnet"]}, "permissions": ["<label>:VoteReject", ...], "vote_policy": {"<label>": {"weight_kind": "RoleWeight", "quorum": "0", "threshold": "1"}, ...}}}}}}` for the 16 labels other than `remove_member_from_role`. The second is `{"proposal": {"description": ..., "kind": {"FunctionCall": {"receiver_id": "kaap-guard-1111072803.testnet", "actions": [{"method_name": "enroll", "args": "e30=", "deposit": "10000000000000000000000", "gas": "10000000000000"}]}}}}`, so the DAO itself calls `enroll` with 0.01 NEAR and 10 Tgas once it passes. `kaap arming <dao>` then checks the live policy (C16, C30).
+- Enrolment, as `kaap enroll <dao>` drafts it: two `add_proposal` calls on the DAO, each with the DAO's `proposal_bond` attached and 30 Tgas, then the DAO's own approvals. The first is `{"proposal": {"description": ..., "kind": {"ChangePolicyAddOrUpdateRole": {"role": {"name": "guard", "kind": {"Group": ["kaap-guard-1113045147.testnet"]}, "permissions": ["<label>:VoteReject", ...], "vote_policy": {"<label>": {"weight_kind": "RoleWeight", "quorum": "0", "threshold": "1"}, ...}}}}}}` for the 16 labels other than `remove_member_from_role`. The second is `{"proposal": {"description": ..., "kind": {"FunctionCall": {"receiver_id": "kaap-guard-1113045147.testnet", "actions": [{"method_name": "enroll", "args": "e30=", "deposit": "10000000000000000000000", "gas": "10000000000000"}]}}}}`, so the DAO itself calls `enroll` with 0.01 NEAR and 10 Tgas once it passes. `kaap arming <dao>` then checks the live policy (C16, C30).
 - A sealed text, through Kaap's worker, needs no wallet signature. `kaap seal-text` checks the text key against the guard's `accepted_key`, checks that the text hashes to the proposal's payload, encrypts it and sends `POST /texts`; the worker signs and pays the run. Until the worker is hosted, this route has no address.
-- A check of one's own, paid one cent (10,000 micro-USD), takes one of two calls. On chain, the payer signs `request_execution` on `outlayer.testnet` with `{"source": {"Project": {"project_id": "kaap-worker-1029053612.testnet/kaap-sealed", "version_key": null}}, "input_data": "<the judge input as text>", "response_format": "Json", "resource_limits": {"max_instructions": 10000000000, "max_memory_mb": 128, "max_execution_seconds": 60}, "params": {"attached_usd": "10000"}}`, 300 Tgas and 0.02 NEAR, after depositing a stablecoin with `ft_transfer_call` to `outlayer.testnet` and the message `{"action":"deposit_balance"}`. Over HTTPS, `POST https://testnet-api.outlayer.ai/call/kaap-worker-1029053612.testnet/kaap-sealed` with an OutLayer payment key in `x-payment-key`, `x-attached-deposit: 10000` and the body `{"input": <the judge input>}`. A paid verdict is signed with a key derived for the payer, so the guard refuses it; a paid run gets no Kaap NEAR AI key and writes no evidence. To seal a text in a paid run, the payer first asks for its own text key with `{"v":1,"op":"pubkey"}`.
+- A check of one's own, paid one cent (10,000 micro-USD), takes one of two calls. On chain, the payer signs `request_execution` on `outlayer.testnet` with `{"source": {"Project": {"project_id": "kaap-sealed-owner-1113041743.testnet/kaap-sealed", "version_key": null}}, "input_data": "<the judge input as text>", "response_format": "Json", "resource_limits": {"max_instructions": 10000000000, "max_memory_mb": 128, "max_execution_seconds": 60}, "params": {"attached_usd": "10000"}}`, 300 Tgas and 0.02 NEAR, after depositing a stablecoin with `ft_transfer_call` to `outlayer.testnet` and the message `{"action":"deposit_balance"}`. Over HTTPS, `POST https://testnet-api.outlayer.ai/call/kaap-sealed-owner-1113041743.testnet/kaap-sealed` with an OutLayer payment key in `x-payment-key`, `x-attached-deposit: 10000` and the body `{"input": <the judge input>}`. A paid verdict is signed with a key derived for the payer, so the guard refuses it; a paid run gets no Kaap NEAR AI key and writes no evidence. To seal a text in a paid run, the payer first asks for its own text key with `{"v":1,"op":"pubkey"}`.
 
 Every alert links to `<KAAP_SITE_URL>/<network>/<dao>/<proposal id>` (`proposalLink` in `packages/worker/src/alerts.ts`), built only from a checked account id and a whole-number id. With `KAAP_SITE_URL` unset, as it is while the site has no public address, alerts carry no link.
 
@@ -360,4 +364,4 @@ Every alert links to `<KAAP_SITE_URL>/<network>/<dao>/<proposal id>` (`proposalL
 - Prices and payment history are read on mainnet only. Testnet tokens have no market price, so a testnet run reads neither and every token stays unpriced, `UNKNOWN_VALUE` at high (`read_past` in `packages/sealed/src/job.rs`).
 - Polling each treasury's own proposal counter, not a block stream. Every id below the counter is judged however the proposal got there: a batch, a cross-contract call, or a gap while the worker was down (`packages/worker/src/watcher.ts`, C21).
 - Contracts are locked and a new version is a new contract. With no upgrade method and no access key, nobody, Kaap included, can change what the guard does; a DAO moves its guard role to a new guard with one ordinary proposal. The 29 Oct 2026 contracts are still on chain beside these, with no keys.
-- Fallback, corrected against the guard's code: the guard's owner can point it at any other ed25519 key with `set_accepted_key`, for example a server key if OutLayer stopped serving runs. Every change emits `key_changed`, and the worker raises `accepted_key_changed` to members. The registry's key is fixed at `new`, so the same switch also needs a new registry.
+- Fallback: the guard's owner can point it at any other ed25519 key with `set_accepted_key`, for example a server key if OutLayer stopped serving runs. The change is announced on chain, takes effect 24 hours later at the earliest and can be cancelled; the worker raises `accepted_key_change_pending` to every treasury's members at once, and `accepted_key_changed` when the key has moved. The registry's key is fixed at `new`, so the same switch there is a new registry.

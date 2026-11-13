@@ -95,7 +95,7 @@ sequenceDiagram
   Note over W: key equals the guard's accepted_key, signature, names, expiry (standard 3)
   W->>M: Telegram, CRITICAL risk on proposal N, queued beside the veto and sent at once (C24, C27)
   Note over W: live state on both providers still matches the verdict's hashes (C4, C22)
-  W->>G: veto(verdict, signature, kind_json), 300 Tgas
+  W->>G: veto(verdict, signature, kind_json), 1,000 Tgas
   Note over G: version, signature, guard and network, enrolled DAO, veto rule, expiry, kind hash, not used before (C9, C19)
   G->>D: act_proposal({id, action: VoteReject, proposal: kind_json}) (C5, C15)
   D-->>G: vote counted, proposal Rejected

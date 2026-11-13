@@ -2,7 +2,7 @@
 
 Kaap's always-on process. It watches every treasury enrolled in the guard, has the sealed reader judge each new request, hands a vetoable verdict to the guard, records every verdict in the registry, and alerts members on Telegram.
 
-**Status: live since 12 Nov 2026, as one container on Railway, watching the demo treasury.** Its status page is https://watcher-production-2350aa2a.up.railway.app/status. No other treasury is enrolled. In the first recorded proof (`PROOF.md`), made before it was hosted, a script, `scripts/prove.mjs`, made the same calls. `HOSTING.md` says how it is hosted and what to check after each deploy.
+**Status: live since 12 Nov 2026, as one container on Railway, watching the demo treasury.** Its status page is https://watcher-production-2350aa2a.up.railway.app/status. No other treasury is enrolled. Since 13 Nov 2026 it watches the guard deployed that day and calls the sealed program's new project. In `PROOF.md` a script, `scripts/prove.mjs`, makes the same calls by hand, and the section "The hosted watcher on this deployment" shows the watcher making them by itself. `HOSTING.md` says how it is hosted and what to check after each deploy.
 
 ## What it does, in order
 
@@ -18,7 +18,7 @@ It never decides anything itself. The veto rule, the hashes and the verdict's de
 
 ## What it holds
 
-- The watcher account's key, in a file only it can read. That account pays for sealed runs, records and vetoes. Its key cannot make the guard do anything a verdict does not allow: the guard checks the sealed signature, not the caller.
+- The watcher account's key, in a file only it can read. That account pays for sealed runs, records and vetoes. Its key cannot make the guard do anything a verdict does not allow: the guard checks the sealed signature, not the caller. It also cannot replace the sealed program: the program is published under another account, whose key is on no host, and OutLayer refuses the watcher's account every call that would publish a build or take the project (`node scripts/attack-sealed-owner.mjs`; rule C37 in `docs/security/threat-model.md`). A thief of this key gets the account's balance and real verdicts, nothing more.
 - A Telegram bot token.
 - A SQLite file: treasuries, judgements, runs, daily spend, subscriptions and alerts.
 

@@ -1,13 +1,13 @@
 {
   "network": "testnet",
-  "dao": "kaap-dao-1111072928.testnet",
-  "proposal_id": 7,
+  "dao": "kaap-dao-1113045321.testnet",
+  "proposal_id": 8,
   "description": "Authenticate DAO for confidential intents",
-  "message": "{\"signer_id\":\"kaap-dao-1111072928.testnet\",\"deadline\":\"2026-11-19T05:47:23.917Z\",\"intents\":[{\"intent\":\"add_public_key\",\"public_key\":\"ed25519:5ASfrukKB4z2oA1bUfQUD5xSc5vuzArLJydBhBTmFNzM\"}]}",
-  "nonce_base64": "d6+zmX7K5ICgx3PI/RLOM5SyCdvLRJR+ZuV8/cE/K8M=",
+  "message": "{\"signer_id\":\"kaap-dao-1113045321.testnet\",\"deadline\":\"2026-11-20T05:16:56.228Z\",\"intents\":[{\"intent\":\"add_public_key\",\"public_key\":\"ed25519:EnK3kjYg6KNMwnK2mWvcUv9ccsKdhzuGDQfYa8qFjGrf\"}]}",
+  "nonce_base64": "nh9VpT05GlFoojdhG3La3WnB0YaMjo7WL9IQ4lrNEbE=",
   "recipient": "intents.near",
   "standard": "nep413",
-  "payload_hash": "fcccd15e7cfcd8489a86c110f3e466c66bb12bca6a32ff5ed0151f21d5d10c7f",
-  "filed_tx": "8yzyLUo3KYifzGxxMh3Azi7Qu5PiULasEcA5V42mmzg",
-  "filed_at_block": 277321553
+  "payload_hash": "a9f14510bca0d490ddf425fcf51c3a599096f8fa598f1bcb0eadd9bbb9bbd50f",
+  "filed_tx": "2C9JNN3kbzzrP153fgoyoNUnWDMQ4myjHfGfu2j5JW22",
+  "filed_at_block": 277466207
 }

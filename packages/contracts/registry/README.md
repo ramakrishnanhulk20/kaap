@@ -33,19 +33,19 @@ Each record comes back with the signed bytes and the signature, so a reader can 
 
 | | |
 |---|---|
-| Account | `kaap-registry-1111072803.testnet`, deployed 11 Nov 2026 |
+| Account | `kaap-registry-1113045147.testnet`, deployed 13 Nov 2026 |
 | Code hash | `3Kro1EgWDYAawFx8RHUwVGTKmJvp9bAUeRL65cwGAoZz` (sha256 `228c21366ffdaf58f31a6e3550fd9898bc9ae65d1182f7a9e84d2df3c07fb2c9`) |
-| Built from | commit `413a74aa91256a8c8603d1f84df33fde64abbcd3`, by the deploy script's `cargo near build non-reproducible-wasm --locked`; a second build in another target folder gave the same sha256 |
-| Accepted key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN`, the sealed program's key (details in `deployments/testnet.json`) |
-| Deploy and init | https://testnet.nearblocks.io/txns/53xJksmZUhokY6rVNzXNcnadxAUEaN1RWPkdhJwMwiT7 |
-| Key deleted | https://testnet.nearblocks.io/txns/GxMNoCaecyMRfF5k1dqtsxB4uCydKz8fUpzBkMm9gUF1, 0 access keys left |
-| Explorer | https://testnet.nearblocks.io/address/kaap-registry-1111072803.testnet |
+| Built from | commit `5f1cf75`, by the deploy script's `cargo near build non-reproducible-wasm --locked`; a second build in an empty target folder gave the same sha256, which is also the sha256 of the registry deployed on 11 Nov 2026 |
+| Accepted key | `ed25519:8eiUXYidw2x7WWfVVmYkDcewi3aBzxKomMefsPPhaecF`, the sealed program's key (details in `deployments/testnet.json`) |
+| Deploy and init | https://testnet.nearblocks.io/txns/J38sabffhH3HGd9SvFL18rnkMjZeHh2UrMjAFe1oxMyJ |
+| Key deleted | https://testnet.nearblocks.io/txns/6T53QkSLhsN1HnbZgPGdHEzpgwCKg1vB3bFBJNcgLaxv, 0 access keys left |
+| Explorer | https://testnet.nearblocks.io/address/kaap-registry-1113045147.testnet |
 
 Anyone can check this deployment with near-cli-rs 0.30.1, reading only:
 
 ```
-near account view-account-summary kaap-registry-1111072803.testnet network-config testnet now
-near contract call-function as-read-only kaap-registry-1111072803.testnet latest json-args '{"network":"testnet","dao":"kaap-dao-1111072928.testnet","proposal_id":1}' network-config testnet now
+near account view-account-summary kaap-registry-1113045147.testnet network-config testnet now
+near contract call-function as-read-only kaap-registry-1113045147.testnet latest json-args '{"network":"testnet","dao":"kaap-dao-1113045321.testnet","proposal_id":1}' network-config testnet now
 ```
 
 The first shows "Account is locked (no access keys)" and the code's sha256; the second returns the record of the attack the demo treasury's guard vetoed. To rebuild and compare, check out the commit the table names and, with cargo-near 0.22.0 and the toolchain in `rust-toolchain.toml`, run `cargo near build non-reproducible-wasm --locked --out-dir <folder>` in `packages/contracts/registry`, then `sha256sum <folder>/kaap_registry.wasm`. It signs nothing.

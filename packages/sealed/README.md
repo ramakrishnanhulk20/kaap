@@ -8,15 +8,20 @@ Kaap's guard contract votes only on verdicts signed by that key.
 
 | Thing | Value |
 | --- | --- |
-| OutLayer project | `kaap-worker-1029053612.testnet/kaap-sealed` on `outlayer.testnet`, uuid `p00000000000000a9` |
-| Worker account (the only free caller) | `kaap-worker-1029053612.testnet` |
-| Build (wasm sha256) | `d8453d6e674d15b1c8acd7796e4219f9388e5704cd8996b7f6642370574e9083`, 1,679,633 bytes, wasm32-wasip2, active since 11 Nov 2026. The build before it, `da2c2853...c666`, is still listed |
-| Hosted at | secret gist `5ea40ed7c5610efcd50d69af2ae8abe2`, commit `104605f8`: [raw URL pinned to the commit](https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/104605f82cf3014bb31304dc66002cc0afbfa3b5/kaap-sealed-d8453d6e.wasm) |
-| Registered by | [add_version](https://testnet.nearblocks.io/txns/CroTVvwfKGFTVYFZpr7WQmFzK87477LoVnn4exUXqviV), in the project from [create_project](https://testnet.nearblocks.io/txns/FHy3utGUWWwPtPMGz8ALXh9NLR5G4Mo2h1QTsEDGtuMu) |
-| Verdict public key | `ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN` |
+| OutLayer project | `kaap-sealed-owner-1113041743.testnet/kaap-sealed` on `outlayer.testnet`, uuid `p0000000000000171` |
+| Owner (the only account that can publish a build) | `kaap-sealed-owner-1113041743.testnet`. It does nothing else, and its key is on no host |
+| Worker account (the only free caller) | `kaap-worker-1029053612.testnet`. It runs the program and cannot publish a build of it: `node scripts/attack-sealed-owner.mjs` |
+| Build (wasm sha256) | `d14e29279146e6b0998e687c8ab3cd4739ea4b16dbfe2ae0184ea97e0af131cf`, 1,687,400 bytes, wasm32-wasip2, active since 13 Nov 2026 and the only build the project holds |
+| Hosted at | secret gist `5ea40ed7c5610efcd50d69af2ae8abe2`, commit `e4276e94`: [raw URL pinned to the commit](https://gist.githubusercontent.com/ramakrishnanhulk20/5ea40ed7c5610efcd50d69af2ae8abe2/raw/e4276e949a9a65414884c1d592cd56f488bba5d5/kaap-sealed-d14e2927.wasm) |
+| Registered by | [create_project](https://testnet.nearblocks.io/txns/E1Za5hoQtyMqgufqQwgjoWvsNF8B2pijKSB8WYqGUHe3), signed by the owner |
+| Verdict public key | `ed25519:8eiUXYidw2x7WWfVVmYkDcewi3aBzxKomMefsPPhaecF`: the key OutLayer gives the worker account on this project (`node scripts/sealed-keys.mjs`) |
 
-Testnet FastFS (`test.fastfs.io`) answered HTTP 502 on the publishing day, so the build is served
-from the gist instead; `packages/sealed/testnet.json` records every published version.
+Testnet FastFS (`test.fastfs.io`) answered HTTP 502 on the first publishing day, so builds are served
+from the gist instead; `packages/sealed/testnet.json` records every version published in this project.
+
+The project before this one, `kaap-worker-1029053612.testnet/kaap-sealed` (uuid `p00000000000000a9`), was owned by
+the worker account itself. The deployments of 29 Oct and 11 Nov 2026 obey its key, `ed25519:4gaYx4kP...uonuN`, and
+its builds are listed in `packages/sealed/testnet-2026-10-29.json`. The runs in `RUNS.md` and `AI-EVAL.md` were made on it.
 
 The key is bound to the project's uuid and to the account that sends `request_execution` (OutLayer
 `bind: "project"`, `caller: "signer"`): every version of this project signs with it when
@@ -41,7 +46,7 @@ HTTPS client, such as curl. The chain door needs a funded testnet account of the
 signs as it, with near-cli-rs or any NEAR wallet. Both spend the payer's money, never Kaap's.
 
 A run is free only on chain, with `OUTLAYER_EXECUTION_TYPE` exactly `NEAR`, and only when
-`NEAR_USER_ACCOUNT_ID` is exactly the account named in `packages/sealed/testnet.json`, compiled in
+`NEAR_USER_ACCOUNT_ID` is exactly the `caller` named in `packages/sealed/testnet.json`, compiled in
 at build time. That variable is the transaction's signer and the account the run's keys are bound
 to. `NEAR_SENDER_ID` is not used, because an Agent Connect binding can rewrite it. An HTTPS call
 always pays, even with the worker's own payment key, and so does a run of any execution type this
@@ -407,7 +412,7 @@ budget with every record, and every row records `thinking_budget` and `answer_cl
   `--dry-run` also needs `packages/core-wasm/pkg`, built by `bash packages/core-wasm/build.sh`
   (the Rust toolchain in `rust-toolchain.toml` and wasm-bindgen-cli 0.2.129). `--report` needs
   the rows a live run wrote (`--out`).
-- The live run signs as the worker `packages/sealed/testnet.json` names, so only the holder of
+- The live run signs as the caller `packages/sealed/testnet.json` names, so only the holder of
   `kaap-worker-1029053612.testnet`'s key can run it. It also needs near-api-js 7.4.0 at the repo
   root, that same wasm, and `KAAP_AI_SECRETS_ACCOUNT` in `.env`, the owner of the NEAR AI secret.
   Every row records its transaction, which anyone can read back with `run-report.mjs` (see "How a
@@ -476,7 +481,7 @@ printed it:
 1. Take a run transaction from `RUNS.md`, for example
    `Edzq3KEDgXQBeLEEZ62mqRT97mAJMpVbZVcB3dxbh6sW`, and fetch
    `https://testnet-api.outlayer.ai/attestations/by-tx/<tx>`.
-2. Check that it names `project_id` `kaap-worker-1029053612.testnet/kaap-sealed`,
+2. Check that it names `project_id` `kaap-sealed-owner-1113041743.testnet/kaap-sealed`,
    `caller_account_id` `kaap-worker-1029053612.testnet`, and `wasm_hash` equal to
    `executed_wasm_sha256` equal to the build hash above; that its `input_hash` is the sha256 of
    the transaction's `input_data`; and that its `output_hash` is the sha256 of the transaction's
@@ -491,7 +496,7 @@ None of them signs or needs an account. For step 4, read a run's return value ba
 
 ```
 node packages/sealed/tools/run-report.mjs <tx> kaap-worker-1029053612.testnet summary.json output.json https://archival-rpc.testnet.fastnear.com
-node packages/sealed/tools/check-output.mjs output.json --key ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN
+node packages/sealed/tools/check-output.mjs output.json --key ed25519:8eiUXYidw2x7WWfVVmYkDcewi3aBzxKomMefsPPhaecF
 ```
 
 `run-report.mjs` writes what the job returned to `output.json`, and the blocks, time and cost to
@@ -514,7 +519,7 @@ bash packages/sealed/build.sh
 
 It remaps local paths out of the binary (`--remap-path-prefix`), strips symbols, refuses to finish
 if a home or checkout path is still inside, and prints the sha256. Three builds in separate target
-directories gave `d8453d6e...9083`, the active version, on 11 Nov 2026.
+directories gave `d14e2927...31cf`, the active version, on 13 Nov 2026.
 
 The build needs nothing else. If `wasm-tools` is at `~/kaap-tools/wasm-tools`, or at the path in
 `KAAP_WASM_TOOLS`, the script also prints the program's manifest section count and its imports;
@@ -526,7 +531,7 @@ with what is served and what OutLayer runs, with curl and near-cli-rs 0.30.1, bo
 
 ```
 curl -sL <the raw URL in the table at the top> | sha256sum
-near contract call-function as-read-only outlayer.testnet get_project json-args '{"project_id":"kaap-worker-1029053612.testnet/kaap-sealed"}' network-config testnet now
+near contract call-function as-read-only outlayer.testnet get_project json-args '{"project_id":"kaap-sealed-owner-1113041743.testnet/kaap-sealed"}' network-config testnet now
 ```
 
 The first prints the served file's sha256, and the second's `active_version` is the hash OutLayer
@@ -548,8 +553,8 @@ runs.
 | --- | --- | --- | --- |
 | `cargo test -p kaap-sealed` | anyone | the toolchain under "Build it yourself" | signs nothing: recorded answers |
 | `run-local.sh` | anyone | the build's tools, wasmtime 28.0.1, jq, Node 24 | signs nothing on chain: the public test key, no network |
-| `publish-sealed-testnet.sh` | only the holder of `kaap-worker-1029053612.testnet`'s key, the worker `packages/sealed/testnet.json` names; in another clone it stops with "no key" | the build's tools, near-cli-rs 0.30.1, jq, curl, sha256sum, and python3 for `fastfs` | signs: the FastFS upload, then `create_project` or `add_version` |
-| `run-sealed-testnet.sh` | only the holder of the same key; without it near-cli-rs signs nothing and no run is sent | near-cli-rs 0.30.1, jq, Node 24 | signs one `request_execution` per run, 0.02 NEAR attached and the rest refunded |
+| `publish-sealed-testnet.sh` | only the holder of `kaap-sealed-owner-1113041743.testnet`'s key, the owner `packages/sealed/testnet.json` names; in another clone it stops with "no key" | the build's tools, near-cli-rs 0.30.1, jq, curl, sha256sum, and python3 for `fastfs` | signs: the FastFS upload, then `create_project` or `add_version` |
+| `run-sealed-testnet.sh` | only the holder of the caller's key, `kaap-worker-1029053612.testnet`; without it near-cli-rs signs nothing and no run is sent | near-cli-rs 0.30.1, jq, Node 24 | signs one `request_execution` per run, 0.02 NEAR attached and the rest refunded |
 
 What the last two prove can be checked without the key: the served file and `get_project` under
 "Build it yourself", and each recorded run with `run-report.mjs` and `check-output.mjs` under "How

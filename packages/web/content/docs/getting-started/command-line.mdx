@@ -22,7 +22,7 @@ To compile the engine yourself instead, you also need Rust and `wasm-bindgen-cli
 
 ```bash
 node packages/cli/dist/src/bin.js check marketing.sputnik-dao.near
-node packages/cli/dist/src/bin.js check kaap-dao-1111072928.testnet 1
+node packages/cli/dist/src/bin.js check kaap-dao-1113045321.testnet 1
 ```
 
 The first reads the latest request of a mainnet treasury. The second reads request 1 of the demo treasury on testnet. An account ending in `.testnet` is read on testnet and any other on mainnet, unless `--network` says otherwise. Add `--json` for the full report.
@@ -43,8 +43,8 @@ Run `node packages/cli/dist/src/bin.js help` for every option.
 ## Verify the stopped theft yourself
 
 ```bash
-node packages/cli/dist/src/bin.js verify kaap-dao-1111072928.testnet 1 --network testnet
-node packages/cli/dist/src/bin.js arming kaap-dao-1111072928.testnet --network testnet
+node packages/cli/dist/src/bin.js verify kaap-dao-1113045321.testnet 1 --network testnet
+node packages/cli/dist/src/bin.js arming kaap-dao-1113045321.testnet --network testnet
 ```
 
 The first checks the verdict behind the guard's reject vote on request 1. The second shows the demo treasury's rules with the guard armed.

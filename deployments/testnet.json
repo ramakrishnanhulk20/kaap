@@ -118,5 +118,12 @@
         "msg": null
       }
     }
+  },
+  "watcher": {
+    "url": "https://watcher-production-2350aa2a.up.railway.app",
+    "host": "Railway",
+    "since": "13 Nov 2026 for this deployment; on this host since 12 Nov 2026",
+    "account": "kaap-worker-1029053612.testnet",
+    "checked_with": "scripts/attack-caller-limit.mjs, scripts/attack-fake-enrolment.sh, scripts/attack-sealed-owner.mjs"
   }
 }
