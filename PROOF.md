@@ -293,6 +293,25 @@ after: listed no more: yes; the watcher watches {"watching":1,"daos":["kaap-dao-
 RESULT: pass, the account was turned away as not_a_sputnik_dao, the watched treasuries did not change, and the watcher account signed nothing in that time
 ```
 
+## The site on its host
+
+The site went up on Vercel on 13 Nov 2026 at https://kaap-snowy.vercel.app. Its first build served every page, and its check route answered "The check could not run": the engine folder the route loads reached the host without the file that says its code is written as modules. The folder now carries that file itself, and a test loads the folder the way a host does (`packages/web/test/engine-alone.test.mjs`).
+
+On the fixed build, a press of the site's own button filed request #12 with nobody else involved. The watcher had it judged with the AI's answer verified ([run](https://testnet.nearblocks.io/txns/6YEGUrnmmD1xHSkKSkjXJ5A7sKDPXaqvJKymrDfGNqn1)), the guard rejected it ([veto](https://testnet.nearblocks.io/txns/52jCpbhEDxoPkuECT6KSPDoqQVjSttNsM9kHU7T2z2Pi)) and the verdict was recorded ([record](https://testnet.nearblocks.io/txns/Fkd9vHsj7ib9DjSrxYvvMCFx9jPvXn6YRxbCiidFEKk4)). The page showed "Rejected" about 52 seconds after the press.
+
+Then the site's per-caller limits were attacked from outside, after that one press (`node scripts/attack-site-limits.mjs https://kaap-snowy.vercel.app --press`):
+
+```
+Kaap site limits attack, 2026-11-13T07:25:04.594Z: https://kaap-snowy.vercel.app
+1. twelve checks, each under another made-up address: 404 404 404 404 404 404 404 404 429 429 429 429
+   the limit bit after 8 asks: the made-up addresses changed nothing
+2. three presses, each under another made-up address: filed #13; 429 slow_down; 429 slow_down
+   1 went through and the third was refused: the made-up addresses changed nothing
+RESULT: pass
+```
+
+The check route allows a caller eight checks a minute and the button two presses in ten minutes. The press from the browser and the first one here came from the same address and made two; the next two were refused whatever address they claimed. Not covered: two different visitors getting two separate counts was not watched from two networks; it rests on the setting that makes the site count by the address the host reports, and on this attack showing that a caller cannot choose that address.
+
 ## The words behind a hash, handed over sealed
 
 A request that shows only a hash cannot be read, so Kaap flags it and, for a treasury in the default mode, the guard does not vote. A member who knows the words behind the hash can hand them to Kaap with `kaap seal-text`: they are encrypted on the member's machine so that only the sealed reader can open them. `node scripts/sealed-text-live.mjs` runs all of it through the hosted watcher:
