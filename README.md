@@ -6,7 +6,7 @@ It only works on NEAR. Sputnik DAO lets a role hold the reject vote and nothing 
 
 [Proof on testnet](PROOF.md) · [Architecture](ARCHITECTURE.md) · [Threat model](docs/security/threat-model.md) · [Evaluation](packages/sealed/AI-EVAL.md) · [Docs](packages/web/content/docs/index.mdx)
 
-Built at NEAR HACKATHON, November 2026. Tracks: social, security, privacy, open.
+Built at NEAR HACKATHON, November 2026. Lead track: social (Social Money). Kaap is something a treasury does with its own Sputnik DAO, not a new multisig: the members vote in one more member whose role can only reject, and can vote it out again. Also entered in: security, privacy, open.
 
 ## The problem
 
