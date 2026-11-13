@@ -4,39 +4,39 @@
     "proposal": {
       "network": "testnet",
       "rpc": "https://rpc.testnet.fastnear.com",
-      "account": "kaap-dao-1111072928.testnet",
-      "method": "get_proposal {\"id\":7}",
-      "block_height": 277321646,
-      "block_hash": "7Hww7JiJFE9sfquiQidj2FjTz3kbG6GqauqMTe9UTJZi",
-      "block_timestamp_ns": "1794462498059818291",
-      "date": "2026-11-12T05:48:19.531Z"
+      "account": "kaap-dao-1113045321.testnet",
+      "method": "get_proposal {\"id\":8}",
+      "block_height": 277466276,
+      "block_hash": "EoT1SToGhzjtbRtxQuGFvKZvJnHcKHmGgwX72G6chifB",
+      "block_timestamp_ns": "1794547060657863575",
+      "date": "2026-11-13T05:17:42.696Z"
     },
     "text": {
       "taken_from": "deployments\\demo-hash-text.json",
-      "filed_tx": "8yzyLUo3KYifzGxxMh3Azi7Qu5PiULasEcA5V42mmzg",
-      "filed_at_block": 277321553,
+      "filed_tx": "2C9JNN3kbzzrP153fgoyoNUnWDMQ4myjHfGfu2j5JW22",
+      "filed_at_block": 277466207,
       "checked_with": "nep413Hash from packages/core-wasm/pkg",
       "hashes_to_payload_on_chain": true,
       "hashes_to_payload_in_file": true,
-      "date": "2026-11-12T05:48:19.531Z"
+      "date": "2026-11-13T05:17:42.696Z"
     },
     "analysis": {
       "engine": "analyze from packages/core-wasm/pkg",
       "decoder_version": "0.1.0",
-      "date": "2026-11-12T05:48:19.531Z"
+      "date": "2026-11-13T05:17:42.696Z"
     },
     "registry": {
       "network": "testnet",
       "rpc": "https://rpc.testnet.fastnear.com",
-      "account": "kaap-registry-1111072803.testnet",
-      "method": "latest {\"network\":\"testnet\",\"dao\":\"kaap-dao-1111072928.testnet\",\"proposal_id\":7}",
-      "block_height": 277321647,
-      "block_hash": "3ytdhKHK7JazeqG6A3gbfd4asXfcoMdXV6rTuaCaqXQJ",
-      "date": "2026-11-12T05:48:19.531Z"
+      "account": "kaap-registry-1113045147.testnet",
+      "method": "latest {\"network\":\"testnet\",\"dao\":\"kaap-dao-1113045321.testnet\",\"proposal_id\":8}",
+      "block_height": 277466277,
+      "block_hash": "CKaEAYQ7ZzuEvKYDRMaTBZ4WTDc7kjRCe3BuL6LnDx9r",
+      "date": "2026-11-13T05:17:42.696Z"
     }
   },
   "proposal": {
-    "id": 7,
+    "id": 8,
     "proposer": "kaap-member-1029064001.testnet",
     "description": "Authenticate DAO for confidential intents",
     "kind": {
@@ -45,7 +45,7 @@
         "actions": [
           {
             "method_name": "sign",
-            "args": "eyJyZXF1ZXN0Ijp7InBhdGgiOiJrYWFwLWRhby0xMTExMDcyOTI4LnRlc3RuZXQiLCJwYXlsb2FkX3YyIjp7IkVkZHNhIjoiZmNjY2QxNWU3Y2ZjZDg0ODlhODZjMTEwZjNlNDY2YzY2YmIxMmJjYTZhMzJmZjVlZDAxNTFmMjFkNWQxMGM3ZiJ9LCJkb21haW5faWQiOjF9fQ==",
+            "args": "eyJyZXF1ZXN0Ijp7InBhdGgiOiJrYWFwLWRhby0xMTEzMDQ1MzIxLnRlc3RuZXQiLCJwYXlsb2FkX3YyIjp7IkVkZHNhIjoiYTlmMTQ1MTBiY2EwZDQ5MGRkZjQyNWZjZjUxYzNhNTk5MDk2ZjhmYTU5OGYxYmNiMGVhZGQ5YmJiOWJiZDUwZiJ9LCJkb21haW5faWQiOjF9fQ==",
             "deposit": "1",
             "gas": "15000000000000"
           }
@@ -55,17 +55,17 @@
     "status": "InProgress",
     "vote_counts": {},
     "votes": {},
-    "submission_time": "1794462446539533808",
+    "submission_time": "1794547018843677087",
     "last_actions_log": [
       {
-        "block_height": "277321553"
+        "block_height": "277466207"
       }
     ]
   },
-  "payload_hash_hex": "fcccd15e7cfcd8489a86c110f3e466c66bb12bca6a32ff5ed0151f21d5d10c7f",
+  "payload_hash_hex": "a9f14510bca0d490ddf425fcf51c3a599096f8fa598f1bcb0eadd9bbb9bbd50f",
   "text": {
-    "message": "{\"signer_id\":\"kaap-dao-1111072928.testnet\",\"deadline\":\"2026-11-19T05:47:23.917Z\",\"intents\":[{\"intent\":\"add_public_key\",\"public_key\":\"ed25519:5ASfrukKB4z2oA1bUfQUD5xSc5vuzArLJydBhBTmFNzM\"}]}",
-    "nonce": "d6+zmX7K5ICgx3PI/RLOM5SyCdvLRJR+ZuV8/cE/K8M=",
+    "message": "{\"signer_id\":\"kaap-dao-1113045321.testnet\",\"deadline\":\"2026-11-20T05:16:56.228Z\",\"intents\":[{\"intent\":\"add_public_key\",\"public_key\":\"ed25519:EnK3kjYg6KNMwnK2mWvcUv9ccsKdhzuGDQfYa8qFjGrf\"}]}",
+    "nonce": "nh9VpT05GlFoojdhG3La3WnB0YaMjo7WL9IQ4lrNEbE=",
     "recipient": "intents.near",
     "standard": "nep413"
   },
@@ -76,8 +76,8 @@
         {
           "domain_id": 1,
           "mpc": "v1.signer-prod.testnet",
-          "path": "kaap-dao-1111072928.testnet",
-          "payload_hash": "fcccd15e7cfcd8489a86c110f3e466c66bb12bca6a32ff5ed0151f21d5d10c7f",
+          "path": "kaap-dao-1113045321.testnet",
+          "payload_hash": "a9f14510bca0d490ddf425fcf51c3a599096f8fa598f1bcb0eadd9bbb9bbd50f",
           "text_source": null,
           "text_standard": null,
           "text_supplied": false,
@@ -108,8 +108,8 @@
         {
           "domain_id": 1,
           "mpc": "v1.signer-prod.testnet",
-          "path": "kaap-dao-1111072928.testnet",
-          "payload_hash": "fcccd15e7cfcd8489a86c110f3e466c66bb12bca6a32ff5ed0151f21d5d10c7f",
+          "path": "kaap-dao-1113045321.testnet",
+          "payload_hash": "a9f14510bca0d490ddf425fcf51c3a599096f8fa598f1bcb0eadd9bbb9bbd50f",
           "text_source": "planted",
           "text_standard": "nep413",
           "text_supplied": true,
@@ -117,7 +117,7 @@
         },
         {
           "op": "add",
-          "public_key": "ed25519:5ASfrukKB4z2oA1bUfQUD5xSc5vuzArLJydBhBTmFNzM",
+          "public_key": "ed25519:EnK3kjYg6KNMwnK2mWvcUv9ccsKdhzuGDQfYa8qFjGrf",
           "type": "intents_key_change"
         }
       ],
@@ -142,5 +142,25 @@
     },
     "kind_label": "call"
   },
-  "registry_record": null
+  "registry_record": {
+    "index": 0,
+    "supersedes": null,
+    "verdict_hash": "26c75a089d4e47defab6b98d20c635c85365a3a1422f3e4ccadcefbaca3e3038",
+    "verdict": "AR0AAABrYWFwLWd1YXJkLTExMTMwNDUxNDcudGVzdG5ldAEbAAAAa2FhcC1kYW8tMTExMzA0NTMyMS50ZXN0bmV0CAAAAAAAAAAZ0SkCcR2f260CPEBIlky7Ar8gw7tBIG9Ih/9oO+BTY7zDSMSjCNTjVUYCrjqIk4Lp/ieW41o/X5n/hTFB7CyScS6Sm7DUFmwQwDO1cUfFCT+1NVyk6JGinhomjPgIxEWBzIkQAAAAAAICAQAAABIFAAAAMC4xLjAAAAAAAuhuxCWKSo/l9oKTluCKCDdt/h5O3i0B5Tc/DoItbGElreRf06EBAAA=",
+    "signature": "wE2wFnqA1UVwbahCI3hEn5eeDjXaYVDOZGWl8F24WJncS7XrnjT0L0uyPKYsEieEC9elfc6DTQbzhck2wEqXCA==",
+    "guard": "kaap-guard-1113045147.testnet",
+    "risk": "high",
+    "floor": "high",
+    "findings": [
+      "HASH_UNVERIFIED"
+    ],
+    "ai_status": "unavailable",
+    "model_id": "",
+    "decoder_version": "0.1.0",
+    "block_height": 277466241,
+    "expires_at_ms": 1794547639469,
+    "recorded_by": "kaap-worker-1029053612.testnet",
+    "recorded_at_block": 277466259,
+    "recorded_at_ms": 1794547050408
+  }
 }

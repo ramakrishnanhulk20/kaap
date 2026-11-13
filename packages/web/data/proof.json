@@ -1,41 +1,41 @@
 {
   "source": "Written by packages/web/scripts/proof-data.mjs from deployments/testnet.json, deployments/demo-hash-text.json, packages/sealed/AI-EVAL.md and PROOF.md. Do not edit by hand.",
   "network": "testnet",
-  "deployedAt": "2026-11-11T07:28:03Z",
+  "deployedAt": "2026-11-13T04:51:47Z",
   "guard": {
-    "account": "kaap-guard-1111072803.testnet",
-    "codeSha256": "bf09d7bbb48f312eb4043bd7b585f3b02bbe9d8b7d5bc0bf31fec9319c663767",
-    "deployTx": "DEta1bNNm4gRYLqhZJ2HfwDnVtz294dgyEyLfiQVzsK1",
-    "keyDeletedTx": "6qEFvNiz5Guw1w2XaA6cS36kkRVhAJbPTtijgPEcTssM",
+    "account": "kaap-guard-1113045147.testnet",
+    "codeSha256": "9e74bbbadcfa6820390e21cb415ae83542f5de6257da4ad651caf950801c5d23",
+    "deployTx": "6zSjJ4FnExBBWx9eR1hcfErbRM83e1x1ob9QwzApTHvT",
+    "keyDeletedTx": "DeCTsm76k8RH6HES5uqh4p4SrzZksKF7uQNL7gYPLxtV",
     "accessKeysLeft": 0
   },
   "registry": {
-    "account": "kaap-registry-1111072803.testnet",
+    "account": "kaap-registry-1113045147.testnet",
     "codeSha256": "228c21366ffdaf58f31a6e3550fd9898bc9ae65d1182f7a9e84d2df3c07fb2c9",
-    "deployTx": "53xJksmZUhokY6rVNzXNcnadxAUEaN1RWPkdhJwMwiT7",
-    "keyDeletedTx": "GxMNoCaecyMRfF5k1dqtsxB4uCydKz8fUpzBkMm9gUF1",
+    "deployTx": "J38sabffhH3HGd9SvFL18rnkMjZeHh2UrMjAFe1oxMyJ",
+    "keyDeletedTx": "6T53QkSLhsN1HnbZgPGdHEzpgwCKg1vB3bFBJNcgLaxv",
     "accessKeysLeft": 0
   },
   "treasury": {
-    "account": "kaap-dao-1111072928.testnet",
+    "account": "kaap-dao-1113045321.testnet",
     "codeSha256": "bf6f951ee5e45968e3367fa857bebf8bc80badec183998c2239c487237e0d7f6",
-    "deployTx": "GJDgwXkEEFqrRR4p24ruZrjdvtcM3Hrp9r1RboWx3ePz",
-    "keyDeletedTx": "GWAwWeDcpid7d2snZx2xY1t1qXvrFerztKgaZ7gJY2hZ",
+    "deployTx": "CiRhao89G9q6Lc7fTBc1Ds7jErck6c7hFVmskAJAJ1v7",
+    "keyDeletedTx": "94xyNPcEhRvuNdAcMfrA9g66yDt1TCTZwVhtZpXQg8FK",
     "accessKeysLeft": 0,
     "policyFrom": "the role setup of a live NEAR Business treasury on mainnet, read 29 Oct 2026, members removed",
     "enrolled": true
   },
   "sealed": {
-    "project": "kaap-worker-1029053612.testnet/kaap-sealed",
-    "signingKey": "ed25519:4gaYx4kPxaNDc5grjrucuJfxV97gNiAr8TuCwUAuonuN",
-    "attestedRunTx": "7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC",
-    "attestationUrl": "https://testnet-api.outlayer.ai/attestations/by-tx/7HvniWe5JKgqARsiWW8onQpSw1rPcHWiNG4vLwBtekSC"
+    "project": "kaap-sealed-owner-1113041743.testnet/kaap-sealed",
+    "signingKey": "ed25519:8eiUXYidw2x7WWfVVmYkDcewi3aBzxKomMefsPPhaecF",
+    "attestedRunTx": "6Lm1adNQeQrm75QBoWcEmAaG1dskrajEUCQCisatU12L",
+    "attestationUrl": "https://testnet-api.outlayer.ai/attestations/by-tx/6Lm1adNQeQrm75QBoWcEmAaG1dskrajEUCQCisatU12L"
   },
   "demoText": {
-    "dao": "kaap-dao-1111072928.testnet",
-    "proposalId": 7,
-    "message": "{\"signer_id\":\"kaap-dao-1111072928.testnet\",\"deadline\":\"2026-11-19T05:47:23.917Z\",\"intents\":[{\"intent\":\"add_public_key\",\"public_key\":\"ed25519:5ASfrukKB4z2oA1bUfQUD5xSc5vuzArLJydBhBTmFNzM\"}]}",
-    "nonce": "d6+zmX7K5ICgx3PI/RLOM5SyCdvLRJR+ZuV8/cE/K8M=",
+    "dao": "kaap-dao-1113045321.testnet",
+    "proposalId": 8,
+    "message": "{\"signer_id\":\"kaap-dao-1113045321.testnet\",\"deadline\":\"2026-11-20T05:16:56.228Z\",\"intents\":[{\"intent\":\"add_public_key\",\"public_key\":\"ed25519:EnK3kjYg6KNMwnK2mWvcUv9ccsKdhzuGDQfYa8qFjGrf\"}]}",
+    "nonce": "nh9VpT05GlFoojdhG3La3WnB0YaMjo7WL9IQ4lrNEbE=",
     "recipient": "intents.near",
     "standard": "nep413"
   },
@@ -44,16 +44,16 @@
     "proposalId": 1,
     "said": "Monthly salary payment to alice...",
     "paid": "a1ice...",
-    "seconds": 24.1,
-    "filedTx": "GaQuPteeaiPAqjow7ezLC7f2HqxbBHv53erE1N4C7g9A",
-    "sealedTx": "az5yNU7xixz2Qwrt8g4pNhygJTpceRqHJTK2zv7NF3J",
-    "recordedTx": "2T8fbLoy9gkFkbLThTMPsbRCf4RckfZVMVBvwvfqePmy",
-    "vetoTx": "AWWzynnmDdCYaKeSJA66Kr3h7DxW6ni9Sh6uHtH6v4M9"
+    "seconds": 25.5,
+    "filedTx": "583jbKshP4USdjmBRnX9wrRjFYg9NvTURdBuWqAo1q5a",
+    "sealedTx": "6Lm1adNQeQrm75QBoWcEmAaG1dskrajEUCQCisatU12L",
+    "recordedTx": "CNqvoFb8Ly3txbrYMuXyRWwPM6Enp1PYr6oGUcVjcS83",
+    "vetoTx": "66WDukXKMVFbeyZ6aAbsTMgZDwCAwXFNSSagM9MkQagz"
   },
   "tryIt": {
     "account": "kaap-member-1029064001.testnet",
-    "publicKey": "ed25519:9q7PNx97fjXi1wBbXtvgNdPwy4WtcixW6rfSAFc96X51",
-    "addKeyTx": "24uPirozvafA72gHjXtmzp6PrgwaAKmVhEYywjgbrm9H",
+    "publicKey": "ed25519:6bCYiH3unY424THRo1qqruVVqNEuwYWteQv5zS8zE5xz",
+    "addKeyTx": "5jkfNA1EW8SD1JzMozHWYqTXMmwt86qGvNym9aby4Q3u",
     "description": "Monthly salary payment to alice.tryit.kaap-member-1029064001.testnet.",
     "kind": {
       "Transfer": {
@@ -66,7 +66,7 @@
   },
   "watcher": {
     "url": "https://watcher-production-2350aa2a.up.railway.app",
-    "since": "12 Nov 2026",
+    "since": "13 Nov 2026 for this deployment; on this host since 12 Nov 2026",
     "host": "Railway"
   },
   "evaluation": {
