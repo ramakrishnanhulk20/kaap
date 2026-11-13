@@ -205,3 +205,10 @@ test('a list of builds named outside packages/sealed is refused before it is rea
   writeFileSync(join(root, 'deployments', 'testnet.json'), JSON.stringify({ ...base, sealed: { ...(TODAY['sealed'] as object), builds: 'packages/sealed/missing.json' } }));
   assert.throws(() => loadDeployment(root, 'testnet'), /names a list of sealed builds, packages\/sealed\/missing\.json, that is not in this clone$/);
 });
+
+test('the records kept with the fixtures are the clone\'s own earlier records, byte for byte', () => {
+  const same = (frozen: string, live: string) => assert.equal(readFileSync(join(RECORDED_ROOT, frozen), 'utf8'), readFileSync(join(REPO_ROOT, live), 'utf8'), `${frozen} is not ${live}`);
+  same('deployments/testnet.json', 'deployments/testnet-2026-11-11.json');
+  same('deployments/testnet-2026-10-29.json', 'deployments/testnet-2026-10-29.json');
+  same('packages/sealed/testnet-2026-10-29.json', 'packages/sealed/testnet-2026-10-29.json');
+});
