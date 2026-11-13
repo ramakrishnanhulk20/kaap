@@ -97,6 +97,9 @@ const ENGINE = [path.join(process.cwd(), 'engine'), path.join(process.cwd(), 'pa
   existsSync(path.join(dir, 'kaap-check.mjs')),
 ) ?? path.join(process.cwd(), 'engine');
 
+/** Whether the engine folder is where this process looks for it. */
+export const ENGINE_FOUND = existsSync(path.join(ENGINE, 'kaap-check.mjs'));
+
 let cli: Promise<Cli> | null = null;
 
 async function loadCli(): Promise<Cli> {

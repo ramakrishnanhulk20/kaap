@@ -9,7 +9,7 @@
 
 import { NextResponse } from 'next/server';
 import { callerOf } from '@/lib/caller';
-import { type CheckAnswer, type CheckAsk, CheckRefused, type SuppliedText, runCheck } from '@/lib/kaapCheck';
+import { type CheckAnswer, type CheckAsk, CheckRefused, ENGINE_FOUND, type SuppliedText, runCheck } from '@/lib/kaapCheck';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -95,7 +95,12 @@ async function answer(request: Request, ask: CheckAsk): Promise<NextResponse> {
       return refuse(status, error.reason, error.message);
     }
     console.error('check failed', error);
-    return refuse(500, 'failed', 'The check could not run. Nothing was decided.');
+    const failed = refuse(500, 'failed', 'The check could not run. Nothing was decided.');
+    // For whoever runs the site: the kind of failure and whether the engine folder was found.
+    // Nothing of the request, the host or the error's own text goes out.
+    const kind = error instanceof Error && /^[A-Za-z]{1,40}$/.test(error.name) ? error.name : 'unknown';
+    failed.headers.set('x-kaap-failure', `${kind}; engine ${ENGINE_FOUND ? 'found' : 'missing'}`);
+    return failed;
   } finally {
     running -= 1;
   }
