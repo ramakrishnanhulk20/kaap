@@ -16,6 +16,8 @@ interface Status {
   txs: { run: string | null; veto: string | null; record: string | null };
   vetoWait: string | null;
   watcher: 'answered' | 'silent' | 'none';
+  runs: number;
+  judging: string | null;
 }
 
 type Phase =
@@ -27,6 +29,9 @@ type Phase =
 const POLL_MS = 3_000;
 /** After this long with no reject the page stops asking and says so. */
 const GIVE_UP_MS = 180_000;
+/** The same, once the watcher is known to be asking the sealed reader again: its host can take
+ *  minutes to answer when it is busy, and the watcher asks for as long as the request is open. */
+const SLOW_GIVE_UP_MS = 12 * 60_000;
 
 const dao = proof.treasury.account;
 const said = proof.tryIt?.description ?? '';
@@ -57,6 +62,7 @@ export default function TryIt() {
   const [stoppedAt, setStoppedAt] = useState<number | null>(null);
   const [gaveUp, setGaveUp] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
+  const slow = useRef(false);
 
   useEffect(() => {
     fetch('/api/demo/attack')
@@ -77,6 +83,8 @@ export default function TryIt() {
         const body = await (await fetch(`/api/demo/status?id=${watchingId}`)).json();
         if (!live || !body.ok) return;
         setStatus(body as Status);
+        // No verdict yet, and the watcher has asked more than once or says a run failed.
+        slow.current = body.verdict == null && (body.runs >= 2 || body.judging === 'failed');
         if (body.rejectedByGuard) setStoppedAt((at) => at ?? Date.now());
       } catch {
         // The next ask may get through. The clock below keeps running either way.
@@ -84,7 +92,7 @@ export default function TryIt() {
     };
     void ask();
     const poll = setInterval(() => {
-      if (Date.now() - pressedAt > GIVE_UP_MS) setGaveUp(true);
+      if (Date.now() - pressedAt > (slow.current ? SLOW_GIVE_UP_MS : GIVE_UP_MS)) setGaveUp(true);
       else void ask();
     }, POLL_MS);
     return () => {
@@ -104,6 +112,7 @@ export default function TryIt() {
     setStatus(null);
     setStoppedAt(null);
     setGaveUp(false);
+    slow.current = false;
     try {
       const res = await fetch('/api/demo/attack', { method: 'POST', headers: { 'x-kaap-demo': '1' } });
       const body = await res.json();
@@ -125,6 +134,7 @@ export default function TryIt() {
   const read = status?.verdict != null;
   const rejected = status?.rejectedByGuard === true;
   const recorded = status?.recorded === true;
+  const askingAgain = !read && status != null && (status.runs >= 2 || status.judging === 'failed');
   const stateOf = (done: boolean, before: boolean): 'done' | 'now' | 'wait' => (done ? 'done' : before && !gaveUp ? 'now' : 'wait');
 
   return (
@@ -199,6 +209,8 @@ export default function TryIt() {
                       </a>
                     ) : read ? (
                       'Done.'
+                    ) : askingAgain ? (
+                      "The sealed reader's host did not answer in time. Kaap's watcher is asking again, which can take a few minutes when that host is busy."
                     ) : (
                       'The watcher has to notice it first. The read usually takes 20 to 60 seconds.'
                     )}
@@ -273,8 +285,9 @@ export default function TryIt() {
             ) : null}
             {gaveUp && !rejected ? (
               <p className="kc-try-end" role="alert">
-                <b>No reject after three minutes.</b> The request is still open and nothing was approved: only the
+                <b>No reject after {askingAgain ? 'twelve' : 'three'} minutes.</b> The request is still open and nothing was approved: only the
                 treasury&apos;s own approvers could do that.{' '}
+                {askingAgain ? "The sealed reader's host has not answered Kaap's watcher, which keeps asking while the request is open. " : ''}
                 {status?.watcher === 'silent' ? "Kaap's watcher did not answer when asked. " : ''}
                 <Link href={STOPPED_THEFT}>The recorded run</Link> shows the same steps.
               </p>

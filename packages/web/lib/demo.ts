@@ -44,6 +44,8 @@ const FINDING = /^[A-Z_]{3,40}$/;
 const TX_HASH = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 /** The watcher's words for a vote that has not landed: it is waiting, was refused, or gave up. */
 const VETO_WAITS = new Set(['sent', 'no_outcome', 'held', 'refused', 'not_open', 'capped']);
+/** The watcher's words for where a request's judgement stands. */
+const JUDGING = new Set(['queued', 'judging', 'judged', 'failed', 'capped', 'skipped']);
 
 const tryIt = proof.tryIt as { account: string; publicKey: string; description: string; kind: { Transfer: { receiver_id: string } } } | null;
 const watcherUrl = (proof as { watcher?: { url: string } | null }).watcher?.url ?? process.env.KAAP_WATCHER_URL ?? null;
@@ -206,6 +208,11 @@ export interface DemoStatus {
   vetoWait: string | null;
   /** Whether Kaap's watcher answered when asked for its transactions. */
   watcher: 'answered' | 'silent' | 'none';
+  /** How many sealed runs the watcher has started for this request. More than one means the
+   *  sealed reader's host did not answer in time and the watcher asked again. */
+  runs: number;
+  /** The watcher's own word for where the judgement stands, such as `judging` or `failed`. */
+  judging: string | null;
 }
 
 interface Verdict {
@@ -229,7 +236,7 @@ function asVerdict(raw: unknown, findingsAre: 'list' | 'either'): Verdict | null
   };
 }
 
-async function fromWatcher(id: number): Promise<{ verdict: Verdict | null; txs: DemoStatus['txs']; vetoWait: string | null } | null> {
+async function fromWatcher(id: number): Promise<{ verdict: Verdict | null; txs: DemoStatus['txs']; vetoWait: string | null; runs: number; judging: string | null } | null> {
   if (watcherUrl === null) return null;
   try {
     const url = new URL('/proposal', watcherUrl);
@@ -237,16 +244,19 @@ async function fromWatcher(id: number): Promise<{ verdict: Verdict | null; txs: 
     url.searchParams.set('id', String(id));
     const res = await fetch(url, { signal: AbortSignal.timeout(WATCHER_TIMEOUT_MS), cache: 'no-store' });
     const body: unknown = await res.json();
-    if (!res.ok || !isRecord(body) || body.dao !== dao || body.proposal_id !== id) return res.status === 404 ? { verdict: null, txs: { run: null, veto: null, record: null }, vetoWait: null } : null;
+    if (!res.ok || !isRecord(body) || body.dao !== dao || body.proposal_id !== id) return res.status === 404 ? { verdict: null, txs: { run: null, veto: null, record: null }, vetoWait: null, runs: 0, judging: null } : null;
     const txs: DemoStatus['txs'] = { run: null, veto: null, record: null };
+    let runs = 0;
     if (Array.isArray(body.txs)) {
       for (const entry of body.txs) {
         if (!isRecord(entry) || typeof entry.tx !== 'string' || !TX_HASH.test(entry.tx)) continue;
         // The newest transaction of each kind wins: a run asked again replaces the first.
         if (entry.kind === 'run' || entry.kind === 'veto' || entry.kind === 'record') txs[entry.kind] = entry.tx;
+        if (entry.kind === 'run') runs += 1;
       }
     }
-    return { verdict: asVerdict(body.verdict, 'list'), txs, vetoWait: typeof body.veto === 'string' && VETO_WAITS.has(body.veto) ? body.veto : null };
+    const judging = typeof body.state === 'string' && JUDGING.has(body.state) ? body.state : null;
+    return { verdict: asVerdict(body.verdict, 'list'), txs, vetoWait: typeof body.veto === 'string' && VETO_WAITS.has(body.veto) ? body.veto : null, runs: Math.min(runs, 99), judging };
   } catch {
     return null;
   }
@@ -263,7 +273,7 @@ export async function demoStatus(id: number): Promise<DemoStatus> {
   const none = { run: null, veto: null, record: null };
   const watcherSays: DemoStatus['watcher'] = watcherUrl === null ? 'none' : watcher === null ? 'silent' : 'answered';
   // Only the demo's own filings are reported on. Any other request is read on the check screen.
-  if (found === null) return { id, found: false, status: null, submittedMs: null, rejectedByGuard: false, verdict: null, recorded: false, txs: none, vetoWait: null, watcher: watcherSays };
+  if (found === null) return { id, found: false, status: null, submittedMs: null, rejectedByGuard: false, verdict: null, recorded: false, txs: none, vetoWait: null, watcher: watcherSays, runs: 0, judging: null };
   const txs = watcher?.txs ?? none;
   const recorded = asVerdict(record, 'list');
   return {
@@ -278,5 +288,7 @@ export async function demoStatus(id: number): Promise<DemoStatus> {
     txs,
     vetoWait: found.status === 'InProgress' ? (watcher?.vetoWait ?? null) : null,
     watcher: watcherSays,
+    runs: watcher?.runs ?? 0,
+    judging: watcher?.judging ?? null,
   };
 }
