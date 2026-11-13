@@ -4,7 +4,7 @@ Kaap comes from the Tamil word kaappu (காப்பு), protection: what it 
 
 It only works on NEAR. Sputnik DAO lets a role hold the reject vote and nothing else, OutLayer signs each verdict inside sealed hardware, NEAR AI's models prove which model answered, and Chain Signatures' sign-a-hash requests are where treasuries sign blind today.
 
-[Live site](https://kaap-snowy.vercel.app) · [Proof on testnet](PROOF.md) · [Architecture](ARCHITECTURE.md) · [Threat model](docs/security/threat-model.md) · [Evaluation](packages/sealed/AI-EVAL.md) · [Docs](packages/web/content/docs/index.mdx)
+[Live site](https://kaap-snowy.vercel.app) · [Demo video](https://youtu.be/U1fevo2Yui8) · [Proof on testnet](PROOF.md) · [Architecture](ARCHITECTURE.md) · [Threat model](docs/security/threat-model.md) · [Evaluation](packages/sealed/AI-EVAL.md) · [Docs](packages/web/content/docs/index.mdx)
 
 Built at NEAR HACKATHON, November 2026. Lead track: social (Social Money). Kaap is something a treasury does with its own Sputnik DAO, not a new multisig: the members vote in one more member whose role can only reject, and can vote it out again. Also entered in: security, privacy, open.
 
