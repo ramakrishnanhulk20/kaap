@@ -52,12 +52,15 @@ export const MAX_PRICE_LIST_BYTES = 1024 * 1024;
 export const MAX_SHOWN_TEXT = 2_000;
 
 /** How far `kaap verify` looks for the sealed run of a verdict, in blocks before and after the
- *  block the verdict was read at. Every run measured so far landed 4 to 6 blocks before that
- *  block (packages/sealed/RUNS.md, PROOF.md), and a run is given at most 180 seconds, about
- *  300 blocks, so 60 back covers a slow pickup without reading half an hour of chain. The verdict
- *  is read at the final block the job saw, which can trail the request by a block or two, hence
- *  the look ahead. A run outside the window is reported as not found, never guessed. */
-export const RUN_SCAN_BACK = 60;
+ *  block the verdict was read at. A run that is picked up at once lands 4 to 6 blocks before that
+ *  block (packages/sealed/RUNS.md), but OutLayer can take most of a run's time before the program
+ *  reads the chain: on 13 Nov 2026 runs started about 160 blocks before the block they read at. A
+ *  run is given at most 180 seconds, about 300 blocks, so 320 back covers every run that can
+ *  have signed the verdict. The scan goes nearest first and stops at the run, so a prompt run
+ *  still costs a handful of reads. The verdict is read at the final block the job saw, which can
+ *  trail the request by a block or two, hence the look ahead. A run outside the window is
+ *  reported as not found, never guessed. */
+export const RUN_SCAN_BACK = 320;
 export const RUN_SCAN_AHEAD = 4;
 
 /** An OutLayer attestation is about 7.5 KiB, most of it the 5 KB Intel quote. */
