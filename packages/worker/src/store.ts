@@ -367,6 +367,12 @@ export class Store {
     this.db.prepare('UPDATE judged SET veto_state = ?, updated_ms = ? WHERE network = ? AND dao = ? AND proposal_id = ?').run(state, this.#now(), network, dao, id);
   }
 
+  /** Marks a kept verdict as one the guard's rule now lets veto: its treasury turned on the
+   *  strict setting after the verdict was stored. */
+  setVetoable(network: string, dao: string, id: number): void {
+    this.db.prepare('UPDATE judged SET vetoable = 1, updated_ms = ? WHERE network = ? AND dao = ? AND proposal_id = ?').run(this.#now(), network, dao, id);
+  }
+
   setRecordState(network: string, dao: string, id: number, state: RecordState): void {
     this.db.prepare('UPDATE judged SET record_state = ?, updated_ms = ? WHERE network = ? AND dao = ? AND proposal_id = ?').run(state, this.#now(), network, dao, id);
   }

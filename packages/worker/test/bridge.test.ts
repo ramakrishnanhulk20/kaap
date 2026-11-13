@@ -29,9 +29,9 @@ test("the 29 Oct attack verdict's kind, policy and receivers hashes recompute fr
 
 test('a verdict decodes and encodes back to the same bytes, and anything else is refused', () => {
   const { b64, v } = okRun();
-  const { verdict_hash, signed_b64, vetoable, ...fields } = v;
+  const { verdict_hash, signed_b64, vetoable, vetoable_strict, ...fields } = v;
   assert.equal(bridge.encodeVerdict(fields), b64);
-  assert.ok(verdict_hash.length === 64 && signed_b64.length > b64.length && vetoable);
+  assert.ok(verdict_hash.length === 64 && signed_b64.length > b64.length && vetoable && vetoable_strict);
   const bytes = Buffer.from(b64, 'base64');
   assert.throws(() => bridge.decodeVerdict(Buffer.concat([bytes, Buffer.from([0])])), /not a kaap-core Verdict/, 'trailing bytes');
   assert.throws(() => bridge.decodeVerdict(bytes.subarray(0, bytes.length - 1)), /not a kaap-core Verdict/, 'cut short');

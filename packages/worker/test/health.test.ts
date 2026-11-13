@@ -160,7 +160,7 @@ test('a signal for proposal 1 stays while proposal 2 gets a verdict', async () =
 
 test('balances below 20 stopped attacks or the storage of 20 vetoes raise guard degraded for every DAO', async () => {
   const s = await started();
-  assert.deepEqual([formatNear(WORKER_FLOOR), formatNear(GUARD_FLOOR)], ['2.060000', '0.016800'], 'run 0.05 + record 0.023 + veto 0.03, times 20; and 20 times 84 bytes');
+  assert.deepEqual([formatNear(WORKER_FLOOR), formatNear(GUARD_FLOOR)], ['3.460000', '0.016800'], 'run 0.05 + record 0.023 + veto 0.1, times 20; and 20 times 84 bytes');
   bothSet([s.a, s.b], (p) => p.balances.set(WORKER, WORKER_FLOOR - 1n + 100n * 10n ** 19n));
   s.b.balances.set(GUARD, GUARD_FLOOR - 1n + 100n * 10n ** 19n);
   await s.worker.checkBalances();
@@ -171,7 +171,7 @@ test('balances below 20 stopped attacks or the storage of 20 vetoes raise guard 
   for (const texts of [chat, other]) assert.match(texts[0]!, /^Kaap guard update for every DAO Kaap watches:\nDegraded: Kaap's worker account holds less NEAR/, 'every chat hears it once');
 
   bothSet([s.a, s.b], (p) => {
-    p.balances.set(WORKER, 3n * NEAR);
+    p.balances.set(WORKER, 5n * NEAR);
     p.balances.set(GUARD, NEAR);
   });
   await s.worker.checkBalances();

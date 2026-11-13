@@ -101,7 +101,7 @@ test('the veto carries the kind exactly as get_proposal returned it, and a cast 
   assert.equal(got.kind, 'cast');
   const sent = s.chain.calls('veto')[0]!;
   assert.equal(sent.receiverId, GUARD);
-  assert.deepEqual([sent.gas, sent.deposit], [300n * 10n ** 12n, 0n]);
+  assert.deepEqual([sent.gas, sent.deposit], [1_000n * 10n ** 12n, 0n]);
   assert.equal(sent.args.kind_json, kind);
   assert.equal(sent.args.verdict, signed.verdictB64);
   assert.equal(s.store.judged(NETWORK, DAO, 2)?.veto_state, 'cast');
@@ -238,8 +238,8 @@ test('every verdict is recorded with 0.02 NEAR attached, and the storage kept is
 });
 
 test('a veto and a record started at once against a NEAR cap with room for one get exactly one through, whichever checks first (C29)', async () => {
-  // The veto reserves 0.03 NEAR and the record 0.023: either fits under 0.04, both do not.
-  const cap = 4n * 10n ** 22n;
+  // The veto reserves 0.1 NEAR and the record 0.023: either fits under 0.11, both do not.
+  const cap = 11n * 10n ** 22n;
   const until = async (done: () => boolean) => {
     for (let i = 0; i < 1_000 && !done(); i++) await new Promise((resolve) => setTimeout(resolve, 1));
   };

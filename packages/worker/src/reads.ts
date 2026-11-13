@@ -11,7 +11,7 @@ import { ACCOUNT_ID } from './config.ts';
 import { STORAGE_PRICE_PER_BYTE } from './near.ts';
 import type { At, ViewProvider, ViewResult } from './rpc.ts';
 
-export type Item = 'block' | 'counter' | 'get_proposal' | 'get_proposals' | 'get_policy' | 'code_hash' | 'enrolled_daos';
+export type Item = 'block' | 'counter' | 'get_proposal' | 'get_proposals' | 'get_policy' | 'code_hash' | 'enrolled_daos' | 'veto_unreadable' | 'pending_key';
 
 export type Problem = { kind: 'disagree'; item: Item; detail?: string } | { kind: 'failed'; item: Item; provider: string; detail: string };
 
@@ -132,6 +132,40 @@ export class Reads {
       return { kind: 'failed', item: 'block', provider: this.primary.name, detail: errorText(e) };
     }
     return this.#codeHashAt(account, head.height, head.hash);
+  }
+
+  /** One view of the guard at final on both providers, used only when the two answers are the
+   *  same (C22). `absent` when both say the guard has no such method: a guard built before the
+   *  method existed, which is an answer, not a failed read. */
+  async #guardView(guard: string, method: 'veto_unreadable' | 'pending_key', args: object): Promise<{ value: unknown } | 'absent' | Problem> {
+    const read = async (p: ViewProvider) => JSON.parse((await p.callFunction(guard, method, args, { finality: 'final' })).text) as unknown;
+    const [a, b] = await Promise.allSettled([read(this.primary), read(this.secondary)]);
+    const missing = (r: PromiseSettledResult<unknown>) => r.status === 'rejected' && /MethodNotFound/.test(String((r.reason as Error | undefined)?.message ?? r.reason));
+    if (missing(a) && missing(b)) return 'absent';
+    if (a.status !== 'fulfilled') return { kind: 'failed', item: method, provider: this.primary.name, detail: errorText(a.reason) };
+    if (b.status !== 'fulfilled') return { kind: 'failed', item: method, provider: this.secondary.name, detail: errorText(b.reason) };
+    if (JSON.stringify(a.value) !== JSON.stringify(b.value)) return { kind: 'disagree', item: method };
+    return { value: a.value };
+  }
+
+  /** Whether `dao` has the guard reject every request Kaap cannot read (its `veto_unreadable`
+   *  setting). Anything but a plain true or false from both providers is a problem, never a yes. */
+  async strictMode(guard: string, dao: string): Promise<boolean | 'absent' | Problem> {
+    const r = await this.#guardView(guard, 'veto_unreadable', { dao });
+    if (r === 'absent' || 'kind' in r) return r;
+    return typeof r.value === 'boolean' ? r.value : { kind: 'failed', item: 'veto_unreadable', provider: this.primary.name, detail: 'the answer is not true or false' };
+  }
+
+  /** The key change the guard's owner has announced and not yet applied or cancelled, or null. */
+  async pendingKey(guard: string): Promise<{ key: string; effectiveAtMs: number } | null | 'absent' | Problem> {
+    const r = await this.#guardView(guard, 'pending_key', {});
+    if (r === 'absent' || 'kind' in r) return r;
+    if (r.value === null) return null;
+    const v = r.value as { key?: unknown; effective_at_ms?: unknown };
+    if (typeof v !== 'object' || typeof v.key !== 'string' || !/^ed25519:[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v.key) || typeof v.effective_at_ms !== 'number' || !Number.isSafeInteger(v.effective_at_ms) || v.effective_at_ms < 0) {
+      return { kind: 'failed', item: 'pending_key', provider: this.primary.name, detail: 'the answer is not a key and a time' };
+    }
+    return { key: v.key, effectiveAtMs: v.effective_at_ms };
   }
 
   /** What `dao`'s policy gives `guard`, read at one final block on both providers, whose two

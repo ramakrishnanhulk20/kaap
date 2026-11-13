@@ -33,9 +33,10 @@ const verdictSchema = z.strictObject({
   verdict_hash: hash,
   signed_b64: z.string(),
   vetoable: z.boolean(),
+  vetoable_strict: z.boolean(),
 });
 export type DecodedVerdict = z.output<typeof verdictSchema>;
-export type VerdictFields = Omit<DecodedVerdict, 'verdict_hash' | 'signed_b64' | 'vetoable'>;
+export type VerdictFields = Omit<DecodedVerdict, 'verdict_hash' | 'signed_b64' | 'vetoable' | 'vetoable_strict'>;
 
 const proposalSchema = z.strictObject({
   id: z.number().int().nonnegative(),

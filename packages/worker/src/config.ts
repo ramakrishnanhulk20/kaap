@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 
-import { DEFAULT_MAX_WATCHED_DAOS, MAX_IDS_PER_PASS } from './limits.ts';
+import { DEFAULT_MAX_WATCHED_DAOS, MAX_IDS_PER_PASS, MAX_VERDICT_TTL_MS } from './limits.ts';
 import { parseNear } from './near.ts';
 
 // NEAR's own account id rule (nearcore `AccountId::validate`): 2 to 64 characters, lowercase
@@ -43,7 +43,7 @@ const schema = z
     KAAP_POLL_MS: count(250, 60_000).default(1_000),
     KAAP_WATCH_MS: count(1_000, 600_000).default(15_000),
     KAAP_ENROLLED_MS: count(5_000, 3_600_000).default(60_000),
-    KAAP_VERDICT_TTL_MS: count(60_000, 3_600_000).default(600_000),
+    KAAP_VERDICT_TTL_MS: z.coerce.number().int().min(60_000).max(MAX_VERDICT_TTL_MS, `at most ${MAX_VERDICT_TTL_MS}, the longest expiry the sealed program signs`).default(600_000),
     KAAP_RUN_WINDOW_BLOCKS: count(50, 2_000).default(220),
     KAAP_HOLD_ALERT_MS: count(1_000, 600_000).default(30_000),
     // How far back the first look at a treasury goes. No more than one pass takes up, so the

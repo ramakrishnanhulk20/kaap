@@ -11,6 +11,9 @@ export const MAX_COUNTER_JUMP = 10_000;
 
 /** Treasuries watched at once unless KAAP_MAX_WATCHED_DAOS says otherwise. */
 export const DEFAULT_MAX_WATCHED_DAOS = 200;
+/** The longest expiry the sealed program signs (its MAX_EXPIRES_IN_MS). A run that asks for more
+ *  is refused there, so a larger setting stops the worker at start. */
+export const MAX_VERDICT_TTL_MS = 900_000;
 
 /** Sputnik's own default for how long a proposal stays open, used for a DAO whose policy states
  *  no period the worker could read: seven days. */

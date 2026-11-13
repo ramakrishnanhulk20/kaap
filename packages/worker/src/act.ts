@@ -14,8 +14,10 @@ import type { ViewProvider } from './rpc.ts';
 import type { JudgedRow, Store, VetoState } from './store.ts';
 import type { SubmitResult, Submitter } from './submit.ts';
 
-/** The guard's NatSpec asks for 300 Tgas: big kinds need it and what is not burnt comes back. */
-export const VETO_GAS = 300n * TGAS;
+/** The guard refuses a veto that attaches under 900 Tgas (ERR_NOT_ENOUGH_GAS), since a large kind
+ *  needs that much to reach the DAO, and one transaction carries at most 1,000. Every veto attaches
+ *  the whole 1,000: what is not burnt comes back, and the caps reserve it all, 0.1 NEAR a veto. */
+export const VETO_GAS = 1_000n * TGAS;
 export const RECORD_GAS = 30n * TGAS;
 /** kaap-registry's README: 0.02 NEAR always covers a record; the registry refunds the rest. */
 export const RECORD_DEPOSIT = 20n * 10n ** 21n;
@@ -63,10 +65,16 @@ export type Decision =
   | { act: 'none'; why: 'not_open'; status: string }
   | { act: 'rejudge'; why: 'stale_policy' | 'stale_receivers' | 'kind_changed' | 'expired' };
 
-/** The veto decision for `verdict` against the state read at final just before sending. The
- *  veto rule itself is kaap-core's, mirrored from the guard inside the bridge (`vetoable`). */
-export function decide(verdict: DecodedVerdict, live: LiveProposal, now: number): Decision {
-  if (!verdict.vetoable) return { act: 'none', why: 'not_vetoable' };
+/** Whether the guard's rule lets `verdict` veto at a treasury whose strict setting is `strict`:
+ *  the rule is the guard's own, mirrored inside the bridge for both settings. */
+export function vetoes(verdict: Pick<DecodedVerdict, 'vetoable' | 'vetoable_strict'>, strict: boolean): boolean {
+  return strict ? verdict.vetoable_strict : verdict.vetoable;
+}
+
+/** The veto decision for `verdict` against the state read at final just before sending, at a
+ *  treasury whose strict setting is `strict`. */
+export function decide(verdict: DecodedVerdict, live: LiveProposal, now: number, strict = false): Decision {
+  if (!vetoes(verdict, strict)) return { act: 'none', why: 'not_vetoable' };
   if (live.status !== 'InProgress') return { act: 'none', why: 'not_open', status: live.status };
   if (live.kindHash !== verdict.kind_hash) return { act: 'rejudge', why: 'kind_changed' };
   if (live.policyHash !== verdict.policy_hash) return { act: 'rejudge', why: 'stale_policy' };
@@ -132,15 +140,17 @@ export class Actor {
     return last;
   }
 
-  /** Decides on and, when the rule says so, sends the veto for one verdict. */
-  async veto(dao: string, id: number, signed: Signed): Promise<VetoOutcome> {
+  /** Decides on and, when the rule says so, sends the veto for one verdict. `strict` is the
+   *  treasury's setting in the guard as the worker last read it on both providers; the guard
+   *  reads its own copy when the veto arrives, so a stale `true` costs one refused call. */
+  async veto(dao: string, id: number, signed: Signed, strict = false): Promise<VetoOutcome> {
     const { verdict } = signed;
     const before = this.#store.judged(this.#s.network, dao, id);
     const key = `veto:${this.#s.network}:${dao}:${id}:${verdict.verdict_hash}`;
     const proposal = { dao, proposal: id };
-    if (!verdict.vetoable) {
+    if (!vetoes(verdict, strict)) {
       this.#store.setVetoState(this.#s.network, dao, id, 'not_needed');
-      this.#log.info('no_veto', { dao, proposal_id: id, why: 'the guard rule does not allow a veto', risk: verdict.risk, floor: verdict.floor, ai_status: verdict.ai_status });
+      this.#log.info('no_veto', { dao, proposal_id: id, why: 'the guard rule does not allow a veto', risk: verdict.risk, floor: verdict.floor, ai_status: verdict.ai_status, strict });
       // The current verdict asks for no veto, so what an earlier verdict's veto raised is moot.
       for (const signal of VETO_SIGNALS) this.#health.clear(signal, proposal);
       return { kind: 'not_needed', why: 'not_vetoable' };
@@ -162,7 +172,7 @@ export class Actor {
       return { kind: 'held', why: `${live.kind}: ${live.item}` };
     }
     this.#store.setProposalStatus(this.#s.network, dao, id, live.status);
-    const d = decide(verdict, live, this.#now());
+    const d = decide(verdict, live, this.#now(), strict);
     if (d.act === 'none') {
       this.#store.setVetoState(this.#s.network, dao, id, d.why === 'not_open' ? 'not_open' : 'not_needed');
       this.#log.info('no_veto', { dao, proposal_id: id, why: d.why, status: live.status });

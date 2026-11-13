@@ -3,7 +3,7 @@
 // hands it, so a quiet worker is a disarmed guard; everything that can stop it is logged loudly.
 // A member's sealed text (POST /texts) is judged here too, one proposal at a time like the rest.
 
-import type { Actor, Signed, VetoOutcome } from './act.ts';
+import { vetoes, type Actor, type Signed, type VetoOutcome } from './act.ts';
 import type { AlertSink } from './alerts.ts';
 import { Bridge, type DecodedVerdict } from './bridge.ts';
 import { PER_STOPPED_ATTACK } from './caps.ts';
@@ -85,6 +85,10 @@ export class Worker {
   readonly #notWatched = new Map<string, 'not_a_sputnik_dao'>();
   /** Treasuries the worker stopped watching. Nothing queued for one runs until it is back. */
   readonly #letGo = new Set<string>();
+  /** Watched treasuries whose strict setting both providers last read as on (C8). */
+  readonly #strict = new Set<string>();
+  /** The pending key change last seen in the guard, as `key@time`, so one announcement is one alert. */
+  #pendingKey: string | null = null;
   /** How long each treasury's policy lets a proposal stay open, from the policy that armed it. */
   readonly #periodMs = new Map<string, number>();
   /** A re-judge pass in progress per DAO: whether the DAO still stands once it is over. */
@@ -334,6 +338,33 @@ export class Worker {
     }
     if (before === null) this.#d.log.info('guard_key', { guard: this.#s.guard, accepted_key: a.value });
     this.#d.acceptedKey.value = a.value;
+    await this.#refreshPendingKey();
+  }
+
+  /** A change of the guard's key that its owner has announced: members of every treasury hear
+   *  at once, since the new key takes over a day later unless the owner cancels (C19). The worker
+   *  never applies a change itself. One announcement is one alert; another key, or the same key
+   *  announced again with a new time, is a new one. */
+  async #refreshPendingKey(): Promise<void> {
+    const { health, log, reads } = this.#d;
+    const pending = await reads.pendingKey(this.#s.guard);
+    if (pending === 'absent') return;
+    if (pending === null) {
+      if (this.#pendingKey !== null) log.info('pending_key_gone', { guard: this.#s.guard });
+      this.#pendingKey = null;
+      health.clear('accepted_key_change_pending', ALL);
+      return;
+    }
+    if ('kind' in pending) {
+      log.warn('pending_key_unread', { problem: pending });
+      return;
+    }
+    const seen = `${pending.key}@${pending.effectiveAtMs}`;
+    if (seen === this.#pendingKey) return;
+    if (this.#pendingKey !== null) health.clear('accepted_key_change_pending', ALL);
+    this.#pendingKey = seen;
+    log.error('accepted_key_change_pending', { guard: this.#s.guard, new_key: pending.key, effective_at_ms: pending.effectiveAtMs, effective_at: new Date(pending.effectiveAtMs).toISOString() });
+    health.raise('accepted_key_change_pending', ALL, { guard: this.#s.guard, new_key: pending.key, effective_at_ms: pending.effectiveAtMs });
   }
 
   /** Takes up the accounts the guard lists that are treasuries Kaap can protect, and lets go of
@@ -381,6 +412,55 @@ export class Worker {
     }
     if (waiting > 0) health.raise('watch_limit_reached', ALL, { limit, waiting });
     else if (complete) health.clear('watch_limit_reached', ALL);
+    await this.#refreshModes();
+  }
+
+  /** Reads each watched treasury's strict setting from the guard (C8). Only a plain yes or no
+   *  from both providers changes what the worker goes by; a failed or differing read keeps the
+   *  last agreed setting and says so, and never turns the setting on. The guard reads its own
+   *  copy when a veto arrives, so going by a stale yes costs one refused call, while dropping a
+   *  real yes on a bad read would let an unreadable request through. */
+  async #refreshModes(): Promise<void> {
+    const { health, log, reads } = this.#d;
+    for (const dao of [...this.#strict]) if (!this.#watchers.has(dao)) this.#strict.delete(dao);
+    for (const dao of [...this.#watchers.keys()]) {
+      const mode = await reads.strictMode(this.#s.guard, dao);
+      // A guard built before the setting existed has no strict treasury at all.
+      if (mode === 'absent') {
+        this.#strict.clear();
+        return;
+      }
+      if (typeof mode !== 'boolean') {
+        log.warn('guard_mode_unread', { dao, problem: mode });
+        health.raise('guard_mode_unread', dao, { problem: mode.kind });
+        continue;
+      }
+      health.clear('guard_mode_unread', dao);
+      if (mode === this.#strict.has(dao)) continue;
+      log.info('guard_mode', { dao, veto_unreadable: mode });
+      if (!mode) {
+        this.#strict.delete(dao);
+        continue;
+      }
+      this.#strict.add(dao);
+      this.#owedSinceStrict(dao);
+    }
+  }
+
+  /** A treasury that just turned the strict setting on is owed a veto on every open request whose
+   *  kept verdict says Kaap could not read it. Each is marked held, so the next pass sends it down
+   *  the same veto path as any held veto, with the live state checked again first. */
+  #owedSinceStrict(dao: string): void {
+    const { store, log } = this.#d;
+    const net = this.#s.network;
+    for (const row of store.open(net, dao)) {
+      if (row.state !== 'judged' || row.veto_state !== 'not_needed' || !row.verdict_b64 || !row.signature_b64) continue;
+      const kept = this.#stored(row);
+      if (!kept || kept.verdict.vetoable || !kept.verdict.vetoable_strict) continue;
+      store.setVetoable(net, dao, row.proposal_id);
+      store.setVetoState(net, dao, row.proposal_id, 'held');
+      log.info('veto_owed', { dao, proposal_id: row.proposal_id, why: 'the treasury now has unreadable requests rejected' });
+    }
   }
 
   async #addDao(dao: string): Promise<void> {
@@ -549,7 +629,7 @@ export class Worker {
    *  it up and the record that follows still goes out. */
   async #veto(dao: string, id: number, signed: Signed): Promise<VetoOutcome> {
     try {
-      return await this.#d.actor.veto(dao, id, signed);
+      return await this.#d.actor.veto(dao, id, signed, this.#strict.has(dao));
     } catch (e) {
       this.#d.log.error('veto_failed', { dao, proposal_id: id, error: e });
       this.#d.store.setVetoState(this.#s.network, dao, id, 'held');
@@ -579,6 +659,7 @@ export class Worker {
     this.#tries.delete(`${dao}#${id}#veto`);
     this.#tries.delete(`${dao}#${id}#record`);
     const v = j.verdict;
+    const strict = this.#strict.has(dao);
     store.setVerdict(net, dao, id, {
       verdict_b64: j.verdictB64,
       signature_b64: j.signatureB64,
@@ -592,10 +673,10 @@ export class Worker {
       receivers_hash: v.receivers_hash,
       block_height: v.block_height,
       expires_at_ms: v.expires_at_ms,
-      vetoable: v.vetoable ? 1 : 0,
+      vetoable: vetoes(v, strict) ? 1 : 0,
     });
     const signed = { verdict: v, verdictB64: j.verdictB64, signatureB64: j.signatureB64 };
-    const alerted = this.#alertVerdict(dao, id, v);
+    const alerted = this.#alertVerdict(dao, id, v, strict);
     const vetoed = await this.#veto(dao, id, signed);
     // The verdict's own alert goes first, so members read the news in the order it happened.
     if (vetoed.kind !== 'not_needed') await alerted;
@@ -611,6 +692,11 @@ export class Worker {
    *  asks for a new judgement instead. The same cause again sends nothing more. */
   #vetoFailed(dao: string, id: number, vetoed: VetoOutcome): void {
     if (vetoed.kind !== 'held' && vetoed.kind !== 'refused_by_dao' && vetoed.kind !== 'refused_by_guard') return;
+    // No later try can land this one: the guard cannot carry a kind this large in one transaction.
+    if (vetoed.kind === 'refused_by_guard' && vetoed.code === 'ERR_KIND_TOO_LARGE') {
+      this.#d.alerts?.vetoFailed(dao, id, 'too_large');
+      return;
+    }
     const state = this.#d.store.judged(this.#s.network, dao, id)?.veto_state;
     if (state === 'held' || state === 'capped' || state === 'no_outcome' || state === 'refused') this.#d.alerts?.vetoFailed(dao, id, state);
   }
@@ -663,7 +749,7 @@ export class Worker {
       if (store.judged(net, dao, id)) store.queueAgain(net, dao, id, 'text');
       else store.queueNew(net, dao, id, 'text', 'InProgress');
       const acting = this.#act(dao, id, 'text', j);
-      reply({ kind: 'judged', runTx: j.runTx, verdict: j.verdict, explanation: j.explanation, veto: j.verdict.vetoable ? 'started' : 'not_needed' });
+      reply({ kind: 'judged', runTx: j.runTx, verdict: j.verdict, explanation: j.explanation, veto: vetoes(j.verdict, this.#strict.has(dao)) ? 'started' : 'not_needed' });
       await acting;
     } catch (e) {
       // Only the error's name: a message could quote what it was handed.
@@ -676,12 +762,12 @@ export class Worker {
 
   /** Queues the members' alert for a verdict. The proposer is read beside the veto, never before
    *  it, since the veto races the approvers. */
-  #alertVerdict(dao: string, id: number, v: DecodedVerdict): Promise<void> {
+  #alertVerdict(dao: string, id: number, v: DecodedVerdict, strict: boolean): Promise<void> {
     const alerts = this.#d.alerts;
     if (!alerts) return Promise.resolve();
     return this.#d.reads
       .proposer(dao, id)
-      .then((proposer) => alerts.verdict(dao, id, v, proposer))
+      .then((proposer) => alerts.verdict(dao, id, { risk: v.risk, findings: v.findings, verdict_hash: v.verdict_hash, vetoable: vetoes(v, strict), unreadable: strict && !v.vetoable && v.vetoable_strict }, proposer))
       .catch((e: unknown) => this.#d.log.error('alert_failed', { dao, proposal_id: id, error: e }));
   }
 

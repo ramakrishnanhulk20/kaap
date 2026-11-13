@@ -56,6 +56,7 @@ const FAILED_AS = {
   capped: 'Kaap reached a daily spending limit. It sends the vote once the limit has room.',
   no_outcome: 'Its vote was sent but no result came back. Kaap keeps sending the same vote.',
   refused: 'The guard or the DAO refused its vote.',
+  too_large: 'The proposal is too large for one transaction to carry, so Kaap cannot veto it at all. Judge it yourselves before anyone approves it.',
 } as const;
 export type VetoFailure = keyof typeof FAILED_AS;
 
@@ -90,7 +91,8 @@ export function proposalLink(site: string | null, network: string, dao: string, 
 }
 
 export type AlertBody =
-  | { t: 'verdict'; id: number; risk: Risk; findings: string[]; vetoable: boolean; proposer: string | null }
+  /** `unreadable`: the veto is owed only because the treasury has every request Kaap cannot read rejected. */
+  | { t: 'verdict'; id: number; risk: Risk; findings: string[]; vetoable: boolean; proposer: string | null; unreadable?: boolean }
   | { t: 'veto_cast'; id: number; seconds: number | null }
   | { t: 'veto_failed'; id: number; why: VetoFailure }
   | { t: 'health'; change: 'raised' | 'cleared'; signal: Signal }
@@ -99,7 +101,7 @@ export type AlertBody =
 
 /** What the worker hands the alerts. */
 export interface AlertSink {
-  verdict(dao: string, id: number, v: { risk: string; findings: string[]; vetoable: boolean; verdict_hash: string }, proposer: string | null): void;
+  verdict(dao: string, id: number, v: { risk: string; findings: string[]; vetoable: boolean; verdict_hash: string; unreadable?: boolean }, proposer: string | null): void;
   vetoCast(dao: string, id: number, seconds: number | null): void;
   vetoFailed(dao: string, id: number, why: VetoFailure): void;
 }
@@ -114,7 +116,7 @@ function readBody(raw: string): AlertBody | null {
   }
   const id = typeof b.id === 'number' && Number.isSafeInteger(b.id) && b.id >= 0 ? b.id : null;
   if (b.t === 'verdict' && id !== null && RISKS.includes(b.risk as Risk)) {
-    return { t: 'verdict', id, risk: b.risk as Risk, findings: Array.isArray(b.findings) ? (b.findings as string[]) : [], vetoable: b.vetoable === true, proposer: typeof b.proposer === 'string' ? b.proposer : null };
+    return { t: 'verdict', id, risk: b.risk as Risk, findings: Array.isArray(b.findings) ? (b.findings as string[]) : [], vetoable: b.vetoable === true, proposer: typeof b.proposer === 'string' ? b.proposer : null, unreadable: b.unreadable === true };
   }
   if (b.t === 'veto_cast' && id !== null) return { t: 'veto_cast', id, seconds: typeof b.seconds === 'number' && Number.isFinite(b.seconds) ? b.seconds : null };
   if (b.t === 'veto_failed' && id !== null && typeof b.why === 'string' && Object.hasOwn(FAILED_AS, b.why)) return { t: 'veto_failed', id, why: b.why as VetoFailure };
@@ -125,7 +127,7 @@ function readBody(raw: string): AlertBody | null {
 
 /** Signals that leave the guard able to act elsewhere, so they are not "offline", but that a
  *  treasury's members hear at once all the same: at their treasury the guard can stop nothing. */
-const AT_ONCE: ReadonlySet<Signal> = new Set<Signal>(['guard_not_armed']);
+const AT_ONCE: ReadonlySet<Signal> = new Set<Signal>(['guard_not_armed', 'accepted_key_change_pending']);
 
 /** The message for one group of alerts: one urgent alert, or one batch for a DAO. */
 export function render(network: string, site: string | null, dao: string, bodies: AlertBody[]): string {
@@ -135,7 +137,12 @@ export function render(network: string, site: string | null, dao: string, bodies
   const first = bodies[0];
   if (!first) return '';
 
-  if (bodies.length === 1 && first.t === 'verdict' && first.risk === 'critical') {
+  if (bodies.length === 1 && first.t === 'verdict' && first.unreadable && first.vetoable && first.risk !== 'critical') {
+    lines.push(`Kaap: proposal ${first.id} of ${where}, filed by ${shownAccount(first.proposer)}, asks the treasury to sign a hash, and Kaap could not read what it signs.`);
+    lines.push('This treasury chose to have such requests rejected, so Kaap is sending its veto now.');
+    const l = link(first.id);
+    if (l) lines.push(`Details: ${l}`);
+  } else if (bodies.length === 1 && first.t === 'verdict' && first.risk === 'critical') {
     lines.push(`Kaap: CRITICAL risk on proposal ${first.id} of ${where}, filed by ${shownAccount(first.proposer)}.`);
     lines.push(`Findings: ${shownFindings(first.findings)}.`);
     // Sent before the vote's result is known, so it says only what is true now.
@@ -231,10 +238,12 @@ export class Alerts implements AlertSink {
     if (added && urgent) void this.flush();
   }
 
-  verdict(dao: string, id: number, v: { risk: string; findings: string[]; vetoable: boolean; verdict_hash: string }, proposer: string | null): void {
-    if (!ALERTED.has(v.risk)) return;
-    const urgent = v.risk === 'critical';
-    const body: AlertBody = { t: 'verdict', id, risk: v.risk as Risk, findings: v.findings, vetoable: v.vetoable, proposer };
+  verdict(dao: string, id: number, v: { risk: string; findings: string[]; vetoable: boolean; verdict_hash: string; unreadable?: boolean }, proposer: string | null): void {
+    // A veto owed to the treasury's strict setting is news at once, whatever the risk says.
+    const strictVeto = v.unreadable === true && v.vetoable;
+    if (!ALERTED.has(v.risk) && !strictVeto) return;
+    const urgent = v.risk === 'critical' || strictVeto;
+    const body: AlertBody = { t: 'verdict', id, risk: v.risk as Risk, findings: v.findings, vetoable: v.vetoable, proposer, ...(strictVeto ? { unreadable: true } : {}) };
     this.#queue(dao, 'verdict', `verdict:${this.#s.network}:${v.verdict_hash}`, urgent, urgent ? `proposal:${id}` : `proposer:${proposer ?? '?'}`, body);
   }
 

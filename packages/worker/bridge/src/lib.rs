@@ -138,8 +138,13 @@ fn safe(n: u64) -> Result<u64, &'static str> {
 
 /// The guard's veto rule, line for line from kaap-guard's `is_vetoable`: critical risk, a high or
 /// critical floor, at least one finding other than HASH_UNVERIFIED that is high or critical at its
-/// `min_severity`, and, when the floor is only high, a Verified AI answer.
-fn is_vetoable(verdict: &Verdict) -> bool {
+/// `min_severity`, and, when the floor is only high, a Verified AI answer. `strict` is the
+/// treasury's own setting in the guard: when it is on, a verdict whose findings include
+/// HASH_UNVERIFIED is vetoable whatever its risk.
+fn is_vetoable(verdict: &Verdict, strict: bool) -> bool {
+    if strict && verdict.findings.contains(&FindingCode::HashUnverified) {
+        return true;
+    }
     let floor_high = matches!(verdict.floor, Severity::High | Severity::Critical);
     let backed_by_proof = verdict.findings.iter().any(|&code| {
         code != FindingCode::HashUnverified
@@ -153,7 +158,8 @@ fn is_vetoable(verdict: &Verdict) -> bool {
 /// Decodes the borsh of a `kaap_core::Verdict` (no domain prefix, as the sealed job prints it).
 /// Refuses trailing bytes, a version other than 1 and numbers Node cannot hold exactly. Returns
 /// every field, the signed bytes (prefix plus borsh) in base64, the verdict hash the guard
-/// records, and whether the guard's veto rule accepts it.
+/// records, and whether the guard's veto rule accepts it, for a treasury in the default mode
+/// (`vetoable`) and for one in strict mode (`vetoable_strict`).
 fn verdict_decode(bytes: &[u8]) -> Result<Value, &'static str> {
     let verdict = Verdict::try_from_slice(bytes).map_err(|_| "the verdict is not a kaap-core Verdict")?;
     if verdict.version != VERDICT_VERSION {
@@ -180,7 +186,8 @@ fn verdict_decode(bytes: &[u8]) -> Result<Value, &'static str> {
         "expires_at_ms": safe(verdict.expires_at_ms)?,
         "verdict_hash": hex(&verdict_hash(&verdict)),
         "signed_b64": b64.encode(verdict_bytes(&verdict)),
-        "vetoable": is_vetoable(&verdict),
+        "vetoable": is_vetoable(&verdict, false),
+        "vetoable_strict": is_vetoable(&verdict, true),
     }))
 }
 
@@ -344,7 +351,9 @@ fn parse_proposal(bytes: &[u8]) -> Result<Proposal, &'static str> {
     let id = raw("id").and_then(|v| serde_json::from_str::<u64>(v).ok()).ok_or(NOT)?;
     raw("description").and_then(|v| serde_json::from_str::<String>(v).ok()).ok_or(NOT)?;
     let kind = raw("kind").ok_or(NOT)?.to_string();
-    let status = raw("status").and_then(|v| serde_json::from_str::<String>(v).ok()).unwrap_or_default();
+    // A status that is not text is an answer this code cannot read. Taking it for an empty one
+    // would read an open proposal as closed.
+    let status = raw("status").and_then(|v| serde_json::from_str::<String>(v).ok()).ok_or(NOT)?;
     let submission_time = raw("submission_time").and_then(|v| serde_json::from_str::<String>(v).ok());
     Ok(Proposal { id: safe(id)?, status, kind, submission_time })
 }
