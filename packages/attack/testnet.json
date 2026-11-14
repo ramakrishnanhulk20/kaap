@@ -1,0 +1,80 @@
+{
+  "network": "testnet",
+  "purpose": "what the attack suite attacks: copies of the guard and the registry that trust a public test key, and throwaway DAOs; never part of Kaap's deployment",
+  "set_up_by": "packages/attack/lib/test-set.mjs",
+  "test_key": {
+    "public_key": "ed25519:GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+    "seed": "thirty-two bytes of 7, the public verdict key seed of the contracts' sandbox tests: anyone can sign with it, by design"
+  },
+  "set_up_by_account": "kaap-attacker-1111100358.testnet",
+  "guard": {
+    "account_id": "kaap-attack-guard-1114112155.testnet",
+    "deploy_and_init_tx": "E5cNSscW4ymxtwGd5kgBioqUTJ6Nq1USg22n5mLCbsJW",
+    "code_hash": "BfYf34n3cN85SpkSWRAJYqDghRHxLJkR4SgYaeXbWBt6",
+    "code_sha256": "9e74bbbadcfa6820390e21cb415ae83542f5de6257da4ad651caf950801c5d23",
+    "copy_of": "kaap-guard-1113045147.testnet",
+    "live_code_hash": "BfYf34n3cN85SpkSWRAJYqDghRHxLJkR4SgYaeXbWBt6",
+    "same_code_as_live": true,
+    "accepted_key": "ed25519:GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+    "network": "testnet",
+    "owner": "kaap-attacker-1111100358.testnet",
+    "full_access_key_deleted_tx": "9RBcfhynDcRNV8TJaSodzSrgqdrpSWAxcVLRfZJyQU3i",
+    "access_keys_left": 0
+  },
+  "registry": {
+    "account_id": "kaap-attack-registry-1114112208.testnet",
+    "deploy_and_init_tx": "5dNiY97dzew2QTZimGCbZM86VxUVh7xe1G1REGVpT314",
+    "code_hash": "3Kro1EgWDYAawFx8RHUwVGTKmJvp9bAUeRL65cwGAoZz",
+    "code_sha256": "228c21366ffdaf58f31a6e3550fd9898bc9ae65d1182f7a9e84d2df3c07fb2c9",
+    "copy_of": "kaap-registry-1113045147.testnet",
+    "live_code_hash": "3Kro1EgWDYAawFx8RHUwVGTKmJvp9bAUeRL65cwGAoZz",
+    "same_code_as_live": true,
+    "accepted_key": "ed25519:GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+    "network": "testnet",
+    "full_access_key_deleted_tx": "H5vX1tZXjThKUPeXqTSP9cUVvnkmJmDWBKEwye4w9U5S",
+    "access_keys_left": 0
+  },
+  "dao": {
+    "account_id": "kaap-attack-dao-1114112222.testnet",
+    "deploy_and_init_tx": "5VFAH7HUDuAgveK9kASa2r9eVk5GXXzLXsgUTAzddzNg",
+    "code_hash": "DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF",
+    "guard_role": "guard: [kaap-attack-guard-1114112155.testnet], VoteReject on 16 labels, threshold 1",
+    "arming": "kaap-core guardArming on the live policy: the guard rejects alone on 16 labels; transfer approval votes needed: none",
+    "enrolment": {
+      "proposal_id": 0,
+      "add_proposal_tx": "GfaZednYyZmyDJSUwso5ddGC6dmvPm5GUbH2sepHUtry",
+      "vote_tx": "34cw5Arhp913cA7GsXKedb1qvvdoudac8krRUvsvL54f",
+      "enrolled": true,
+      "veto_unreadable": false
+    },
+    "full_access_key_deleted_tx": "7FggmxHaKzJfR2QUcPfFyRCVTBWs2cE52Vwg2xwFf4DH",
+    "access_keys_left": 0
+  },
+  "strict_dao": {
+    "account_id": "kaap-attack-strict-1114112249.testnet",
+    "deploy_and_init_tx": "9bB7YT8ytUP78MQ3RYvotdm9AaG6saLxf3uv6fW8xa2P",
+    "code_hash": "DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF",
+    "guard_role": "guard: [kaap-attack-guard-1114112155.testnet], VoteReject on 16 labels, threshold 1",
+    "arming": "kaap-core guardArming on the live policy: the guard rejects alone on 16 labels; transfer approval votes needed: none",
+    "enrolment": {
+      "proposal_id": 0,
+      "add_proposal_tx": "i8YUuKT5pYgzVKE2xYeMxPXvwC2hqyMtSzdprBJteZJ",
+      "vote_tx": "9LLjwz1G4drgzkptQxwVrCUyjBqDd3ywfjXP6SpfRCz3",
+      "enrolled": true,
+      "veto_unreadable": true
+    },
+    "full_access_key_deleted_tx": "Gc8ir6xSWDJB3Zkp3sfvFE1qpbvvLSVSPiMXKK61gyjM",
+    "access_keys_left": 0
+  },
+  "unenrolled_dao": {
+    "account_id": "kaap-attack-unenrolled-1114112314.testnet",
+    "deploy_and_init_tx": "J4wm7LPFdcM6Dy6yD6WPXHLkHdHJc8hJpTg6bFkGRpBq",
+    "code_hash": "DtHZA1mUmGYeScEaUoUZYQGGFHSMpnjMCvkr5U9hJXuF",
+    "guard_role": "guard: [kaap-attack-guard-1114112155.testnet], VoteReject on 16 labels, threshold 1",
+    "arming": "kaap-core guardArming on the live policy: the guard rejects alone on 16 labels; transfer approval votes needed: none",
+    "enrolled": false,
+    "full_access_key_deleted_tx": "2f2qLHZqkwzrW2uy2123yVibSuTxySvECQzwPSS5vvWc",
+    "access_keys_left": 0
+  },
+  "checked_at": "2026-11-14T12:25:09.998Z"
+}

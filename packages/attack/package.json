@@ -2,5 +2,16 @@
   "name": "@kaap/attack",
   "version": "0.1.0",
   "private": true,
-  "license": "MIT"
+  "license": "MIT",
+  "description": "Attacks copies of Kaap's guard and registry on NEAR testnet and prints one PASS or FAIL line per attack.",
+  "scripts": {
+    "test-set": "node lib/test-set.mjs",
+    "replay": "node attacks/01-replay.mjs",
+    "wrong-signer": "node attacks/02-wrong-signer.mjs",
+    "enrolment": "node attacks/03-enrolment.mjs",
+    "veto-rule": "node attacks/04-veto-rule.mjs",
+    "kind-mismatch": "node attacks/05-kind-mismatch.mjs",
+    "access": "node attacks/06-access.mjs",
+    "all": "node ../../scripts/attack-all.mjs"
+  }
 }
