@@ -361,8 +361,8 @@ Later the same morning the key was stored for the new project, locked to the wat
 
 ## What this does not cover
 
-- Strict mode on testnet. The guard has it and the demo treasury has not turned it on, so no request was vetoed for being unreadable. The guard's sandbox tests against the real Sputnik DAO binary and the watcher's tests cover it.
-- A key change. No change of the guard's key was announced, so the 24-hour wait and the watcher's alert are shown by tests only.
+- Strict mode on the live guard. The demo treasury has not turned it on, so no request on it was vetoed for being unreadable. What is shown on testnet is a copy of the guard that runs the same code: for a treasury in strict mode it rejected a request on a verdict whose only finding was an unread hash, and it refused a verdict rated the same way for a treasury in the default mode (`packages/attack/RESULTS.md`, rows 4.11 and 4.15, run on 14 Nov 2026). Those verdicts were signed with a public test key, not by the sealed reader, and the requests under them were plain transfers with no signed hash in them. The watcher's side of strict mode is shown by its tests.
+- A key change on the live guard. None was announced. On the copy the owner announced a new key and nothing obeyed it early: a verdict signed by it was refused, a stranger's call to switch at once was refused with `ERR_TOO_EARLY`, and the owner cancelled it (rows 2.14 to 2.19). The switch after 24 hours and the watcher's alert are shown by tests only.
 - A race against approvers. The treasury needs two approvals, and nobody approved anything while Kaap worked. A treasury where one approval executes a request can pay before any veto lands, and `kaap arming` says so for such a policy.
 - OutLayer's pace. A verdict needs OutLayer to answer. That morning every run that named a key not yet stored took over a minute and a half, and one was never answered and had to be asked again. Nothing in Kaap can speed that up.
 - Mainnet. Everything here is NEAR testnet.

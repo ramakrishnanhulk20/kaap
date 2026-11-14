@@ -26,6 +26,7 @@ The README's "NEAR tools used" table lists each NEAR tool with the files that us
 |---|---|---|---|
 | The guard can cast one vote, reject, and nothing else | `packages/contracts/guard/src/lib.rs` | `cargo test -p kaap-guard` | [reject cast](https://testnet.nearblocks.io/txns/66WDukXKMVFbeyZ6aAbsTMgZDwCAwXFNSSagM9MkQagz) |
 | A verdict works once | the same | `PROOF.md`, step 5: the same verdict handed in again is refused | linked in `PROOF.md` |
+| A signer gone wrong still cannot make the guard reject on the AI's word alone, on an unread hash alone or on an unverified AI answer, and no verdict works twice, on another request or under another key | `packages/attack/attacks/` | `node scripts/attack-all.mjs`: 91 cases, 75 of them attacks, on copies of the guard and the registry that run the live code | every line and its transaction: `packages/attack/RESULTS.md` |
 | The contracts are locked | `scripts/deploy-contracts-testnet.sh` | `verify`, lines "guard keys" and "registry keys" | [guard key deleted](https://testnet.nearblocks.io/txns/DeCTsm76k8RH6HES5uqh4p4SrzZksKF7uQNL7gYPLxtV), [registry key deleted](https://testnet.nearblocks.io/txns/6T53QkSLhsN1HnbZgPGdHEzpgwCKg1vB3bFBJNcgLaxv) |
 | The rule port matches Sputnik's own code | `packages/core/src/policy/sputnik.rs` | `cargo test -p kaap-core-diff`, which runs both against the same inputs in a sandbox | |
 | The verdict's bytes cannot drift | `packages/verdict/src/verdict.rs` | `cargo test -p kaap-verdict --test pinned` | |

@@ -56,7 +56,7 @@ A treasury adopts Kaap with two of its own requests: one adds a role named `guar
 | A theft stopped | Request #1 of the demo treasury | [filed](https://testnet.nearblocks.io/txns/583jbKshP4USdjmBRnX9wrRjFYg9NvTURdBuWqAo1q5a), [read in sealed hardware](https://testnet.nearblocks.io/txns/6Lm1adNQeQrm75QBoWcEmAaG1dskrajEUCQCisatU12L), [recorded](https://testnet.nearblocks.io/txns/CNqvoFb8Ly3txbrYMuXyRWwPM6Enp1PYr6oGUcVjcS83), [rejected by the guard](https://testnet.nearblocks.io/txns/66WDukXKMVFbeyZ6aAbsTMgZDwCAwXFNSSagM9MkQagz) |
 | The check, the site and the docs | [kaap-snowy.vercel.app](https://kaap-snowy.vercel.app), from `packages/web` and `packages/cli` | Live. The check reads any Sputnik DAO on mainnet or testnet with no key, and the try-it button files a real request on the demo treasury |
 | Always-on watcher | `packages/worker` | Live since 12 Nov 2026 as one container on Railway, watching the demo treasury: [its status page](https://watcher-production-2350aa2a.up.railway.app/status). It runs on free RPC providers |
-| Strict mode | In the guard above | Live, and no treasury on testnet has turned it on yet. It is proven by the guard's tests against the real Sputnik DAO binary and by the watcher's tests, not by a veto on testnet |
+| Strict mode | In the guard above | Live, and no treasury on the live guard has turned it on yet. On testnet a copy of the guard with the same code rejected a request for a treasury in strict mode on a verdict whose only finding was an unread hash, and refused a verdict rated the same way for a treasury in the default mode ([attack suite](packages/attack/RESULTS.md), rows 4.11 and 4.15). Those verdicts were signed with a test key and the requests were plain transfers: no verdict from the sealed reader has been used that way yet |
 | Earlier deployments | The guards of 29 Oct and 11 Nov 2026 | Still on chain with their own registries and treasuries. `kaap verify` and `kaap check` read their requests against their own records in `deployments/` |
 | Mainnet | | Not deployed. Kaap reads mainnet treasuries and does nothing else there |
 
@@ -489,6 +489,7 @@ packages/
   worker/       the always-on watcher: watches treasuries, submits vetoes, records, alerts
   cli/          the kaap command line: check, verify, enroll, arming, seal-text, eval, census
   web/          the site: landing page, /check, /docs, /api/check
+  attack/       attacks on copies of the guard and the registry, and the saved results
 scripts/        deploy, demo treasury setup, the proof run, sealed builds
 deployments/    what is deployed where, with transaction ids
 eval/           the labelled requests, how they were sampled and labelled, and every AI run
@@ -510,6 +511,8 @@ No honest request was stopped. Every catch came from plain code. The 13 misses a
 ## Security and limits
 
 The [threat model](docs/security/threat-model.md) was written before the code. Its section C lists the rules the build is held to, and ARCHITECTURE.md cites them by number.
+
+The two contracts were then attacked on testnet. `node scripts/attack-all.mjs` runs 91 cases: 75 attacks, 10 controls that show the honest path still works, and 6 doors that are open by design. The attacks: a verdict used twice or moved to another request, signatures by keys the contracts do not trust, a treasury that never enrolled, correctly signed verdicts that must still not reject anything, request content swapped or extended, and callers with no right. Every case ended the way the contracts are meant to end it, and [packages/attack/RESULTS.md](packages/attack/RESULTS.md) has every line with its transaction. The attacks go to copies of the guard and the registry that run the same code, compared by code hash on chain at the start of each file, and that trust a public test key, so the suite can sign verdicts the real key never would and the live contracts are never touched. [packages/attack/README.md](packages/attack/README.md) says what the suite leaves out.
 
 What you still have to trust, and what Kaap does not do:
 
